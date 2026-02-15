@@ -1,0 +1,176 @@
+# 트러블슈팅 가이드
+
+## 자주 발생하는 문제와 해결 방법
+
+### 1. DB 연결 오류: "Connection refused" 또는 "ECONNREFUSED"
+
+**증상**: 백엔드가 PostgreSQL에 연결하지 못함
+
+**해결 방법**:
+
+```bash
+# 1. DB 컨테이너가 실행 중인지 확인
+docker-compose ps
+
+# 2. DB 헬스체크 확인
+docker-compose logs db
+
+# 3. DB가 준비될 때까지 백엔드가 기다리는지 확인
+# docker-compose.yml의 depends_on 섹션에 condition: service_healthy 설정 확인
+
+# 4. 수동으로 DB 연결 테스트
+docker-compose exec db psql -U yoga_admin -d yoga_studio
+
+# 5. .env 파일 확인
+# DB_PASSWORD가 올바른지 확인
+
+# 6. 컨테이너 재시작
+docker-compose restart backend
+```
+
+### 2. "npm ci can only install with an existing package-lock.json"
+
+**증상**: Docker 빌드 시 npm 오류
+
+**해결**: 이미 수정되어 있습니다. 만약 여전히 발생한다면:
+```bash
+# 로컬에서 package-lock.json 생성
+cd backend
+npm install
+cd ../frontend
+npm install
+
+# 다시 빌드
+docker-compose build
+```
+
+### 3. 데이터베이스 스키마가 적용되지 않음
+
+**증상**: 테이블이 존재하지 않는다는 오류
+
+**해결**:
+```bash
+# 1. 스키마가 자동으로 적용되었는지 확인
+docker-compose exec db psql -U yoga_admin -d yoga_studio -c "\dt"
+
+# 2. 테이블이 없다면 수동으로 적용
+docker-compose exec -T db psql -U yoga_admin -d yoga_studio < database/schema.sql
+
+# 3. 또는 컨테이너를 완전히 재생성
+docker-compose down -v  # ⚠️ 주의: 데이터가 삭제됩니다!
+docker-compose up -d
+```
+
+### 4. "Permission denied" - 스크립트 실행 오류
+
+**증상**: start.sh 또는 init-db.sh 실행 불가
+
+**해결**:
+```bash
+chmod +x start.sh init-db.sh
+./start.sh
+```
+
+### 5. 프론트엔드가 백엔드에 연결 안 됨 (CORS 오류)
+
+**증상**: 브라우저 콘솔에 CORS 오류
+
+**해결**:
+```bash
+# backend/.env 확인
+CORS_ORIGIN=http://localhost:3000
+
+# nginx.conf 확인 (proxy_pass가 올바른지)
+# 컨테이너 재시작
+docker-compose restart
+```
+
+### 6. "Unknown authentication method"
+
+**증상**: PostgreSQL 인증 오류
+
+**해결**:
+```bash
+# pg_hba.conf 확인
+docker exec -it <postgres-container> cat /var/lib/postgresql/data/pg_hba.conf
+
+# md5 또는 scram-sha-256 인증이 설정되어 있는지 확인
+# 필요시 PostgreSQL 컨테이너 재시작
+```
+
+### 7. 컨테이너가 계속 재시작됨
+
+**증상**: `docker ps`에서 컨테이너가 Restarting 상태
+
+**해결**:
+```bash
+# 로그 확인
+docker-compose logs backend
+docker-compose logs frontend
+
+# 일반적인 원인:
+# - 환경 변수 누락 (.env 파일 확인)
+# - DB 연결 실패
+# - 포트 충돌 (3000, 3001 포트가 이미 사용 중인지 확인)
+
+# 포트 충돌 확인
+lsof -i :3000
+lsof -i :3001
+```
+
+### 8. 관리자 로그인 실패
+
+**증상**: admin@yoga.com으로 로그인 안 됨
+
+**해결**:
+```bash
+# DB에 관리자 계정이 생성되었는지 확인
+docker exec -it <postgres-container> psql -U yoga_admin -d yoga_studio
+
+# PostgreSQL에서:
+SELECT * FROM yoga_users WHERE email = 'admin@yoga.com';
+
+# 없다면 schema.sql의 INSERT 부분을 다시 실행
+# 비밀번호 해시를 재생성해야 할 수 있음
+```
+
+### 9. 데이터가 보이지 않음
+
+**증상**: 회원, 출석 등 데이터가 표시 안 됨
+
+**해결**:
+```bash
+# 브라우저 개발자 도구 (F12) 확인
+# - Console 탭: JavaScript 오류 확인
+# - Network 탭: API 요청 확인
+
+# 백엔드 로그 확인
+docker-compose logs -f backend
+
+# API 직접 테스트
+curl http://localhost:3001/health
+```
+
+### 10. 빌드가 너무 느림
+
+**해결**:
+```bash
+# Docker 캐시 정리
+docker system prune -a
+
+# node_modules 볼륨 사용 (docker-compose.yml에 추가)
+# volumes:
+#   - ./backend:/app
+#   - /app/node_modules
+```
+
+## 도움이 더 필요하신가요?
+
+1. 로그 전체 확인: `docker-compose logs > logs.txt`
+2. 컨테이너 상태 확인: `docker ps -a`
+3. 네트워크 상태 확인: `docker network inspect <network-name>`
+4. DB 연결 테스트:
+   ```bash
+   docker run --rm -it --network <network-name> postgres:15-alpine \
+     psql -h <db-host> -U yoga_admin -d yoga_studio
+   ```

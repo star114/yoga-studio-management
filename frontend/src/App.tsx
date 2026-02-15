@@ -1,0 +1,96 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Login from './pages/Login';
+import AdminDashboard from './pages/AdminDashboard';
+import CustomerDashboard from './pages/CustomerDashboard';
+import CustomerManagement from './pages/CustomerManagement';
+import MembershipManagement from './pages/MembershipManagement';
+import MembershipTypeManagement from './pages/MembershipTypeManagement';
+import ClassManagement from './pages/ClassManagement';
+import Layout from './components/Layout';
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ 
+  children, 
+  adminOnly = false 
+}) => {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-warm-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-warm-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (adminOnly && user.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const AppRoutes: React.FC = () => {
+  const { user } = useAuth();
+
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      
+      <Route path="/" element={
+        <ProtectedRoute>
+          <Layout />
+        </ProtectedRoute>
+      }>
+        <Route index element={
+          user?.role === 'admin' 
+            ? <AdminDashboard /> 
+            : <CustomerDashboard />
+        } />
+        <Route path="customers" element={
+          <ProtectedRoute adminOnly>
+            <CustomerManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="memberships" element={
+          <ProtectedRoute adminOnly>
+            <MembershipManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="membership-types" element={
+          <ProtectedRoute adminOnly>
+            <MembershipTypeManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="classes" element={
+          <ProtectedRoute adminOnly>
+            <ClassManagement />
+          </ProtectedRoute>
+        } />
+        {/* 추가 라우트들은 여기에 추가 */}
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
+  );
+};
+
+export default App;
