@@ -2,26 +2,9 @@ import express from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
 
 const router = express.Router();
-
-const isValidTime = (value: string): boolean => {
-  return /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/.test(value);
-};
-
-const timeToMinutes = (value: string): number => {
-  const [hour, minute] = value.split(':').map((item) => Number(item));
-  return hour * 60 + minute;
-};
-
-const parseDateOnly = (value: string): Date => new Date(`${value}T00:00:00`);
-
-const formatDateOnly = (value: Date): string => {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
 
 const getCustomerIdFromUser = async (userId: number): Promise<number | null> => {
   const result = await pool.query(
@@ -382,34 +365,17 @@ router.post('/recurring',
       return res.status(400).json({ error: 'End time must be after start time' });
     }
 
-    const startDate = parseDateOnly(recurrence_start_date);
-    const endDate = parseDateOnly(recurrence_end_date);
-
-    if (startDate > endDate) {
-      return res.status(400).json({ error: 'recurrence_end_date must be on or after recurrence_start_date' });
-    }
-
-    const dayDiff = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    if (dayDiff > 370) {
-      return res.status(400).json({ error: 'Recurring range cannot exceed 370 days' });
-    }
-
     const uniqueWeekdays = Array.from(new Set((weekdays as number[]).map((value) => Number(value))));
-    const excludedDateSet = new Set(
-      Array.isArray(excluded_dates)
-        ? excluded_dates.map((value: string) => value.slice(0, 10))
-        : []
-    );
-
-    const classDates: string[] = [];
-    const cursor = new Date(startDate);
-
-    while (cursor <= endDate) {
-      const currentDate = formatDateOnly(cursor);
-      if (uniqueWeekdays.includes(cursor.getDay()) && !excludedDateSet.has(currentDate)) {
-        classDates.push(currentDate);
-      }
-      cursor.setDate(cursor.getDate() + 1);
+    let classDates: string[] = [];
+    try {
+      classDates = getRecurringClassDates(
+        recurrence_start_date,
+        recurrence_end_date,
+        uniqueWeekdays,
+        Array.isArray(excluded_dates) ? excluded_dates : []
+      );
+    } catch (recurrenceError: any) {
+      return res.status(400).json({ error: recurrenceError?.message || 'Invalid recurrence rule' });
     }
 
     if (classDates.length === 0) {

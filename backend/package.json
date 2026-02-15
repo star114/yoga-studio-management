@@ -7,7 +7,9 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "init-db": "ts-node src/scripts/initDatabase.ts"
+    "init-db": "ts-node src/scripts/initDatabase.ts",
+    "test": "npm run build && node --test tests/*.test.js",
+    "test:ci": "npm run test"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
