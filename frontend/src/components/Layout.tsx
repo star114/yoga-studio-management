@@ -119,7 +119,7 @@ const Layout: React.FC = () => {
       <footer className="mt-auto border-t border-warm-100 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <p className="text-center text-sm text-warm-500">
-            © 2024 요가원 관리 시스템. 마음을 담은 서비스.
+            © 2026 Yoga Studio Management.
           </p>
         </div>
       </footer>
