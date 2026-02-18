@@ -1,8 +1,9 @@
 import express from 'express';
-import { body, param, query, validationResult } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
+import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
 
@@ -25,12 +26,8 @@ router.get('/',
   query('date_from').optional().isDate(),
   query('date_to').optional().isDate(),
   query('is_open').optional().isBoolean(),
+  validateRequest,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { date_from, date_to, is_open } = req.query;
 
     try {
@@ -44,22 +41,22 @@ router.get('/',
         WHERE 1=1
       `;
 
-      const params: any[] = [];
+      const params: Array<string | boolean> = [];
       let paramIndex = 1;
 
-      if (date_from) {
+      if (typeof date_from === 'string') {
         sql += ` AND class_date >= $${paramIndex}`;
         params.push(date_from);
         paramIndex++;
       }
 
-      if (date_to) {
+      if (typeof date_to === 'string') {
         sql += ` AND class_date <= $${paramIndex}`;
         params.push(date_to);
         paramIndex++;
       }
 
-      if (is_open !== undefined) {
+      if (typeof is_open === 'string') {
         sql += ` AND is_open = $${paramIndex}`;
         params.push(is_open === 'true');
         paramIndex++;
@@ -123,12 +120,8 @@ router.get('/:id/registrations',
 router.post('/:id/registrations',
   authenticate,
   body('customer_id').optional().isInt({ min: 1 }),
+  validateRequest,
   async (req: AuthRequest, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { id } = req.params;
     let customerId: number | null = null;
 
@@ -280,12 +273,8 @@ router.post('/',
   body('start_time').custom(isValidTime),
   body('end_time').custom(isValidTime),
   body('max_capacity').isInt({ min: 1 }),
+  validateRequest,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const {
       title,
       instructor_name,
@@ -341,12 +330,8 @@ router.post('/recurring',
   body('start_time').custom(isValidTime),
   body('end_time').custom(isValidTime),
   body('max_capacity').isInt({ min: 1 }),
+  validateRequest,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const {
       title,
       instructor_name,
@@ -374,8 +359,10 @@ router.post('/recurring',
         uniqueWeekdays,
         Array.isArray(excluded_dates) ? excluded_dates : []
       );
-    } catch (recurrenceError: any) {
-      return res.status(400).json({ error: recurrenceError?.message || 'Invalid recurrence rule' });
+    } catch (recurrenceError: unknown) {
+      return res.status(400).json({
+        error: recurrenceError instanceof Error ? recurrenceError.message : 'Invalid recurrence rule',
+      });
     }
 
     if (classDates.length === 0) {
@@ -406,7 +393,7 @@ router.post('/recurring',
       );
 
       const seriesId = seriesResult.rows[0].id as number;
-      const values: any[] = [];
+      const values: Array<string | number | boolean | null> = [];
       const rows: string[] = [];
       let paramIndex = 1;
 
@@ -461,12 +448,8 @@ router.post('/series/:seriesId/exclusions',
   body('class_id').optional().isInt({ min: 1 }),
   body('class_date').isDate(),
   body('reason').optional().isString().isLength({ max: 200 }),
+  validateRequest,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const seriesId = Number(req.params.seriesId);
     const classId = req.body.class_id ? Number(req.body.class_id) : null;
     const classDate = String(req.body.class_date).slice(0, 10);

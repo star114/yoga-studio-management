@@ -1,7 +1,8 @@
 import express from 'express';
-import { body, validationResult } from 'express-validator';
+import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin } from '../middleware/auth';
+import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
 
@@ -23,12 +24,8 @@ router.post('/types',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
+  validateRequest,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { name, description, duration_days, total_sessions, price } = req.body;
 
     try {
@@ -139,12 +136,8 @@ router.post('/',
   body('customer_id').isInt(),
   body('membership_type_id').isInt(),
   body('start_date').isDate(),
+  validateRequest,
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { customer_id, membership_type_id, start_date, purchase_price, notes } = req.body;
 
     try {

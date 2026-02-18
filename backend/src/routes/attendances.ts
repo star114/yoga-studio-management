@@ -1,7 +1,8 @@
 import express from 'express';
-import { body, validationResult } from 'express-validator';
+import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
 
@@ -23,29 +24,34 @@ router.get('/', authenticate, async (req, res) => {
       WHERE 1=1
     `;
 
-    const params: any[] = [];
+    const params: Array<string | number> = [];
     let paramIndex = 1;
 
-    if (customer_id) {
+    if (typeof customer_id === 'string') {
       query += ` AND a.customer_id = $${paramIndex}`;
       params.push(customer_id);
       paramIndex++;
     }
 
-    if (start_date) {
+    if (typeof start_date === 'string') {
       query += ` AND a.attendance_date >= $${paramIndex}`;
       params.push(start_date);
       paramIndex++;
     }
 
-    if (end_date) {
+    if (typeof end_date === 'string') {
       query += ` AND a.attendance_date <= $${paramIndex}`;
       params.push(end_date);
       paramIndex++;
     }
 
+    const parsedLimit = Number(limit);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 200)
+      : 50;
+
     query += ` ORDER BY a.attendance_date DESC LIMIT $${paramIndex}`;
-    params.push(limit);
+    params.push(safeLimit);
 
     const result = await pool.query(query, params);
 
@@ -61,12 +67,8 @@ router.post('/',
   authenticate,
   requireAdmin,
   body('customer_id').isInt(),
+  validateRequest,
   async (req: AuthRequest, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { customer_id, membership_id, instructor_comment, class_type } = req.body;
 
     const client = await pool.connect();
