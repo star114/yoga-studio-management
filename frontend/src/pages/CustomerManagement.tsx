@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { customerAPI } from '../services/api';
+import { parseApiError } from '../utils/apiError';
 
 interface Customer {
   id: number;
@@ -103,13 +104,6 @@ const CustomerManagement: React.FC = () => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const parseApiError = (apiError: any): string => {
-    if (Array.isArray(apiError?.response?.data?.errors)) {
-      return apiError.response.data.errors.map((item: any) => item.msg).join(', ');
-    }
-    return apiError?.response?.data?.error || '요청 처리에 실패했습니다.';
-  };
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -140,7 +134,7 @@ const CustomerManagement: React.FC = () => {
 
       await loadCustomers();
       resetForm();
-    } catch (submitError: any) {
+    } catch (submitError: unknown) {
       console.error('Failed to save customer:', submitError);
       setFormError(parseApiError(submitError));
     } finally {
@@ -158,7 +152,7 @@ const CustomerManagement: React.FC = () => {
       if (editingCustomerId === customer.id) {
         resetForm();
       }
-    } catch (deleteError: any) {
+    } catch (deleteError: unknown) {
       console.error('Failed to delete customer:', deleteError);
       setError(parseApiError(deleteError));
     }

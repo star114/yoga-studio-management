@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { classAPI, customerAPI } from '../services/api';
+import { parseApiError } from '../utils/apiError';
 
 interface YogaClass {
   id: number;
@@ -123,13 +124,6 @@ const ClassManagement: React.FC = () => {
       setRegistrations([]);
     }
   }, [selectedClassId]);
-
-  const parseApiError = (apiError: any): string => {
-    if (Array.isArray(apiError?.response?.data?.errors)) {
-      return apiError.response.data.errors.map((item: any) => item.msg).join(', ');
-    }
-    return apiError?.response?.data?.error || '요청 처리에 실패했습니다.';
-  };
 
   const initializeData = async () => {
     try {
@@ -291,7 +285,7 @@ const ClassManagement: React.FC = () => {
         setRecurrenceEndDate(INITIAL_FORM.class_date);
         setRecurrenceWeekdays([]);
       }
-    } catch (submitError: any) {
+    } catch (submitError: unknown) {
       console.error('Failed to save class:', submitError);
       setFormError(parseApiError(submitError));
     } finally {
@@ -309,7 +303,7 @@ const ClassManagement: React.FC = () => {
       if (editingClassId === item.id) {
         resetForm();
       }
-    } catch (deleteError: any) {
+    } catch (deleteError: unknown) {
       console.error('Failed to delete class:', deleteError);
       setError(parseApiError(deleteError));
     }
@@ -333,7 +327,7 @@ const ClassManagement: React.FC = () => {
       );
       await loadClasses();
       setFormNotice(`${targetDate} 회차가 제외되었습니다.`);
-    } catch (excludeError: any) {
+    } catch (excludeError: unknown) {
       console.error('Failed to exclude recurring occurrence:', excludeError);
       setError(parseApiError(excludeError));
     }
@@ -359,7 +353,7 @@ const ClassManagement: React.FC = () => {
       setSelectedCustomerId('');
       await Promise.all([loadRegistrations(selectedClassId), loadClasses()]);
       setRegistrationNotice('수동 신청이 등록되었습니다.');
-    } catch (registerError: any) {
+    } catch (registerError: unknown) {
       console.error('Failed to register customer manually:', registerError);
       setRegistrationError(parseApiError(registerError));
     } finally {
@@ -379,7 +373,7 @@ const ClassManagement: React.FC = () => {
       await classAPI.cancelRegistration(selectedClassId, customerId);
       await Promise.all([loadRegistrations(selectedClassId), loadClasses()]);
       setRegistrationNotice('신청이 취소되었습니다.');
-    } catch (cancelError: any) {
+    } catch (cancelError: unknown) {
       console.error('Failed to cancel registration:', cancelError);
       setRegistrationError(parseApiError(cancelError));
     }

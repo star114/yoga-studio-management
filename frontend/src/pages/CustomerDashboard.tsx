@@ -3,10 +3,26 @@ import { useAuth } from '../contexts/AuthContext';
 import { membershipAPI, attendanceAPI } from '../services/api';
 import { format } from 'date-fns';
 
+interface CustomerMembership {
+  id: number;
+  membership_type_name: string;
+  start_date: string;
+  end_date?: string | null;
+  remaining_sessions?: number | null;
+  is_active: boolean;
+}
+
+interface CustomerAttendance {
+  id: number;
+  attendance_date: string;
+  class_type?: string | null;
+  instructor_comment?: string | null;
+}
+
 const CustomerDashboard: React.FC = () => {
   const { customerInfo } = useAuth();
-  const [memberships, setMemberships] = useState<any[]>([]);
-  const [attendances, setAttendances] = useState<any[]>([]);
+  const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
+  const [attendances, setAttendances] = useState<CustomerAttendance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadCustomerData = useCallback(async () => {
@@ -29,7 +45,7 @@ const CustomerDashboard: React.FC = () => {
 
   useEffect(() => {
     if (customerInfo) {
-      loadCustomerData();
+      void loadCustomerData();
     }
   }, [customerInfo, loadCustomerData]);
 
@@ -44,7 +60,7 @@ const CustomerDashboard: React.FC = () => {
     );
   }
 
-  const activeMemberships = memberships.filter(m => m.is_active);
+  const activeMemberships = memberships.filter((membership) => membership.is_active);
 
   return (
     <div className="space-y-6 fade-in">

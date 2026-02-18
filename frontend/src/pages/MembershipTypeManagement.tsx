@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { membershipAPI } from '../services/api';
+import { parseApiError } from '../utils/apiError';
 
 interface MembershipType {
   id: number;
@@ -39,13 +40,6 @@ const MembershipTypeManagement: React.FC = () => {
   useEffect(() => {
     void loadTypes();
   }, []);
-
-  const parseApiError = (apiError: any): string => {
-    if (Array.isArray(apiError?.response?.data?.errors)) {
-      return apiError.response.data.errors.map((item: any) => item.msg).join(', ');
-    }
-    return apiError?.response?.data?.error || '요청 처리에 실패했습니다.';
-  };
 
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
@@ -106,7 +100,7 @@ const MembershipTypeManagement: React.FC = () => {
 
       await loadTypes();
       resetForm();
-    } catch (submitError: any) {
+    } catch (submitError: unknown) {
       console.error('Failed to save membership type:', submitError);
       setError(parseApiError(submitError));
     } finally {
@@ -125,7 +119,7 @@ const MembershipTypeManagement: React.FC = () => {
         resetForm();
       }
       showSuccess('회원권 종류를 비활성화했습니다.');
-    } catch (deactivateError: any) {
+    } catch (deactivateError: unknown) {
       console.error('Failed to deactivate membership type:', deactivateError);
       setError(parseApiError(deactivateError));
     }

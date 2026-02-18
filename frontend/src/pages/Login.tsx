@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { parseApiError } from '../utils/apiError';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -19,8 +20,8 @@ const Login: React.FC = () => {
     try {
       await login(email, password);
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || '로그인에 실패했습니다.');
+    } catch (error: unknown) {
+      setError(parseApiError(error, '로그인에 실패했습니다.'));
     } finally {
       setIsLoading(false);
     }

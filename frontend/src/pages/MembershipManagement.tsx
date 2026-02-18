@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { customerAPI, membershipAPI } from '../services/api';
+import { parseApiError } from '../utils/apiError';
 
 interface Customer {
   id: number;
@@ -80,13 +81,6 @@ const MembershipManagement: React.FC = () => {
     }
   }, [selectedCustomerId]);
 
-  const parseApiError = (apiError: any): string => {
-    if (Array.isArray(apiError?.response?.data?.errors)) {
-      return apiError.response.data.errors.map((item: any) => item.msg).join(', ');
-    }
-    return apiError?.response?.data?.error || '요청 처리에 실패했습니다.';
-  };
-
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
     setTimeout(() => setSuccessMessage(''), 2500);
@@ -149,7 +143,7 @@ const MembershipManagement: React.FC = () => {
       });
       await loadMemberships(selectedCustomerId);
       showSuccess('회원권을 지급했습니다.');
-    } catch (submitError: any) {
+    } catch (submitError: unknown) {
       console.error('Failed to create membership:', submitError);
       setError(parseApiError(submitError));
     } finally {
@@ -185,7 +179,7 @@ const MembershipManagement: React.FC = () => {
       }
       setEditingMembershipId(null);
       showSuccess('회원권 정보를 수정했습니다.');
-    } catch (updateError: any) {
+    } catch (updateError: unknown) {
       console.error('Failed to update membership:', updateError);
       setError(parseApiError(updateError));
     }
@@ -202,7 +196,7 @@ const MembershipManagement: React.FC = () => {
         await loadMemberships(selectedCustomerId);
       }
       showSuccess('회원권을 삭제했습니다.');
-    } catch (deleteError: any) {
+    } catch (deleteError: unknown) {
       console.error('Failed to delete membership:', deleteError);
       setError(parseApiError(deleteError));
     }

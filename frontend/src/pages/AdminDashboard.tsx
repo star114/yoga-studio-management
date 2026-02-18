@@ -2,13 +2,28 @@ import React, { useEffect, useState } from 'react';
 import { customerAPI, attendanceAPI } from '../services/api';
 import { format } from 'date-fns';
 
+interface DashboardAttendance {
+  id: number;
+  customer_name: string;
+  attendance_date: string;
+  class_type?: string | null;
+}
+
+interface DashboardCustomer {
+  id: number;
+  name: string;
+  phone: string;
+  membership_count?: string | number;
+  total_attendance?: string | number;
+}
+
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({
     totalCustomers: 0,
     todayAttendance: 0,
   });
-  const [todayAttendances, setTodayAttendances] = useState<any[]>([]);
-  const [recentCustomers, setRecentCustomers] = useState<any[]>([]);
+  const [todayAttendances, setTodayAttendances] = useState<DashboardAttendance[]>([]);
+  const [recentCustomers, setRecentCustomers] = useState<DashboardCustomer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
