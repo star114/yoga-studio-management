@@ -11,6 +11,19 @@ router.get('/', authenticate, async (req, res) => {
   const { customer_id, start_date, end_date, limit = 50 } = req.query;
 
   try {
+    const customerIdFilter =
+      typeof customer_id === 'string' && customer_id.trim() !== ''
+        ? customer_id.trim()
+        : null;
+    const startDateFilter =
+      typeof start_date === 'string' && start_date.trim() !== ''
+        ? start_date.trim()
+        : null;
+    const endDateFilter =
+      typeof end_date === 'string' && end_date.trim() !== ''
+        ? end_date.trim()
+        : null;
+
     let query = `
       SELECT 
         a.*,
@@ -27,21 +40,21 @@ router.get('/', authenticate, async (req, res) => {
     const params: Array<string | number> = [];
     let paramIndex = 1;
 
-    if (typeof customer_id === 'string') {
+    if (customerIdFilter) {
       query += ` AND a.customer_id = $${paramIndex}`;
-      params.push(customer_id);
+      params.push(customerIdFilter);
       paramIndex++;
     }
 
-    if (typeof start_date === 'string') {
+    if (startDateFilter) {
       query += ` AND a.attendance_date >= $${paramIndex}`;
-      params.push(start_date);
+      params.push(startDateFilter);
       paramIndex++;
     }
 
-    if (typeof end_date === 'string') {
+    if (endDateFilter) {
       query += ` AND a.attendance_date <= $${paramIndex}`;
-      params.push(end_date);
+      params.push(endDateFilter);
       paramIndex++;
     }
 
