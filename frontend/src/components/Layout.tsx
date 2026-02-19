@@ -15,8 +15,7 @@ const Layout: React.FC = () => {
     ...(user?.role === 'admin'
       ? [
           { to: '/customers', label: '고객 관리' },
-          { to: '/memberships', label: '회원권 지급' },
-          { to: '/membership-types', label: '회원권 종류' },
+          { to: '/membership-types', label: '회원권 관리' },
           { to: '/classes', label: '수업 관리' },
         ]
       : []),

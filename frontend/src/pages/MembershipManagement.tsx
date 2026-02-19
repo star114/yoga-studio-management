@@ -255,7 +255,7 @@ const MembershipManagement: React.FC = () => {
           <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">회원권 발급</h2>
           <form className="space-y-4" onSubmit={handleCreateMembership}>
             <div>
-              <label className="label" htmlFor="membership-type">회원권 종류</label>
+              <label className="label" htmlFor="membership-type">회원권 관리</label>
               <select
                 id="membership-type"
                 className="input-field"

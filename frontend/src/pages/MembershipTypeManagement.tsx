@@ -61,7 +61,7 @@ const MembershipTypeManagement: React.FC = () => {
       setTypes(response.data);
     } catch (loadError) {
       console.error('Failed to load membership types:', loadError);
-      setError('회원권 종류 목록을 불러오지 못했습니다.');
+      setError('회원권 관리 목록을 불러오지 못했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -99,10 +99,10 @@ const MembershipTypeManagement: React.FC = () => {
 
       if (editingTypeId) {
         await membershipAPI.updateType(editingTypeId, payload);
-        showSuccess('회원권 종류를 수정했습니다.');
+        showSuccess('회원권 관리 정보를 수정했습니다.');
       } else {
         await membershipAPI.createType(payload);
-        showSuccess('회원권 종류를 추가했습니다.');
+        showSuccess('회원권 관리 항목을 추가했습니다.');
       }
 
       await loadTypes();
@@ -116,7 +116,7 @@ const MembershipTypeManagement: React.FC = () => {
   };
 
   const handleDeactivate = async (type: MembershipType) => {
-    const ok = window.confirm(`"${type.name}" 회원권 종류를 비활성화할까요?`);
+    const ok = window.confirm(`"${type.name}" 회원권 관리 항목을 비활성화할까요?`);
     if (!ok) return;
 
     try {
@@ -125,7 +125,7 @@ const MembershipTypeManagement: React.FC = () => {
       if (editingTypeId === type.id) {
         resetForm();
       }
-      showSuccess('회원권 종류를 비활성화했습니다.');
+      showSuccess('회원권 관리 항목을 비활성화했습니다.');
     } catch (deactivateError: unknown) {
       console.error('Failed to deactivate membership type:', deactivateError);
       setError(parseApiError(deactivateError));
@@ -135,8 +135,8 @@ const MembershipTypeManagement: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">회원권 종류 관리</h1>
-        <p className="text-warm-600">현재 운영중인 회원권 종류를 추가/수정/비활성화합니다.</p>
+        <h1 className="text-3xl font-display font-bold text-primary-800">회원권 관리</h1>
+        <p className="text-warm-600">현재 운영 중인 회원권 관리 항목을 추가/수정/비활성화합니다.</p>
       </div>
 
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
@@ -145,7 +145,7 @@ const MembershipTypeManagement: React.FC = () => {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <section className="card xl:col-span-1">
           <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-            {editingTypeId ? '회원권 종류 수정' : '회원권 종류 추가'}
+            {editingTypeId ? '회원권 관리 수정' : '회원권 관리 추가'}
           </h2>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
@@ -213,11 +213,11 @@ const MembershipTypeManagement: React.FC = () => {
         </section>
 
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">운영중인 회원권 종류</h2>
+          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">운영 중인 회원권 관리</h2>
           {isLoading ? (
             <p className="text-warm-600 py-8 text-center">목록을 불러오는 중...</p>
           ) : types.length === 0 ? (
-            <p className="text-warm-600 py-8 text-center">운영중인 회원권 종류가 없습니다.</p>
+            <p className="text-warm-600 py-8 text-center">운영 중인 회원권 관리 항목이 없습니다.</p>
           ) : (
             <div className="space-y-3">
               {types.map((type) => (
