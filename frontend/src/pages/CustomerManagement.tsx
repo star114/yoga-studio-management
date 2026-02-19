@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { customerAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 
@@ -161,7 +162,7 @@ const CustomerManagement: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">고객 계정 관리</h1>
+        <h1 className="text-3xl font-display font-bold text-primary-800">고객 관리</h1>
         <p className="text-warm-600">고객 로그인 계정을 생성하고 기본 정보를 관리합니다.</p>
       </div>
 
@@ -336,6 +337,12 @@ const CustomerManagement: React.FC = () => {
                       <td className="py-3 pr-4">{customer.total_attendance ?? 0}</td>
                       <td className="py-3 pr-0">
                         <div className="flex justify-end gap-2">
+                          <Link
+                            to={`/customers/${customer.id}`}
+                            className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
+                          >
+                            상세
+                          </Link>
                           <button
                             type="button"
                             onClick={() => startEdit(customer)}
