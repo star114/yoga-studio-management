@@ -86,6 +86,14 @@ if [ $COUNT -eq $MAX_RETRIES ]; then
 fi
 
 echo ""
+echo "🗂️  데이터베이스 마이그레이션 적용 중..."
+if ! $DOCKER_COMPOSE exec -T backend npm run migrate; then
+    echo "❌ 마이그레이션 적용에 실패했습니다."
+    echo "   로그 확인: $DOCKER_COMPOSE logs backend"
+    exit 1
+fi
+
+echo ""
 echo "✨ 설치 완료!"
 echo ""
 echo "📌 접속 정보:"

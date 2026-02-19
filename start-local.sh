@@ -55,7 +55,7 @@ elif docker compose version >/dev/null 2>&1; then
 fi
 
 if [ -n "$DOCKER_COMPOSE" ]; then
-  echo "[0/5] Ensuring local Postgres (db) is running via Docker..."
+  echo "[0/6] Ensuring local Postgres (db) is running via Docker..."
   if ! (cd "$ROOT_DIR" && $DOCKER_COMPOSE up -d db); then
     echo "ERROR: Failed to start Docker Postgres service."
     echo "Make sure Docker Desktop is running, then retry."
@@ -75,15 +75,22 @@ if [ -n "$DOCKER_COMPOSE" ]; then
     sleep 1
   done
 else
-  echo "[0/5] Docker Compose not found. Assuming a local Postgres is already running."
+  echo "[0/6] Docker Compose not found. Assuming a local Postgres is already running."
 fi
 
-echo "[1/5] Installing backend dependencies..."
+echo "[1/6] Installing backend dependencies..."
 (cd "$BACKEND_DIR" && npm install)
-echo "[2/5] Installing frontend dependencies..."
+echo "[2/6] Installing frontend dependencies..."
 (cd "$FRONTEND_DIR" && npm install)
 
-echo "[3/5] Starting backend dev server..."
+echo "[3/6] Applying backend migrations..."
+(
+  cd "$BACKEND_DIR" && \
+    DATABASE_URL="$LOCAL_DATABASE_URL" \
+    npm run migrate
+)
+
+echo "[4/6] Starting backend dev server..."
 (
   cd "$BACKEND_DIR" && \
     DATABASE_URL="$LOCAL_DATABASE_URL" \
@@ -96,7 +103,7 @@ echo "[3/5] Starting backend dev server..."
 ) &
 BACKEND_PID=$!
 
-echo "[4/5] Starting frontend dev server..."
+echo "[5/6] Starting frontend dev server..."
 (cd "$FRONTEND_DIR" && npm start) &
 FRONTEND_PID=$!
 
