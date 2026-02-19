@@ -15,6 +15,7 @@ interface YogaClassDetail {
   is_excluded?: boolean;
   current_enrollment?: number;
   remaining_seats?: number;
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
 }
 
 interface Customer {
@@ -48,6 +49,21 @@ const ClassDetail: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  const classStatusLabel = useMemo(() => {
+    switch (classDetail?.class_status) {
+      case 'completed':
+        return '완료';
+      case 'in_progress':
+        return '진행중';
+      case 'closed':
+        return '닫힘';
+      case 'excluded':
+        return '제외';
+      default:
+        return '오픈';
+    }
+  }, [classDetail?.class_status]);
 
   const unregisteredCustomers = useMemo(() => {
     const registered = new Set(registrations.map((item) => item.customer_id));
@@ -199,6 +215,7 @@ const ClassDetail: React.FC = () => {
         <p className="text-warm-700">
           신청 {classDetail.current_enrollment ?? 0}명 / 잔여 {classDetail.remaining_seats ?? classDetail.max_capacity}자리
         </p>
+        <p className="text-warm-700 mt-2">상태: {classStatusLabel}</p>
       </section>
 
       <section className="card">
@@ -218,7 +235,12 @@ const ClassDetail: React.FC = () => {
           </select>
           <button
             type="submit"
-            disabled={isRegisterSubmitting || !classDetail.is_open || !!classDetail.is_excluded}
+            disabled={
+              isRegisterSubmitting
+              || !classDetail.is_open
+              || !!classDetail.is_excluded
+              || classDetail.class_status === 'completed'
+            }
             className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRegisterSubmitting ? '등록 중...' : '수동 신청 등록'}
@@ -245,7 +267,8 @@ const ClassDetail: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => void handleCancelRegistration(registration.customer_id)}
-                    className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 whitespace-nowrap"
+                    disabled={classDetail.class_status === 'completed'}
+                    className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     신청 취소
                   </button>

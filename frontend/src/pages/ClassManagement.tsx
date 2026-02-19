@@ -19,6 +19,7 @@ interface YogaClass {
   notes?: string | null;
   current_enrollment?: number;
   remaining_seats?: number;
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
 }
 
 interface ClassForm {
@@ -53,6 +54,21 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: '토' },
 ];
 
+const getClassStatusBadge = (item: YogaClass) => {
+  switch (item.class_status) {
+    case 'excluded':
+      return { label: '제외', className: 'bg-red-100 text-red-700' };
+    case 'completed':
+      return { label: '완료', className: 'bg-slate-200 text-slate-700' };
+    case 'in_progress':
+      return { label: '진행중', className: 'bg-blue-100 text-blue-700' };
+    case 'closed':
+      return { label: '닫힘', className: 'bg-gray-200 text-gray-700' };
+    default:
+      return { label: '오픈', className: 'bg-green-100 text-green-700' };
+  }
+};
+
 const ClassManagement: React.FC = () => {
   const [classes, setClasses] = useState<YogaClass[]>([]);
   const [form, setForm] = useState<ClassForm>(INITIAL_FORM);
@@ -73,7 +89,7 @@ const ClassManagement: React.FC = () => {
   const filteredClasses = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return classes.filter((item) => {
-      if (showOpenOnly && !item.is_open) {
+      if (showOpenOnly && item.class_status !== 'open') {
         return false;
       }
       if (!keyword) {
@@ -505,7 +521,9 @@ const ClassManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredClasses.map((item) => (
+                  {filteredClasses.map((item) => {
+                    const status = getClassStatusBadge(item);
+                    return (
                     <tr key={item.id} className="border-b border-warm-100">
                       <td className="py-3 pr-4 font-medium text-primary-800">{item.title}</td>
                       <td className="py-3 pr-4">{item.instructor_name || '-'}</td>
@@ -518,14 +536,8 @@ const ClassManagement: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 pr-4">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          item.is_excluded
-                            ? 'bg-red-100 text-red-700'
-                            : item.is_open
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-gray-200 text-gray-700'
-                        }`}>
-                          {item.is_excluded ? '제외' : item.is_open ? '오픈' : '닫힘'}
+                        <span className={`px-2 py-1 rounded-full text-xs ${status.className}`}>
+                          {status.label}
                         </span>
                       </td>
                       <td className="py-3 pr-0">
@@ -548,7 +560,8 @@ const ClassManagement: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => startEdit(item)}
-                            className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200"
+                            disabled={item.class_status === 'completed'}
+                            className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             수정
                           </button>
@@ -562,7 +575,8 @@ const ClassManagement: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

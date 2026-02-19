@@ -45,6 +45,7 @@ interface DashboardClass {
   current_enrollment?: number;
   is_open?: boolean;
   is_excluded?: boolean;
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
 }
 
 type CalendarView = 'month' | 'week' | 'day';
@@ -165,7 +166,18 @@ const AdminDashboard: React.FC = () => {
   };
 
   const renderClassChip = (item: DashboardClass) => {
-    const closed = item.is_open === false;
+    const status = item.class_status || 'open';
+    const closed = status === 'closed' || status === 'completed' || status === 'excluded';
+    const statusLabel =
+      status === 'completed'
+        ? '완료'
+        : status === 'in_progress'
+          ? '진행중'
+          : status === 'excluded'
+            ? '제외'
+            : status === 'closed'
+              ? '닫힘'
+              : '오픈';
     return (
       <div
         key={item.id}
@@ -178,6 +190,7 @@ const AdminDashboard: React.FC = () => {
             ? ` · ${item.current_enrollment}/${item.max_capacity}`
             : ''}
         </p>
+        <p className="text-[10px] mt-0.5">{statusLabel}</p>
       </div>
     );
   };
@@ -349,7 +362,15 @@ const AdminDashboard: React.FC = () => {
                         </p>
                       </div>
                       <span className={`px-2.5 py-1 text-xs rounded-full ${item.is_open === false ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'}`}>
-                        {item.is_open === false ? '마감' : '접수중'}
+                        {item.class_status === 'completed'
+                          ? '완료'
+                          : item.class_status === 'in_progress'
+                            ? '진행중'
+                            : item.class_status === 'excluded'
+                              ? '제외'
+                              : item.is_open === false
+                                ? '마감'
+                                : '접수중'}
                       </span>
                     </div>
                     {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number' && (

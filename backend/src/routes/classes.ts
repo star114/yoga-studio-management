@@ -34,6 +34,13 @@ router.get('/',
       let sql = `
         SELECT
           c.*,
+          CASE
+            WHEN c.is_excluded THEN 'excluded'
+            WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
+            WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
+            WHEN c.is_open THEN 'open'
+            ELSE 'closed'
+          END AS class_status,
           COUNT(r.id)::int AS current_enrollment,
           GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats
         FROM yoga_classes c
@@ -89,6 +96,13 @@ router.get('/:id',
       const result = await pool.query(
         `SELECT
            c.*,
+           CASE
+             WHEN c.is_excluded THEN 'excluded'
+             WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
+             WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
+             WHEN c.is_open THEN 'open'
+             ELSE 'closed'
+           END AS class_status,
            COUNT(r.id)::int AS current_enrollment,
            GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats
          FROM yoga_classes c
@@ -215,7 +229,7 @@ router.post('/:id/registrations',
       await client.query('BEGIN');
 
       const classResult = await client.query(
-        `SELECT id, is_open, max_capacity, is_excluded
+        `SELECT id, is_open, max_capacity, is_excluded, class_date, start_time, end_time
          FROM yoga_classes
          WHERE id = $1
          FOR UPDATE`,
@@ -232,6 +246,13 @@ router.post('/:id/registrations',
       if (yogaClass.is_excluded) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Class is excluded' });
+      }
+
+      const now = new Date();
+      const classEndAt = new Date(`${String(yogaClass.class_date).slice(0, 10)}T${String(yogaClass.end_time).slice(0, 8)}`);
+      if (classEndAt <= now) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Class is completed' });
       }
 
       if (!yogaClass.is_open) {

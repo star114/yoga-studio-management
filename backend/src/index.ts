@@ -9,6 +9,7 @@ import attendanceRoutes from './routes/attendances';
 import classRoutes from './routes/classes';
 import { errorHandler } from './middleware/errorHandler';
 import { ensureAdminUser } from './bootstrap/admin';
+import { startClassAutoCloseWorker } from './worker/classAutoCloseWorker';
 
 dotenv.config();
 
@@ -41,10 +42,18 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await ensureAdminUser();
+    const stopWorker = startClassAutoCloseWorker();
 
     app.listen(PORT, () => {
       console.log(`🧘 Yoga Studio Backend running on port ${PORT}`);
     });
+
+    const shutdown = () => {
+      stopWorker();
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
