@@ -1,7 +1,11 @@
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Keep PostgreSQL DATE (OID 1082) as raw string (YYYY-MM-DD)
+// to avoid timezone shifts when serializing/deserializing dates.
+types.setTypeParser(1082, (value: string) => value);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

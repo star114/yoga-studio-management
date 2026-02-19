@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { format } from 'date-fns';
 import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 
@@ -34,7 +35,7 @@ interface ClassForm {
 const INITIAL_FORM: ClassForm = {
   title: '',
   instructor_name: '',
-  class_date: new Date().toISOString().slice(0, 10),
+  class_date: format(new Date(), 'yyyy-MM-dd'),
   start_time: '09:00',
   end_time: '10:00',
   max_capacity: '10',
