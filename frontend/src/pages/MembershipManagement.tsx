@@ -46,6 +46,13 @@ const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   notes: '',
 };
 
+const formatAmount = (value?: string | number | null): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return '-';
+  return Math.round(amount).toLocaleString('ko-KR');
+};
+
 const MembershipManagement: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [membershipTypes, setMembershipTypes] = useState<MembershipType[]>([]);
@@ -280,6 +287,8 @@ const MembershipManagement: React.FC = () => {
                 type="number"
                 className="input-field"
                 placeholder="비워두면 기본값"
+                min={0}
+                step={1}
                 value={newMembershipForm.purchase_price}
                 onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, purchase_price: e.target.value }))}
               />
@@ -373,7 +382,7 @@ const MembershipManagement: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-sm text-warm-700">
-                        잔여 횟수: {membership.remaining_sessions ?? '무제한'} / 결제금액: {membership.purchase_price ?? '-'}
+                        잔여 횟수: {membership.remaining_sessions ?? '무제한'} / 결제금액: {formatAmount(membership.purchase_price)}
                       </p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
                       <div className="flex gap-2">

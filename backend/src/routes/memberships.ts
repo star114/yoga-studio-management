@@ -24,6 +24,7 @@ router.post('/types',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
+  body('price').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
     const { name, description, duration_days, total_sessions, price } = req.body;
@@ -32,7 +33,7 @@ router.post('/types',
       const result = await pool.query(
         `INSERT INTO yoga_membership_types (name, description, duration_days, total_sessions, price)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [name, description || null, duration_days || null, total_sessions || null, price || null]
+        [name, description || null, duration_days || null, total_sessions || null, price ?? null]
       );
 
       res.status(201).json(result.rows[0]);
@@ -47,6 +48,8 @@ router.post('/types',
 router.put('/types/:id',
   authenticate,
   requireAdmin,
+  body('price').optional({ nullable: true }).isInt({ min: 0 }),
+  validateRequest,
   async (req, res) => {
     const { id } = req.params;
     const { name, description, duration_days, total_sessions, price, is_active } = req.body;
@@ -136,6 +139,7 @@ router.post('/',
   body('customer_id').isInt(),
   body('membership_type_id').isInt(),
   body('start_date').isDate(),
+  body('purchase_price').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
     const { customer_id, membership_type_id, start_date, purchase_price, notes } = req.body;
@@ -171,7 +175,7 @@ router.post('/',
           start_date,
           endDate,
           membershipType.total_sessions || null,
-          purchase_price || membershipType.price,
+          purchase_price ?? membershipType.price ?? null,
           notes || null
         ]
       );

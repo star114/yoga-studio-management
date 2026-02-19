@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS yoga_membership_types (
     description TEXT,
     duration_days INTEGER,  -- 기간제의 경우 일수
     total_sessions INTEGER,  -- 횟수제의 경우 총 횟수
-    price DECIMAL(10, 2),
+    price INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     end_date DATE,
     remaining_sessions INTEGER,  -- 잔여 횟수
     is_active BOOLEAN DEFAULT TRUE,
-    purchase_price DECIMAL(10, 2),
+    purchase_price INTEGER,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

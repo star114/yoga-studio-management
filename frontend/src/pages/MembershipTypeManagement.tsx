@@ -28,6 +28,13 @@ const INITIAL_TYPE_FORM: TypeForm = {
   price: '',
 };
 
+const formatAmount = (value?: string | number | null): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return '-';
+  return Math.round(amount).toLocaleString('ko-KR');
+};
+
 const MembershipTypeManagement: React.FC = () => {
   const [types, setTypes] = useState<MembershipType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -72,7 +79,7 @@ const MembershipTypeManagement: React.FC = () => {
       description: type.description || '',
       duration_days: type.duration_days === null || type.duration_days === undefined ? '' : String(type.duration_days),
       total_sessions: type.total_sessions === null || type.total_sessions === undefined ? '' : String(type.total_sessions),
-      price: type.price === null || type.price === undefined ? '' : String(type.price),
+      price: type.price === null || type.price === undefined ? '' : String(Math.round(Number(type.price))),
     });
   };
 
@@ -177,6 +184,8 @@ const MembershipTypeManagement: React.FC = () => {
                 id="type-price"
                 type="number"
                 className="input-field"
+                min={0}
+                step={1}
                 value={form.price}
                 onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
               />
@@ -217,7 +226,7 @@ const MembershipTypeManagement: React.FC = () => {
                     <div>
                       <p className="font-semibold text-primary-800">{type.name}</p>
                       <p className="text-sm text-warm-600">
-                        기간: {type.duration_days ?? '-'}일 / 횟수: {type.total_sessions ?? '무제한'} / 가격: {type.price ?? '-'}
+                        기간: {type.duration_days ?? '-'}일 / 횟수: {type.total_sessions ?? '무제한'} / 가격: {formatAmount(type.price)}
                       </p>
                       {type.description && <p className="text-sm text-warm-700 mt-1">{type.description}</p>}
                     </div>
