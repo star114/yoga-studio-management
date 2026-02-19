@@ -44,6 +44,8 @@ JWT_SECRET=여기에_생성한_JWT_시크릿_입력
 docker-compose up -d --build
 ```
 
+`start.sh`는 DB 준비 완료 후 마이그레이션(`npm run migrate`)을 자동 적용합니다.
+
 ### 4️⃣ 접속
 
 브라우저에서 http://localhost:3000 열기
@@ -71,6 +73,9 @@ docker-compose restart
 
 # 백업
 ./backup.sh
+
+# 수동 마이그레이션 (필요 시)
+docker-compose exec -T backend npm run migrate
 
 # 완전 삭제 (데이터 포함)
 docker-compose down -v
