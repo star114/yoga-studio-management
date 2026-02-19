@@ -5,7 +5,6 @@
 
 # 백업
 backups/
-*.sql
 
 # Node modules
 node_modules/
