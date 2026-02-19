@@ -8,6 +8,7 @@ import CustomerManagement from './pages/CustomerManagement';
 import MembershipManagement from './pages/MembershipManagement';
 import MembershipTypeManagement from './pages/MembershipTypeManagement';
 import ClassManagement from './pages/ClassManagement';
+import ClassDetail from './pages/ClassDetail';
 import Layout from './components/Layout';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ 
@@ -73,6 +74,11 @@ const AppRoutes: React.FC = () => {
         <Route path="classes" element={
           <ProtectedRoute adminOnly>
             <ClassManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="classes/:id" element={
+          <ProtectedRoute adminOnly>
+            <ClassDetail />
           </ProtectedRoute>
         } />
         {/* 추가 라우트들은 여기에 추가 */}

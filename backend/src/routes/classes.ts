@@ -76,17 +76,53 @@ router.get('/',
   }
 );
 
+// 수업 상세 조회 (관리자)
+router.get('/:id',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  validateRequest,
+  async (req, res) => {
+    const classId = Number(req.params.id);
+
+    try {
+      const result = await pool.query(
+        `SELECT
+           c.*,
+           COUNT(r.id)::int AS current_enrollment,
+           GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats
+         FROM yoga_classes c
+         LEFT JOIN yoga_class_registrations r ON c.id = r.class_id
+         WHERE c.id = $1
+         GROUP BY c.id`,
+        [classId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Get class detail error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 // 수업 신청 목록 조회 (관리자)
 router.get('/:id/registrations',
   authenticate,
   requireAdmin,
+  param('id').isInt({ min: 1 }),
+  validateRequest,
   async (req, res) => {
-    const { id } = req.params;
+    const classId = Number(req.params.id);
 
     try {
       const classResult = await pool.query(
         'SELECT id, title FROM yoga_classes WHERE id = $1',
-        [id]
+        [classId]
       );
 
       if (classResult.rows.length === 0) {
@@ -99,18 +135,55 @@ router.get('/:id/registrations',
            r.class_id,
            r.customer_id,
            r.registered_at,
+           r.registration_comment,
            c.name AS customer_name,
            c.phone AS customer_phone
          FROM yoga_class_registrations r
          INNER JOIN yoga_customers c ON r.customer_id = c.id
          WHERE r.class_id = $1
          ORDER BY r.registered_at ASC`,
-        [id]
+        [classId]
       );
 
       res.json(result.rows);
     } catch (error) {
       console.error('Get class registrations error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 수업 신청자 코멘트 저장 (관리자)
+router.put('/:id/registrations/:customerId/comment',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  param('customerId').isInt({ min: 1 }),
+  body('registration_comment').optional({ values: 'falsy' }).isString().isLength({ max: 500 }),
+  validateRequest,
+  async (req, res) => {
+    const classId = Number(req.params.id);
+    const customerId = Number(req.params.customerId);
+    const comment = typeof req.body.registration_comment === 'string'
+      ? req.body.registration_comment.trim()
+      : null;
+
+    try {
+      const result = await pool.query(
+        `UPDATE yoga_class_registrations
+         SET registration_comment = $3
+         WHERE class_id = $1 AND customer_id = $2
+         RETURNING id, class_id, customer_id, registration_comment, registered_at`,
+        [classId, customerId, comment && comment.length > 0 ? comment : null]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Registration not found' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Update registration comment error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }

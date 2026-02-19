@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { classAPI, customerAPI } from '../services/api';
+import { Link } from 'react-router-dom';
+import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 
 interface YogaClass {
@@ -30,22 +31,6 @@ interface ClassForm {
   notes: string;
 }
 
-interface Customer {
-  id: number;
-  name: string;
-  phone: string;
-  email: string;
-}
-
-interface ClassRegistration {
-  id: number;
-  class_id: number;
-  customer_id: number;
-  registered_at: string;
-  customer_name: string;
-  customer_phone: string;
-}
-
 const INITIAL_FORM: ClassForm = {
   title: '',
   instructor_name: '',
@@ -69,33 +54,20 @@ const WEEKDAY_OPTIONS = [
 
 const ClassManagement: React.FC = () => {
   const [classes, setClasses] = useState<YogaClass[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [registrations, setRegistrations] = useState<ClassRegistration[]>([]);
   const [form, setForm] = useState<ClassForm>(INITIAL_FORM);
   const [editingClassId, setEditingClassId] = useState<number | null>(null);
-  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [search, setSearch] = useState('');
   const [showOpenOnly, setShowOpenOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingRegistrations, setIsLoadingRegistrations] = useState(false);
-  const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
-  const [registrationError, setRegistrationError] = useState('');
-  const [registrationNotice, setRegistrationNotice] = useState('');
   const [formNotice, setFormNotice] = useState('');
   const [isRecurringCreate, setIsRecurringCreate] = useState(false);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(INITIAL_FORM.class_date);
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
 
   const isEditMode = editingClassId !== null;
-  const selectedClass = classes.find((item) => item.id === selectedClassId) || null;
-  const unregisteredCustomers = useMemo(() => {
-    const registeredIds = new Set(registrations.map((item) => item.customer_id));
-    return customers.filter((item) => !registeredIds.has(item.id));
-  }, [customers, registrations]);
 
   const filteredClasses = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -114,63 +86,24 @@ const ClassManagement: React.FC = () => {
   }, [classes, search, showOpenOnly]);
 
   useEffect(() => {
-    void initializeData();
+    void loadClasses(true);
   }, []);
 
-  useEffect(() => {
-    if (selectedClassId !== null) {
-      void loadRegistrations(selectedClassId);
-    } else {
-      setRegistrations([]);
-    }
-  }, [selectedClassId]);
-
-  const initializeData = async () => {
+  const loadClasses = async (showLoading = false) => {
     try {
       setError('');
-      setIsLoading(true);
-      const [classRes, customerRes] = await Promise.all([
-        classAPI.getAll(),
-        customerAPI.getAll(),
-      ]);
-      setClasses(classRes.data);
-      setCustomers(customerRes.data);
-      if (classRes.data.length > 0) {
-        setSelectedClassId(classRes.data[0].id);
+      if (showLoading) {
+        setIsLoading(true);
       }
-    } catch (loadError) {
-      console.error('Failed to initialize class page:', loadError);
-      setError('기초 데이터를 불러오지 못했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadClasses = async () => {
-    try {
-      setError('');
       const response = await classAPI.getAll();
       setClasses(response.data);
-      if (selectedClassId !== null && !response.data.some((item: YogaClass) => item.id === selectedClassId)) {
-        setSelectedClassId(response.data.length > 0 ? response.data[0].id : null);
-      }
     } catch (loadError) {
       console.error('Failed to load classes:', loadError);
       setError('수업 목록을 불러오지 못했습니다.');
-    }
-  };
-
-  const loadRegistrations = async (classId: number) => {
-    try {
-      setRegistrationError('');
-      setIsLoadingRegistrations(true);
-      const response = await classAPI.getRegistrations(classId);
-      setRegistrations(response.data);
-    } catch (loadError) {
-      console.error('Failed to load registrations:', loadError);
-      setRegistrationError('신청자 목록을 불러오지 못했습니다.');
     } finally {
-      setIsLoadingRegistrations(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -333,57 +266,11 @@ const ClassManagement: React.FC = () => {
     }
   };
 
-  const handleManualRegister = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!selectedClassId) {
-      setRegistrationError('수업을 먼저 선택하세요.');
-      return;
-    }
-    if (!selectedCustomerId) {
-      setRegistrationError('신청할 고객을 선택하세요.');
-      return;
-    }
-
-    try {
-      setRegistrationError('');
-      setRegistrationNotice('');
-      setIsRegisterSubmitting(true);
-      await classAPI.register(selectedClassId, { customer_id: Number(selectedCustomerId) });
-      setSelectedCustomerId('');
-      await Promise.all([loadRegistrations(selectedClassId), loadClasses()]);
-      setRegistrationNotice('수동 신청이 등록되었습니다.');
-    } catch (registerError: unknown) {
-      console.error('Failed to register customer manually:', registerError);
-      setRegistrationError(parseApiError(registerError));
-    } finally {
-      setIsRegisterSubmitting(false);
-    }
-  };
-
-  const handleCancelRegistration = async (customerId: number) => {
-    if (!selectedClassId) return;
-
-    const ok = window.confirm('해당 고객의 수업 신청을 취소할까요?');
-    if (!ok) return;
-
-    try {
-      setRegistrationError('');
-      setRegistrationNotice('');
-      await classAPI.cancelRegistration(selectedClassId, customerId);
-      await Promise.all([loadRegistrations(selectedClassId), loadClasses()]);
-      setRegistrationNotice('신청이 취소되었습니다.');
-    } catch (cancelError: unknown) {
-      console.error('Failed to cancel registration:', cancelError);
-      setRegistrationError(parseApiError(cancelError));
-    }
-  };
-
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-display font-bold text-primary-800">수업 관리</h1>
-        <p className="text-warm-600">전체 수업을 확인하고 오픈 상태 표기와 함께 추가/수정/삭제 및 제한 인원을 관리합니다.</p>
+        <p className="text-warm-600">수업 생성/수정/삭제와 상세 페이지 이동을 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
@@ -642,6 +529,12 @@ const ClassManagement: React.FC = () => {
                       </td>
                       <td className="py-3 pr-0">
                         <div className="flex justify-end gap-2">
+                          <Link
+                            to={`/classes/${item.id}`}
+                            className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
+                          >
+                            상세
+                          </Link>
                           {item.recurring_series_id && !item.is_excluded && (
                             <button
                               type="button"
@@ -675,111 +568,6 @@ const ClassManagement: React.FC = () => {
           )}
         </section>
       </div>
-
-      <section className="card">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-          <div>
-            <h2 className="text-xl font-display font-semibold text-primary-800">수업별 신청자 관리</h2>
-            <p className="text-sm text-warm-600 mt-1">신청자 목록 확인, 수동 신청 등록, 신청 취소를 처리합니다.</p>
-          </div>
-          <select
-            className="input-field md:max-w-sm"
-            value={selectedClassId ?? ''}
-            onChange={(e) => setSelectedClassId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">수업 선택</option>
-            {classes.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.class_date.slice(0, 10)} {item.start_time.slice(0, 5)} {item.title}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {registrationError && (
-          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
-            {registrationError}
-          </p>
-        )}
-        {registrationNotice && (
-          <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-3">
-            {registrationNotice}
-          </p>
-        )}
-
-        {selectedClass ? (
-          <div className="space-y-4">
-            <div className="bg-warm-50 border border-warm-200 rounded-lg px-4 py-3 text-sm text-warm-700">
-              <span className="font-medium text-primary-800">{selectedClass.title}</span>
-              <span> / {selectedClass.class_date.slice(0, 10)} {selectedClass.start_time.slice(0, 5)}-{selectedClass.end_time.slice(0, 5)}</span>
-              <span> / 신청 {selectedClass.current_enrollment ?? 0}명 / 잔여 {selectedClass.remaining_seats ?? selectedClass.max_capacity}자리</span>
-            </div>
-
-            <form className="flex flex-col md:flex-row gap-3" onSubmit={handleManualRegister}>
-              <select
-                className="input-field md:max-w-sm"
-                value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-              >
-                <option value="">신청할 고객 선택</option>
-                {unregisteredCustomers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name} ({customer.phone})
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                disabled={isRegisterSubmitting || !selectedClass.is_open || !!selectedClass.is_excluded}
-                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isRegisterSubmitting ? '등록 중...' : '수동 신청 등록'}
-              </button>
-            </form>
-
-            {isLoadingRegistrations ? (
-              <p className="text-warm-600 py-4">신청자 목록 불러오는 중...</p>
-            ) : registrations.length === 0 ? (
-              <p className="text-warm-600 py-4">신청자가 없습니다.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-warm-200 text-left text-warm-600">
-                      <th className="py-2 pr-4">이름</th>
-                      <th className="py-2 pr-4">전화번호</th>
-                      <th className="py-2 pr-4">신청 시각</th>
-                      <th className="py-2 pr-0 text-right">작업</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {registrations.map((registration) => (
-                      <tr key={registration.id} className="border-b border-warm-100">
-                        <td className="py-3 pr-4 font-medium text-primary-800">{registration.customer_name}</td>
-                        <td className="py-3 pr-4">{registration.customer_phone}</td>
-                        <td className="py-3 pr-4">{new Date(registration.registered_at).toLocaleString('ko-KR')}</td>
-                        <td className="py-3 pr-0">
-                          <div className="flex justify-end">
-                            <button
-                              type="button"
-                              onClick={() => void handleCancelRegistration(registration.customer_id)}
-                              className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
-                            >
-                              신청 취소
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-warm-600 py-4">신청자 관리를 위해 수업을 선택하세요.</p>
-        )}
-      </section>
     </div>
   );
 };

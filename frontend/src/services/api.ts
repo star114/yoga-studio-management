@@ -2,6 +2,9 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 type QueryParams = Record<string, string | number | boolean | null | undefined>;
+type ClassRegistrationPayload = {
+  customer_id?: number;
+};
 
 const api = axios.create({
   baseURL: API_URL,
@@ -113,6 +116,9 @@ export const classAPI = {
   getAll: (params?: QueryParams) =>
     api.get('/classes', { params }),
 
+  getById: (classId: number) =>
+    api.get(`/classes/${classId}`),
+
   getRegistrations: (classId: number) =>
     api.get(`/classes/${classId}/registrations`),
 
@@ -132,8 +138,11 @@ export const classAPI = {
       reason,
     }),
 
-  register: (classId: number, data: QueryParams = {}) =>
+  register: (classId: number, data: ClassRegistrationPayload = {}) =>
     api.post(`/classes/${classId}/registrations`, data),
+
+  updateRegistrationComment: (classId: number, customerId: number, registration_comment: string) =>
+    api.put(`/classes/${classId}/registrations/${customerId}/comment`, { registration_comment }),
 
   cancelRegistration: (classId: number, customerId: number) =>
     api.delete(`/classes/${classId}/registrations/${customerId}`),
