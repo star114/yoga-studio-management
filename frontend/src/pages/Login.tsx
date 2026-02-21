@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { parseApiError } from '../utils/apiError';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -19,24 +20,26 @@ const Login: React.FC = () => {
     try {
       await login(email, password);
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || '로그인에 실패했습니다.');
+    } catch (error: unknown) {
+      setError(parseApiError(error, '로그인에 실패했습니다.'));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-warm-50 via-primary-50 to-warm-100 px-4">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center px-4">
+      <div className="pointer-events-none absolute -top-24 -left-20 h-80 w-80 rounded-full bg-primary-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 -right-16 h-96 w-96 rounded-full bg-warm-300/28 blur-3xl" />
       <div className="max-w-md w-full space-y-8">
         <div className="text-center fade-in">
-          <div className="mx-auto w-20 h-20 bg-primary-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
+          <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-lg bg-gradient-to-br from-primary-500 to-primary-600">
             <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
           <h1 className="text-4xl font-display font-bold text-primary-800 mb-2">
-            요가원 관리
+            숨의 정원
           </h1>
           <p className="text-warm-700">마음을 담은 회원 관리</p>
         </div>

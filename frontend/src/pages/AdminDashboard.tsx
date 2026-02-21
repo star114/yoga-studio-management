@@ -1,25 +1,153 @@
-import React, { useEffect, useState } from 'react';
-import { customerAPI, attendanceAPI } from '../services/api';
-import { format } from 'date-fns';
+import React, { useEffect, useMemo, useState } from 'react';
+import { customerAPI, attendanceAPI, classAPI } from '../services/api';
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subDays,
+  subMonths,
+  subWeeks,
+} from 'date-fns';
+
+interface DashboardAttendance {
+  id: number;
+  customer_name: string;
+  attendance_date: string;
+  class_type?: string | null;
+}
+
+interface DashboardCustomer {
+  id: number;
+  name: string;
+  phone: string;
+  membership_count?: string | number;
+  total_attendance?: string | number;
+}
+
+interface DashboardClass {
+  id: number;
+  title: string;
+  class_date: string;
+  start_time: string;
+  end_time: string;
+  instructor_name?: string | null;
+  max_capacity?: number;
+  current_enrollment?: number;
+  is_open?: boolean;
+  is_excluded?: boolean;
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
+}
+
+type CalendarView = 'month' | 'week' | 'day';
+
+const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+const normalizeTime = (value: string) => value.slice(0, 5);
+const normalizeDate = (value: string) => value.slice(0, 10);
 
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({
     totalCustomers: 0,
     todayAttendance: 0,
   });
-  const [todayAttendances, setTodayAttendances] = useState<any[]>([]);
-  const [recentCustomers, setRecentCustomers] = useState<any[]>([]);
+  const [todayAttendances, setTodayAttendances] = useState<DashboardAttendance[]>([]);
+  const [recentCustomers, setRecentCustomers] = useState<DashboardCustomer[]>([]);
+  const [classes, setClasses] = useState<DashboardClass[]>([]);
+  const [calendarView, setCalendarView] = useState<CalendarView>('month');
+  const [focusDate, setFocusDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadDashboardData();
+    void loadDashboardData();
   }, []);
+
+  const classesByDate = useMemo(() => {
+    return classes.reduce<Record<string, DashboardClass[]>>((acc, item) => {
+      const dateKey = normalizeDate(item.class_date);
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
+      }
+      acc[dateKey].push(item);
+      return acc;
+    }, {});
+  }, [classes]);
+
+  const visibleDates = useMemo(() => {
+    if (calendarView === 'day') {
+      return [focusDate];
+    }
+
+    if (calendarView === 'week') {
+      const weekStart = startOfWeek(focusDate, { weekStartsOn: 0 });
+      const weekEnd = endOfWeek(focusDate, { weekStartsOn: 0 });
+      return eachDayOfInterval({ start: weekStart, end: weekEnd });
+    }
+
+    const monthStart = startOfMonth(focusDate);
+    const monthEnd = endOfMonth(focusDate);
+    const start = startOfWeek(monthStart, { weekStartsOn: 0 });
+    const end = endOfWeek(monthEnd, { weekStartsOn: 0 });
+    return eachDayOfInterval({ start, end });
+  }, [calendarView, focusDate]);
+
+  const selectedDayClasses = useMemo(() => {
+    const dayKey = format(focusDate, 'yyyy-MM-dd');
+    const items = classesByDate[dayKey] || [];
+    return [...items].sort((a, b) => a.start_time.localeCompare(b.start_time));
+  }, [classesByDate, focusDate]);
+
+  const calendarTitle = useMemo(() => {
+    if (calendarView === 'day') {
+      return format(focusDate, 'yyyy년 M월 d일 (EEE)');
+    }
+    if (calendarView === 'week') {
+      const weekStart = startOfWeek(focusDate, { weekStartsOn: 0 });
+      const weekEnd = endOfWeek(focusDate, { weekStartsOn: 0 });
+      return `${format(weekStart, 'yyyy년 M월 d일')} - ${format(weekEnd, 'M월 d일')}`;
+    }
+    return format(focusDate, 'yyyy년 M월');
+  }, [calendarView, focusDate]);
+
+  const movePrev = () => {
+    if (calendarView === 'day') {
+      setFocusDate((prev) => subDays(prev, 1));
+      return;
+    }
+    if (calendarView === 'week') {
+      setFocusDate((prev) => subWeeks(prev, 1));
+      return;
+    }
+    setFocusDate((prev) => subMonths(prev, 1));
+  };
+
+  const moveNext = () => {
+    if (calendarView === 'day') {
+      setFocusDate((prev) => addDays(prev, 1));
+      return;
+    }
+    if (calendarView === 'week') {
+      setFocusDate((prev) => addWeeks(prev, 1));
+      return;
+    }
+    setFocusDate((prev) => addMonths(prev, 1));
+  };
 
   const loadDashboardData = async () => {
     try {
-      const [customersRes, todayRes] = await Promise.all([
+      const [customersRes, todayRes, classesRes] = await Promise.all([
         customerAPI.getAll(),
         attendanceAPI.getToday(),
+        classAPI.getAll(),
       ]);
 
       setStats({
@@ -29,11 +157,42 @@ const AdminDashboard: React.FC = () => {
 
       setRecentCustomers(customersRes.data.slice(0, 5));
       setTodayAttendances(todayRes.data);
+      setClasses(classesRes.data.filter((item: DashboardClass) => !item.is_excluded));
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const renderClassChip = (item: DashboardClass) => {
+    const status = item.class_status || 'open';
+    const closed = status === 'closed' || status === 'completed' || status === 'excluded';
+    const statusLabel =
+      status === 'completed'
+        ? '완료'
+        : status === 'in_progress'
+          ? '진행중'
+          : status === 'excluded'
+            ? '제외'
+            : status === 'closed'
+              ? '닫힘'
+              : '오픈';
+    return (
+      <div
+        key={item.id}
+        className={`rounded-lg px-2 py-1.5 text-xs border ${closed ? 'bg-gray-100 border-gray-200 text-gray-500' : 'bg-primary-50 border-primary-100 text-primary-800'}`}
+      >
+        <p className="font-medium truncate">{item.title}</p>
+        <p className="text-[11px]">
+          {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
+          {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number'
+            ? ` · ${item.current_enrollment}/${item.max_capacity}`
+            : ''}
+        </p>
+        <p className="text-[10px] mt-0.5">{statusLabel}</p>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -56,7 +215,6 @@ const AdminDashboard: React.FC = () => {
         <p className="text-warm-600">오늘도 평온한 하루 되세요</p>
       </div>
 
-      {/* 통계 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="card hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
@@ -87,8 +245,146 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
+      <section className="card space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-display font-semibold text-primary-800">수업 캘린더</h2>
+            <p className="text-sm text-warm-600">현재 날짜는 강조 표시됩니다.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl border border-warm-200 bg-white/75 p-1">
+              {(['month', 'week', 'day'] as CalendarView[]).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  className={`px-3 py-1.5 text-sm rounded-lg ${calendarView === view ? 'bg-primary-600 text-white' : 'text-primary-800 hover:bg-warm-100'}`}
+                  onClick={() => setCalendarView(view)}
+                >
+                  {view === 'month' ? '월간' : view === 'week' ? '주간' : '일간'}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn-secondary" onClick={() => setFocusDate(startOfDay(new Date()))}>오늘</button>
+            <button type="button" className="btn-secondary" onClick={movePrev}>이전</button>
+            <button type="button" className="btn-secondary" onClick={moveNext}>다음</button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
+          <p className="text-xs text-warm-500">기준일: {format(focusDate, 'yyyy-MM-dd')}</p>
+        </div>
+
+        {calendarView === 'month' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-7 gap-2 text-xs text-warm-600">
+              {WEEKDAY_LABELS.map((label) => (
+                <div key={label} className="text-center py-1 font-medium">{label}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-2">
+              {visibleDates.map((date) => {
+                const dateKey = format(date, 'yyyy-MM-dd');
+                const dayClasses = classesByDate[dateKey] || [];
+                const today = isToday(date);
+                const active = isSameDay(date, focusDate);
+                const inMonth = isSameMonth(date, focusDate);
+
+                return (
+                  <button
+                    key={dateKey}
+                    type="button"
+                    onClick={() => setFocusDate(date)}
+                    className={`min-h-[108px] rounded-xl border p-2 text-left transition-colors ${today ? 'border-primary-500 bg-primary-50/80' : active ? 'border-primary-300 bg-primary-50/50' : 'border-warm-200 bg-white/70'} ${inMonth ? 'text-primary-800' : 'text-warm-400'}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-sm font-semibold ${today ? 'text-primary-700' : ''}`}>{format(date, 'd')}</span>
+                      {today && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-600 text-white">오늘</span>}
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {dayClasses.slice(0, 2).map(renderClassChip)}
+                      {dayClasses.length > 2 && (
+                        <p className="text-[11px] text-warm-600">+{dayClasses.length - 2}개 더 있음</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {calendarView === 'week' && (
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            {visibleDates.map((date) => {
+              const dateKey = format(date, 'yyyy-MM-dd');
+              const dayClasses = classesByDate[dateKey] || [];
+              const today = isToday(date);
+
+              return (
+                <button
+                  key={dateKey}
+                  type="button"
+                  onClick={() => setFocusDate(date)}
+                  className={`rounded-xl border p-3 text-left min-h-[160px] ${today ? 'border-primary-500 bg-primary-50/80' : 'border-warm-200 bg-white/70'}`}
+                >
+                  <p className="text-xs text-warm-600">{WEEKDAY_LABELS[date.getDay()]}</p>
+                  <p className={`text-lg font-semibold ${today ? 'text-primary-700' : 'text-primary-800'}`}>{format(date, 'd')}</p>
+                  <div className="mt-2 space-y-1">
+                    {dayClasses.length === 0 ? (
+                      <p className="text-xs text-warm-500">수업 없음</p>
+                    ) : (
+                      dayClasses.map(renderClassChip)
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {calendarView === 'day' && (
+          <div className="rounded-xl border border-warm-200 bg-white/70 p-4">
+            <p className="text-sm text-warm-600 mb-2">{format(focusDate, 'yyyy년 M월 d일 (EEE)')}</p>
+            {selectedDayClasses.length === 0 ? (
+              <p className="text-warm-500">해당 날짜에 등록된 수업이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedDayClasses.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-warm-200 bg-warm-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-primary-800">{item.title}</p>
+                        <p className="text-sm text-warm-600">
+                          {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
+                          {item.instructor_name ? ` · ${item.instructor_name}` : ''}
+                        </p>
+                      </div>
+                      <span className={`px-2.5 py-1 text-xs rounded-full ${item.is_open === false ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'}`}>
+                        {item.class_status === 'completed'
+                          ? '완료'
+                          : item.class_status === 'in_progress'
+                            ? '진행중'
+                            : item.class_status === 'excluded'
+                              ? '제외'
+                              : item.is_open === false
+                                ? '마감'
+                                : '접수중'}
+                      </span>
+                    </div>
+                    {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number' && (
+                      <p className="mt-2 text-sm text-warm-700">신청: {item.current_enrollment}/{item.max_capacity}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 오늘 출석 */}
         <div className="card">
           <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
             오늘 출석
@@ -116,7 +412,6 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 최근 등록 회원 */}
         <div className="card">
           <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
             최근 등록 회원

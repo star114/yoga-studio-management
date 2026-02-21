@@ -1,6 +1,10 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
+type QueryParams = Record<string, string | number | boolean | null | undefined>;
+type ClassRegistrationPayload = {
+  customer_id?: number;
+};
 
 const api = axios.create({
   baseURL: API_URL,
@@ -52,10 +56,10 @@ export const customerAPI = {
   getById: (id: number) => 
     api.get(`/customers/${id}`),
   
-  create: (data: any) => 
+  create: (data: unknown) => 
     api.post('/customers', data),
   
-  update: (id: number, data: any) => 
+  update: (id: number, data: unknown) => 
     api.put(`/customers/${id}`, data),
   
   delete: (id: number) => 
@@ -67,10 +71,10 @@ export const membershipAPI = {
   getTypes: () => 
     api.get('/memberships/types'),
   
-  createType: (data: any) => 
+  createType: (data: unknown) => 
     api.post('/memberships/types', data),
 
-  updateType: (id: number, data: any) =>
+  updateType: (id: number, data: unknown) =>
     api.put(`/memberships/types/${id}`, data),
 
   deactivateType: (id: number) =>
@@ -79,10 +83,10 @@ export const membershipAPI = {
   getByCustomer: (customerId: number) => 
     api.get(`/memberships/customer/${customerId}`),
   
-  create: (data: any) => 
+  create: (data: unknown) => 
     api.post('/memberships', data),
   
-  update: (id: number, data: any) => 
+  update: (id: number, data: unknown) => 
     api.put(`/memberships/${id}`, data),
   
   delete: (id: number) => 
@@ -91,16 +95,16 @@ export const membershipAPI = {
 
 // Attendance API
 export const attendanceAPI = {
-  getAll: (params?: any) => 
+  getAll: (params?: QueryParams) => 
     api.get('/attendances', { params }),
   
   getToday: () => 
     api.get('/attendances/today'),
   
-  checkIn: (data: any) => 
+  checkIn: (data: unknown) => 
     api.post('/attendances', data),
   
-  update: (id: number, data: any) => 
+  update: (id: number, data: unknown) => 
     api.put(`/attendances/${id}`, data),
   
   delete: (id: number) => 
@@ -109,19 +113,22 @@ export const attendanceAPI = {
 
 // Class API
 export const classAPI = {
-  getAll: (params?: any) =>
+  getAll: (params?: QueryParams) =>
     api.get('/classes', { params }),
+
+  getById: (classId: number) =>
+    api.get(`/classes/${classId}`),
 
   getRegistrations: (classId: number) =>
     api.get(`/classes/${classId}/registrations`),
 
-  create: (data: any) =>
+  create: (data: unknown) =>
     api.post('/classes', data),
 
-  update: (id: number, data: any) =>
+  update: (id: number, data: unknown) =>
     api.put(`/classes/${id}`, data),
 
-  createRecurring: (data: any) =>
+  createRecurring: (data: unknown) =>
     api.post('/classes/recurring', data),
 
   excludeRecurringOccurrence: (seriesId: number, classDate: string, classId?: number, reason?: string) =>
@@ -131,8 +138,11 @@ export const classAPI = {
       reason,
     }),
 
-  register: (classId: number, data?: any) =>
-    api.post(`/classes/${classId}/registrations`, data || {}),
+  register: (classId: number, data: ClassRegistrationPayload = {}) =>
+    api.post(`/classes/${classId}/registrations`, data),
+
+  updateRegistrationComment: (classId: number, customerId: number, registration_comment: string) =>
+    api.put(`/classes/${classId}/registrations/${customerId}/comment`, { registration_comment }),
 
   cancelRegistration: (classId: number, customerId: number) =>
     api.delete(`/classes/${classId}/registrations/${customerId}`),

@@ -13,7 +13,8 @@
   - 단일 수업 생성/수정/삭제
   - 반복 수업 생성 (요일/기간 기반)
   - 반복 수업 특정 회차 제외 (공휴일 등)
-  - 수업별 신청자 관리
+  - 수업 상세 페이지에서 신청자 관리/취소
+  - 신청자별 등록 코멘트 작성
 
 ### 고객
 - 내 회원권 조회
@@ -21,7 +22,7 @@
 
 ## 기술 스택
 
-- Backend: Node.js, Express, TypeScript
+- Backend: Node.js 22, Express, TypeScript
 - Frontend: React, TypeScript, Tailwind CSS
 - Database: PostgreSQL 17
 - Infra: Docker, Docker Compose
@@ -53,6 +54,8 @@ docker-compose up -d --build
 - API: `http://localhost:3001`
 - 초기 관리자: `admin@yoga.com` / `admin123`
 
+`start.sh`는 DB 준비 후 `npm run migrate`를 자동 실행합니다.
+
 ## 개발 모드 실행 (핫리로드)
 
 로컬 개발은 DB만 Docker로 띄우고 앱은 로컬 npm 프로세스로 실행합니다.
@@ -63,6 +66,9 @@ docker-compose up -d --build
 
 - 웹: `http://localhost:3000`
 - API: `http://localhost:3001`
+- 요구사항: Node.js 22+
+
+`start-local.sh`도 백엔드 실행 전 `npm run migrate`를 자동 실행합니다.
 
 ## 운영 배포 방식
 
@@ -101,7 +107,7 @@ docker-compose up -d --build
 
 ### 스키마
 - 기본 스키마: `database/schema.sql`
-- 마이그레이션: `database/migrations/*.sql`
+- 마이그레이션: `backend/migrations/*.sql`
 
 ### 반복 수업 관련 테이블/컬럼
 - `yoga_class_series`
@@ -111,8 +117,13 @@ docker-compose up -d --build
 
 ### 마이그레이션 적용 예시
 ```bash
-docker-compose exec -T db psql -U ${DB_USER:-yoga_admin} -d ${DB_NAME:-yoga_studio} < database/migrations/20260214_add_class_recurring.sql
+docker-compose exec -T backend npm run migrate
 ```
+
+### 마이그레이션 운영 원칙
+- 신규 DB: `database/schema.sql`이 컨테이너 초기화 시 1회 적용됩니다.
+- 기존 DB: 애플리케이션 시작 시(`start.sh`, `start-local.sh`, backend 컨테이너 CMD) pending migration이 자동 적용됩니다.
+- 이미 적용된 migration 파일은 checksum으로 무결성을 검증합니다.
 
 ## 운영 유틸리티
 
@@ -135,6 +146,7 @@ docker-compose exec -T db psql -U ${DB_USER:-yoga_admin} -d ${DB_NAME:-yoga_stud
 - 운영 Docker 구성: `docker-compose.prod.yml`
 - 트러블슈팅: `TROUBLESHOOTING.md`
 - 빠른 가이드: `QUICKSTART.md`
+- 마이그레이션 러너: `backend/src/scripts/migrate.ts`
 
 ## 보안 주의사항
 

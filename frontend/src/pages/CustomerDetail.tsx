@@ -1,12 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { customerAPI, membershipAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 
 interface Customer {
   id: number;
+  user_id?: number;
   name: string;
   phone: string;
   email: string;
+  birth_date?: string | null;
+  gender?: string | null;
+  address?: string | null;
+  notes?: string | null;
 }
 
 interface MembershipType {
@@ -53,11 +59,13 @@ const formatAmount = (value?: string | number | null): string => {
   return Math.round(amount).toLocaleString('ko-KR');
 };
 
-const MembershipManagement: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
+const CustomerDetail: React.FC = () => {
+  const { id } = useParams();
+  const customerId = Number(id);
+
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [membershipTypes, setMembershipTypes] = useState<MembershipType[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [newMembershipForm, setNewMembershipForm] = useState<NewMembershipForm>(INITIAL_NEW_MEMBERSHIP_FORM);
   const [editingMembershipId, setEditingMembershipId] = useState<number | null>(null);
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
@@ -66,78 +74,65 @@ const MembershipManagement: React.FC = () => {
     is_active: true,
     notes: '',
   });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const selectedCustomer = useMemo(
-    () => customers.find((customer) => customer.id === selectedCustomerId) || null,
-    [customers, selectedCustomerId]
-  );
+  const hasValidCustomerId = useMemo(() => Number.isInteger(customerId) && customerId > 0, [customerId]);
 
   useEffect(() => {
-    void initialize();
-  }, []);
-
-  useEffect(() => {
-    if (selectedCustomerId !== null) {
-      void loadMemberships(selectedCustomerId);
-    } else {
-      setMemberships([]);
+    if (!hasValidCustomerId) {
+      setIsLoading(false);
+      setError('유효하지 않은 고객 ID입니다.');
+      return;
     }
-  }, [selectedCustomerId]);
+    void initialize();
+  }, [customerId, hasValidCustomerId]);
 
-  const showSuccess = (message: string) => {
-    setSuccessMessage(message);
-    setTimeout(() => setSuccessMessage(''), 2500);
+  const showNotice = (message: string) => {
+    setNotice(message);
+    setTimeout(() => setNotice(''), 2500);
   };
 
   const initialize = async () => {
     try {
       setError('');
       setIsLoading(true);
-
-      const [customersRes, typesRes] = await Promise.all([
-        customerAPI.getAll(),
-        membershipAPI.getTypes(),
-      ]);
-
-      setCustomers(customersRes.data);
-      setMembershipTypes(typesRes.data);
-
-      if (customersRes.data.length > 0) {
-        setSelectedCustomerId(customersRes.data[0].id);
-      }
+      await Promise.all([loadCustomer(), loadMembershipTypes(), loadMemberships()]);
     } catch (loadError) {
-      console.error('Failed to initialize membership assignment page:', loadError);
-      setError('초기 데이터를 불러오지 못했습니다.');
+      console.error('Failed to initialize customer detail page:', loadError);
+      setError('고객 상세 정보를 불러오지 못했습니다.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadMemberships = async (customerId: number) => {
-    try {
-      setError('');
-      const response = await membershipAPI.getByCustomer(customerId);
-      setMemberships(response.data);
-    } catch (loadError) {
-      console.error('Failed to load memberships:', loadError);
-      setError('회원권 목록을 불러오지 못했습니다.');
-    }
+  const loadCustomer = async () => {
+    const response = await customerAPI.getById(customerId);
+    setCustomer(response.data.customer);
+  };
+
+  const loadMembershipTypes = async () => {
+    const response = await membershipAPI.getTypes();
+    setMembershipTypes(response.data);
+  };
+
+  const loadMemberships = async () => {
+    const response = await membershipAPI.getByCustomer(customerId);
+    setMemberships(response.data);
   };
 
   const handleCreateMembership = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedCustomerId) return;
 
     setIsSubmitting(true);
     setError('');
 
     try {
       await membershipAPI.create({
-        customer_id: selectedCustomerId,
+        customer_id: customerId,
         membership_type_id: Number(newMembershipForm.membership_type_id),
         start_date: newMembershipForm.start_date,
         purchase_price: newMembershipForm.purchase_price ? Number(newMembershipForm.purchase_price) : null,
@@ -148,8 +143,9 @@ const MembershipManagement: React.FC = () => {
         ...INITIAL_NEW_MEMBERSHIP_FORM,
         start_date: new Date().toISOString().slice(0, 10),
       });
-      await loadMemberships(selectedCustomerId);
-      showSuccess('회원권을 지급했습니다.');
+
+      await Promise.all([loadMemberships(), loadCustomer()]);
+      showNotice('회원권을 지급했습니다.');
     } catch (submitError: unknown) {
       console.error('Failed to create membership:', submitError);
       setError(parseApiError(submitError));
@@ -173,6 +169,7 @@ const MembershipManagement: React.FC = () => {
 
   const handleUpdateMembership = async (membershipId: number) => {
     setError('');
+
     try {
       await membershipAPI.update(membershipId, {
         end_date: editMembershipForm.end_date || null,
@@ -181,11 +178,9 @@ const MembershipManagement: React.FC = () => {
         notes: editMembershipForm.notes || null,
       });
 
-      if (selectedCustomerId) {
-        await loadMemberships(selectedCustomerId);
-      }
+      await Promise.all([loadMemberships(), loadCustomer()]);
       setEditingMembershipId(null);
-      showSuccess('회원권 정보를 수정했습니다.');
+      showNotice('회원권 정보를 수정했습니다.');
     } catch (updateError: unknown) {
       console.error('Failed to update membership:', updateError);
       setError(parseApiError(updateError));
@@ -199,10 +194,8 @@ const MembershipManagement: React.FC = () => {
     setError('');
     try {
       await membershipAPI.delete(membership.id);
-      if (selectedCustomerId) {
-        await loadMemberships(selectedCustomerId);
-      }
-      showSuccess('회원권을 삭제했습니다.');
+      await Promise.all([loadMemberships(), loadCustomer()]);
+      showNotice('회원권을 삭제했습니다.');
     } catch (deleteError: unknown) {
       console.error('Failed to delete membership:', deleteError);
       setError(parseApiError(deleteError));
@@ -212,43 +205,57 @@ const MembershipManagement: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-warm-600">회원권 지급 화면을 준비 중입니다...</p>
+        <p className="text-warm-600">고객 상세 정보를 불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (!customer || !hasValidCustomerId) {
+    return (
+      <div className="space-y-4 fade-in">
+        <Link to="/customers" className="inline-flex items-center text-sm text-primary-700 hover:text-primary-900">
+          ← 고객 목록으로
+        </Link>
+        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error || '고객을 찾을 수 없습니다.'}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6 fade-in">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">회원별 회원권 지급</h1>
-        <p className="text-warm-600">고객 단위로 회원권을 발급하고, 발급된 회원권을 관리합니다.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-primary-800">고객 상세</h1>
+          <p className="text-warm-600">회원권 지급 및 관리</p>
+        </div>
+        <Link to="/customers" className="btn-secondary">목록으로</Link>
       </div>
+
+      <section className="card">
+        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">기본 정보</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
+          <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
+          <p><span className="text-warm-600">이메일:</span> <span className="text-primary-800">{customer.email}</span></p>
+          <p><span className="text-warm-600">생년월일:</span> <span className="text-primary-800">{customer.birth_date ? customer.birth_date.slice(0, 10) : '-'}</span></p>
+          <p><span className="text-warm-600">성별:</span> <span className="text-primary-800">{customer.gender || '-'}</span></p>
+          <p><span className="text-warm-600">주소:</span> <span className="text-primary-800">{customer.address || '-'}</span></p>
+        </div>
+        {customer.notes && (
+          <div className="mt-3 text-sm text-warm-700">
+            <span className="text-warm-600">메모:</span> {customer.notes}
+          </div>
+        )}
+      </section>
 
       {error && (
         <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
       )}
-      {successMessage && (
-        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{successMessage}</p>
+      {notice && (
+        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{notice}</p>
       )}
-
-      <section className="card">
-        <div className="flex flex-col md:flex-row md:items-center gap-3">
-          <label className="label mb-0 md:min-w-24" htmlFor="membership-customer">고객 선택</label>
-          <select
-            id="membership-customer"
-            className="input-field md:max-w-md"
-            value={selectedCustomerId ?? ''}
-            onChange={(e) => setSelectedCustomerId(e.target.value ? Number(e.target.value) : null)}
-          >
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name} ({customer.phone})
-              </option>
-            ))}
-          </select>
-          {selectedCustomer && <p className="text-sm text-warm-600">로그인 계정: {selectedCustomer.email}</p>}
-        </div>
-      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <section className="card xl:col-span-1">
@@ -286,9 +293,9 @@ const MembershipManagement: React.FC = () => {
                 id="purchase-price"
                 type="number"
                 className="input-field"
-                placeholder="비워두면 기본값"
                 min={0}
                 step={1}
+                placeholder="비워두면 기본값"
                 value={newMembershipForm.purchase_price}
                 onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, purchase_price: e.target.value }))}
               />
@@ -304,7 +311,7 @@ const MembershipManagement: React.FC = () => {
             </div>
             <button
               type="submit"
-              disabled={isSubmitting || !selectedCustomerId}
+              disabled={isSubmitting}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '지급 중...' : '회원권 지급'}
@@ -401,4 +408,4 @@ const MembershipManagement: React.FC = () => {
   );
 };
 
-export default MembershipManagement;
+export default CustomerDetail;

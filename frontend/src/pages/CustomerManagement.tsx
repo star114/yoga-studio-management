@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { customerAPI } from '../services/api';
+import { parseApiError } from '../utils/apiError';
 
 interface Customer {
   id: number;
@@ -103,13 +105,6 @@ const CustomerManagement: React.FC = () => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const parseApiError = (apiError: any): string => {
-    if (Array.isArray(apiError?.response?.data?.errors)) {
-      return apiError.response.data.errors.map((item: any) => item.msg).join(', ');
-    }
-    return apiError?.response?.data?.error || '요청 처리에 실패했습니다.';
-  };
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -140,7 +135,7 @@ const CustomerManagement: React.FC = () => {
 
       await loadCustomers();
       resetForm();
-    } catch (submitError: any) {
+    } catch (submitError: unknown) {
       console.error('Failed to save customer:', submitError);
       setFormError(parseApiError(submitError));
     } finally {
@@ -158,7 +153,7 @@ const CustomerManagement: React.FC = () => {
       if (editingCustomerId === customer.id) {
         resetForm();
       }
-    } catch (deleteError: any) {
+    } catch (deleteError: unknown) {
       console.error('Failed to delete customer:', deleteError);
       setError(parseApiError(deleteError));
     }
@@ -167,7 +162,7 @@ const CustomerManagement: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">고객 계정 관리</h1>
+        <h1 className="text-3xl font-display font-bold text-primary-800">고객 관리</h1>
         <p className="text-warm-600">고객 로그인 계정을 생성하고 기본 정보를 관리합니다.</p>
       </div>
 
@@ -342,6 +337,12 @@ const CustomerManagement: React.FC = () => {
                       <td className="py-3 pr-4">{customer.total_attendance ?? 0}</td>
                       <td className="py-3 pr-0">
                         <div className="flex justify-end gap-2">
+                          <Link
+                            to={`/customers/${customer.id}`}
+                            className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
+                          >
+                            상세
+                          </Link>
                           <button
                             type="button"
                             onClick={() => startEdit(customer)}

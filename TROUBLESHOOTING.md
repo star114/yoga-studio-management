@@ -50,24 +50,28 @@ docker-compose build
 
 **해결**:
 ```bash
-# 1. 스키마가 자동으로 적용되었는지 확인
+# 1. 테이블 확인
 docker-compose exec db psql -U yoga_admin -d yoga_studio -c "\dt"
 
-# 2. 테이블이 없다면 수동으로 적용
-docker-compose exec -T db psql -U yoga_admin -d yoga_studio < database/schema.sql
+# 2. 마이그레이션 상태 확인/적용
+docker-compose exec -T backend npm run migrate
 
-# 3. 또는 컨테이너를 완전히 재생성
+# 3. 신규 DB 초기화가 필요하면 재생성
 docker-compose down -v  # ⚠️ 주의: 데이터가 삭제됩니다!
 docker-compose up -d
 ```
 
+참고:
+- 신규 볼륨(빈 DB)은 `database/schema.sql`이 자동 적용됩니다.
+- 기존 DB는 `backend/migrations/*.sql`이 `npm run migrate`로 적용됩니다.
+
 ### 4. "Permission denied" - 스크립트 실행 오류
 
-**증상**: start.sh 또는 init-db.sh 실행 불가
+**증상**: `start.sh` 또는 `start-local.sh` 실행 불가
 
 **해결**:
 ```bash
-chmod +x start.sh init-db.sh
+chmod +x start.sh start-local.sh deploy.sh backup.sh restore.sh
 ./start.sh
 ```
 
@@ -124,14 +128,15 @@ lsof -i :3001
 
 **해결**:
 ```bash
-# DB에 관리자 계정이 생성되었는지 확인
-docker exec -it <postgres-container> psql -U yoga_admin -d yoga_studio
+# 백엔드 환경 변수 확인 (.env)
+# ADMIN_EMAIL, ADMIN_PASSWORD 값이 올바른지 확인
 
-# PostgreSQL에서:
-SELECT * FROM yoga_users WHERE email = 'admin@yoga.com';
+# 백엔드 재시작 (admin 계정은 시작 시 ensure/upsert 됩니다)
+docker-compose restart backend
 
-# 없다면 schema.sql의 INSERT 부분을 다시 실행
-# 비밀번호 해시를 재생성해야 할 수 있음
+# 계정 존재 확인
+docker-compose exec -T db psql -U yoga_admin -d yoga_studio -c \
+"SELECT email, role, updated_at FROM yoga_users WHERE email = 'admin@yoga.com';"
 ```
 
 ### 9. 데이터가 보이지 않음
@@ -171,6 +176,6 @@ docker system prune -a
 3. 네트워크 상태 확인: `docker network inspect <network-name>`
 4. DB 연결 테스트:
    ```bash
-   docker run --rm -it --network <network-name> postgres:15-alpine \
+   docker run --rm -it --network <network-name> postgres:17-bookworm \
      psql -h <db-host> -U yoga_admin -d yoga_studio
    ```

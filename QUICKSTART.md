@@ -44,6 +44,8 @@ JWT_SECRET=여기에_생성한_JWT_시크릿_입력
 docker-compose up -d --build
 ```
 
+`start.sh`는 DB 준비 완료 후 마이그레이션(`npm run migrate`)을 자동 적용합니다.
+
 ### 4️⃣ 접속
 
 브라우저에서 http://localhost:3000 열기
@@ -72,6 +74,9 @@ docker-compose restart
 # 백업
 ./backup.sh
 
+# 수동 마이그레이션 (필요 시)
+docker-compose exec -T backend npm run migrate
+
 # 완전 삭제 (데이터 포함)
 docker-compose down -v
 ```
@@ -79,7 +84,7 @@ docker-compose down -v
 ## 다음 단계
 
 1. **관리자 비밀번호 변경** (보안 필수!)
-2. 회원권 종류 추가 (1개월 무제한, 10회권 등)
+2. 회원권 관리 항목 추가 (1개월 무제한, 10회권 등)
 3. 회원 등록 시작
 4. 출석 체크 시작
 

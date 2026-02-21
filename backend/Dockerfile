@@ -18,4 +18,4 @@ RUN npm run build
 EXPOSE 3001
 
 # 애플리케이션 실행
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npm run migrate && node dist/index.js"]
