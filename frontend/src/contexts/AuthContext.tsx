@@ -16,7 +16,7 @@ interface CustomerInfo {
 interface AuthContextType {
   user: User | null;
   customerInfo: CustomerInfo | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -46,8 +46,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const response = await authAPI.login(email, password);
+  const login = async (identifier: string, password: string) => {
+    const response = await authAPI.login(identifier, password);
     const { token, user, customerInfo } = response.data;
     
     localStorage.setItem('token', token);
