@@ -77,6 +77,7 @@ const CustomerDetail: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -202,6 +203,23 @@ const CustomerDetail: React.FC = () => {
     }
   };
 
+  const handleResetPassword = async () => {
+    setError('');
+    const ok = window.confirm(`${customer.name} 고객의 비밀번호를 기본값(12345)으로 초기화할까요?`);
+    if (!ok) return;
+
+    setIsResettingPassword(true);
+    try {
+      await customerAPI.resetPassword(customerId);
+      showNotice('고객 비밀번호를 기본값(12345)으로 초기화했습니다.');
+    } catch (resetError: unknown) {
+      console.error('Failed to reset customer password:', resetError);
+      setError(parseApiError(resetError));
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -248,6 +266,23 @@ const CustomerDetail: React.FC = () => {
             <span className="text-warm-600">메모:</span> {customer.notes}
           </div>
         )}
+      </section>
+
+      <section className="card">
+        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">계정 관리</h2>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <p className="text-sm text-warm-700">
+            고객 로그인 비밀번호를 기본값 <span className="font-semibold text-primary-800">12345</span>로 초기화합니다.
+          </p>
+          <button
+            type="button"
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isResettingPassword}
+            onClick={() => void handleResetPassword()}
+          >
+            {isResettingPassword ? '초기화 중...' : '비밀번호 초기화'}
+          </button>
+        </div>
       </section>
 
       {error && (

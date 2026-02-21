@@ -173,6 +173,40 @@ router.put('/:id',
   }
 );
 
+// 고객 비밀번호 초기화 (관리자)
+router.put(
+  '/:id/password',
+  authenticate,
+  requireAdmin,
+  async (req, res) => {
+    const { id } = req.params;
+    const defaultPassword = '12345';
+
+    try {
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+      const result = await pool.query(
+        `UPDATE yoga_users u
+         SET password_hash = $1
+         FROM yoga_customers c
+         WHERE c.id = $2
+           AND u.id = c.user_id
+         RETURNING u.id`,
+        [passwordHash, id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      res.json({ message: 'Password reset successfully', defaultPassword });
+    } catch (error) {
+      console.error('Reset customer password error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 // 고객 삭제 (관리자)
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   const { id } = req.params;

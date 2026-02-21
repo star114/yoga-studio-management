@@ -61,6 +61,9 @@ export const customerAPI = {
   
   update: (id: number, data: unknown) => 
     api.put(`/customers/${id}`, data),
+
+  resetPassword: (id: number) =>
+    api.put(`/customers/${id}/password`),
   
   delete: (id: number) => 
     api.delete(`/customers/${id}`),
