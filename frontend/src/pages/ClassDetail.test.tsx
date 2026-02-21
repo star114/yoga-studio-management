@@ -1,0 +1,341 @@
+import React from 'react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import ClassDetail from './ClassDetail';
+
+const {
+  classGetByIdMock,
+  classGetRegistrationsMock,
+  classRegisterMock,
+  classCancelRegistrationMock,
+  classUpdateCommentMock,
+  customerGetAllMock,
+  parseApiErrorMock,
+} = vi.hoisted(() => ({
+  classGetByIdMock: vi.fn(),
+  classGetRegistrationsMock: vi.fn(),
+  classRegisterMock: vi.fn(),
+  classCancelRegistrationMock: vi.fn(),
+  classUpdateCommentMock: vi.fn(),
+  customerGetAllMock: vi.fn(),
+  parseApiErrorMock: vi.fn(() => '요청 실패'),
+}));
+
+const navigateMock = vi.fn();
+let routeId = '1';
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useParams: () => ({ id: routeId }),
+    useNavigate: () => navigateMock,
+  };
+});
+
+vi.mock('../services/api', () => ({
+  classAPI: {
+    getById: classGetByIdMock,
+    getRegistrations: classGetRegistrationsMock,
+    register: classRegisterMock,
+    cancelRegistration: classCancelRegistrationMock,
+    updateRegistrationComment: classUpdateCommentMock,
+  },
+  customerAPI: {
+    getAll: customerGetAllMock,
+  },
+}));
+
+vi.mock('../utils/apiError', () => ({
+  parseApiError: parseApiErrorMock,
+}));
+
+const renderPage = () => render(
+  <MemoryRouter>
+    <ClassDetail />
+  </MemoryRouter>
+);
+
+const seedLoad = (overrides?: Record<string, unknown>) => {
+  classGetByIdMock.mockResolvedValue({
+    data: {
+      id: 1,
+      title: '빈야사',
+      class_date: '2026-03-01',
+      start_time: '09:00:00',
+      end_time: '10:00:00',
+      max_capacity: 10,
+      is_open: true,
+      is_excluded: false,
+      class_status: 'open',
+      current_enrollment: 1,
+      remaining_seats: 9,
+      ...overrides,
+    },
+  });
+  classGetRegistrationsMock.mockResolvedValue({
+    data: [
+      {
+        id: 1,
+        class_id: 1,
+        customer_id: 101,
+        registered_at: '2026-03-01T01:00:00.000Z',
+        registration_comment: '기존 코멘트',
+        customer_name: '홍길동',
+        customer_phone: '010-1111-2222',
+      },
+    ],
+  });
+  customerGetAllMock.mockResolvedValue({
+    data: [
+      { id: 101, name: '홍길동', phone: '010-1111-2222' },
+      { id: 102, name: '김영희', phone: '010-2222-3333' },
+    ],
+  });
+};
+
+describe('ClassDetail page', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    routeId = '1';
+    seedLoad();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows invalid route error for bad class id', async () => {
+    routeId = 'abc';
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
+    expect(classGetByIdMock).not.toHaveBeenCalled();
+  });
+
+  it('shows load error from API', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classGetByIdMock.mockRejectedValueOnce(new Error('load failed'));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
+    expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('shows missing class fallback and navigates back', async () => {
+    classGetByIdMock.mockResolvedValueOnce({ data: null });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '수업 관리로 돌아가기' }));
+    expect(navigateMock).toHaveBeenCalledWith('/classes');
+  });
+
+  it('renders class detail and unregistered customer options', async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('수업별 신청자 상세')).toBeTruthy());
+    expect(screen.getByText('상태: 오픈')).toBeTruthy();
+    expect(screen.getByText('홍길동')).toBeTruthy();
+    expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
+  });
+
+  it('shows all status labels', async () => {
+    classGetRegistrationsMock.mockResolvedValue({ data: [] });
+
+    classGetByIdMock.mockResolvedValueOnce({ data: { id: 1, title: 'A', class_date: '2026-03-01', start_time: '09:00:00', end_time: '10:00:00', max_capacity: 10, is_open: true, class_status: 'completed' } });
+    customerGetAllMock.mockResolvedValueOnce({ data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('상태: 완료')).toBeTruthy());
+
+    cleanup();
+    classGetByIdMock.mockResolvedValueOnce({ data: { id: 1, title: 'A', class_date: '2026-03-01', start_time: '09:00:00', end_time: '10:00:00', max_capacity: 10, is_open: true, class_status: 'in_progress' } });
+    classGetRegistrationsMock.mockResolvedValueOnce({ data: [] });
+    customerGetAllMock.mockResolvedValueOnce({ data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('상태: 진행중')).toBeTruthy());
+
+    cleanup();
+    classGetByIdMock.mockResolvedValueOnce({ data: { id: 1, title: 'A', class_date: '2026-03-01', start_time: '09:00:00', end_time: '10:00:00', max_capacity: 10, is_open: true, class_status: 'closed' } });
+    classGetRegistrationsMock.mockResolvedValueOnce({ data: [] });
+    customerGetAllMock.mockResolvedValueOnce({ data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('상태: 닫힘')).toBeTruthy());
+
+    cleanup();
+    classGetByIdMock.mockResolvedValueOnce({ data: { id: 1, title: 'A', class_date: '2026-03-01', start_time: '09:00:00', end_time: '10:00:00', max_capacity: 10, is_open: true, class_status: 'excluded' } });
+    classGetRegistrationsMock.mockResolvedValueOnce({ data: [] });
+    customerGetAllMock.mockResolvedValueOnce({ data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('상태: 제외')).toBeTruthy());
+  });
+
+  it('shows error when manual register is submitted without customer', async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(screen.getByText('신청할 고객을 선택하세요.')).toBeTruthy());
+    expect(classRegisterMock).not.toHaveBeenCalled();
+  });
+
+  it('registers customer manually and refreshes state', async () => {
+    classRegisterMock.mockResolvedValueOnce(undefined);
+    classGetByIdMock.mockResolvedValue({
+      data: {
+        id: 1,
+        title: '빈야사',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        max_capacity: 10,
+        is_open: true,
+        class_status: 'open',
+        current_enrollment: 2,
+      },
+    });
+    classGetRegistrationsMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 2,
+            class_id: 1,
+            customer_id: 102,
+            registered_at: '2026-03-01T02:00:00.000Z',
+            registration_comment: '',
+            customer_name: '김영희',
+            customer_phone: '010-2222-3333',
+          },
+        ],
+      });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(1, { customer_id: 102 }));
+    await waitFor(() => expect(screen.getByText('수동 신청이 등록되었습니다.')).toBeTruthy());
+  });
+
+  it('shows parsed error when manual register fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classRegisterMock.mockRejectedValueOnce(new Error('register failed'));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('cancels registration with confirm cancel/success and handles failure', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true);
+
+    classCancelRegistrationMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '신청 취소' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '신청 취소' }));
+    expect(classCancelRegistrationMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '신청 취소' }));
+    await waitFor(() => expect(classCancelRegistrationMock).toHaveBeenCalledWith(1, 101));
+    await waitFor(() => expect(screen.getByText('신청이 취소되었습니다.')).toBeTruthy());
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classCancelRegistrationMock.mockRejectedValueOnce(new Error('cancel failed'));
+
+    fireEvent.click(screen.getByRole('button', { name: '신청 취소' }));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
+  it('saves registration comment and handles error fallback message', async () => {
+    classUpdateCommentMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '코멘트 저장' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('신청자 코멘트'), { target: { value: '  새 코멘트  ' } });
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
+
+    await waitFor(() => expect(classUpdateCommentMock).toHaveBeenCalledWith(1, 101, '새 코멘트'));
+    await waitFor(() => expect(screen.getByText('신청자 코멘트를 저장했습니다.')).toBeTruthy());
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    parseApiErrorMock.mockReturnValueOnce('코멘트 저장에 실패했습니다.');
+    classUpdateCommentMock.mockRejectedValueOnce(new Error('comment failed'));
+
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
+    await waitFor(() => expect(screen.getByText('코멘트 저장에 실패했습니다.')).toBeTruthy());
+    expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('normalizes empty registration comment draft to empty string', async () => {
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          class_id: 1,
+          customer_id: 101,
+          registered_at: '2026-03-01T01:00:00.000Z',
+          registration_comment: null,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+    classUpdateCommentMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '코멘트 저장' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
+
+    await waitFor(() => expect(classUpdateCommentMock).toHaveBeenCalledWith(1, 101, ''));
+  });
+
+  it('disables register/cancel buttons for completed or unavailable class state', async () => {
+    classGetByIdMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '완료수업',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        max_capacity: 10,
+        is_open: false,
+        is_excluded: true,
+        class_status: 'completed',
+      },
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('상태: 완료')).toBeTruthy());
+    expect((screen.getByRole('button', { name: '수동 신청 등록' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '신청 취소' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});

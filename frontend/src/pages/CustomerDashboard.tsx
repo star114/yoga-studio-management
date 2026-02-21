@@ -26,8 +26,6 @@ const CustomerDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadCustomerData = useCallback(async () => {
-    if (!customerInfo) return;
-
     try {
       const [membershipsRes, attendancesRes] = await Promise.all([
         membershipAPI.getByCustomer(customerInfo.id),

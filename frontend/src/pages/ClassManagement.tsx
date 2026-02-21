@@ -260,8 +260,6 @@ const ClassManagement: React.FC = () => {
   };
 
   const handleExcludeRecurringOccurrence = async (item: YogaClass) => {
-    if (!item.recurring_series_id) return;
-
     const targetDate = item.class_date.slice(0, 10);
     const ok = window.confirm(`${targetDate} 회차를 반복 일정에서 제외할까요?`);
     if (!ok) return;

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { parseApiError } from '../utils/apiError';
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +18,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      await login(identifier, password);
       navigate('/');
     } catch (error: unknown) {
       setError(parseApiError(error, '로그인에 실패했습니다.'));
@@ -47,19 +47,19 @@ const Login: React.FC = () => {
         <div className="card fade-in" style={{ animationDelay: '0.1s' }}>
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="label">
-                이메일
+              <label htmlFor="identifier" className="label">
+                이메일 또는 전화번호
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="identifier"
+                name="identifier"
+                type="text"
+                autoComplete="username"
                 required
                 className="input-field"
-                placeholder="admin@yoga.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@yoga.com 또는 010-1234-5678"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
               />
             </div>
 

@@ -21,7 +21,6 @@ interface CustomerForm {
   name: string;
   phone: string;
   email: string;
-  password: string;
   birth_date: string;
   gender: string;
   address: string;
@@ -32,7 +31,6 @@ const INITIAL_FORM: CustomerForm = {
   name: '',
   phone: '',
   email: '',
-  password: '',
   birth_date: '',
   gender: '',
   address: '',
@@ -93,7 +91,6 @@ const CustomerManagement: React.FC = () => {
       name: customer.name,
       phone: customer.phone,
       email: customer.email,
-      password: '',
       birth_date: customer.birth_date ? customer.birth_date.slice(0, 10) : '',
       gender: customer.gender || '',
       address: customer.address || '',
@@ -111,10 +108,18 @@ const CustomerManagement: React.FC = () => {
     setFormError('');
 
     try {
+      const trimmedPhone = form.phone.trim();
+      const trimmedEmail = form.email.trim();
+
+      if (!isEditMode && !trimmedPhone && !trimmedEmail) {
+        setFormError('이메일 또는 전화번호 중 하나는 필수입니다.');
+        return;
+      }
+
       if (isEditMode && editingCustomerId) {
         await customerAPI.update(editingCustomerId, {
           name: form.name,
-          phone: form.phone,
+          phone: trimmedPhone,
           birth_date: form.birth_date || null,
           gender: form.gender || null,
           address: form.address || null,
@@ -123,9 +128,8 @@ const CustomerManagement: React.FC = () => {
       } else {
         await customerAPI.create({
           name: form.name,
-          phone: form.phone,
-          email: form.email,
-          password: form.password,
+          phone: trimmedPhone,
+          email: trimmedEmail,
           birth_date: form.birth_date || null,
           gender: form.gender || null,
           address: form.address || null,
@@ -191,38 +195,26 @@ const CustomerManagement: React.FC = () => {
                 className="input-field"
                 value={form.phone}
                 onChange={(e) => handleFormChange('phone', e.target.value)}
-                required
               />
+              {!isEditMode && (
+                <p className="mt-1 text-xs text-warm-500">이메일이 없으면 전화번호를 로그인 ID로 사용합니다.</p>
+              )}
             </div>
 
             <div>
-              <label className="label" htmlFor="customer-email">이메일(로그인 ID)</label>
+              <label className="label" htmlFor="customer-email">이메일</label>
               <input
                 id="customer-email"
                 type="email"
                 className="input-field"
                 value={form.email}
                 onChange={(e) => handleFormChange('email', e.target.value)}
-                required
                 disabled={isEditMode}
               />
+              {!isEditMode && (
+                <p className="mt-1 text-xs text-warm-500">전화번호와 이메일 중 하나만 입력해도 됩니다.</p>
+              )}
             </div>
-
-            {!isEditMode && (
-              <div>
-                <label className="label" htmlFor="customer-password">초기 비밀번호</label>
-                <input
-                  id="customer-password"
-                  type="password"
-                  className="input-field"
-                  value={form.password}
-                  onChange={(e) => handleFormChange('password', e.target.value)}
-                  placeholder="최소 6자"
-                  required
-                  minLength={6}
-                />
-              </div>
-            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -273,6 +265,12 @@ const CustomerManagement: React.FC = () => {
             {formError && (
               <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 {formError}
+              </p>
+            )}
+
+            {!isEditMode && (
+              <p className="text-xs text-warm-500">
+                신규 고객의 초기 비밀번호는 <span className="font-semibold text-primary-800">12345</span>로 자동 설정됩니다.
               </p>
             )}
 

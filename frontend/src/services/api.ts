@@ -41,11 +41,14 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  login: (email: string, password: string) => 
-    api.post('/auth/login', { email, password }),
+  login: (identifier: string, password: string) => 
+    api.post('/auth/login', { identifier, password }),
   
   getCurrentUser: () => 
     api.get('/auth/me'),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.put('/auth/password', { currentPassword, newPassword }),
 };
 
 // Customer API
@@ -61,6 +64,9 @@ export const customerAPI = {
   
   update: (id: number, data: unknown) => 
     api.put(`/customers/${id}`, data),
+
+  resetPassword: (id: number) =>
+    api.put(`/customers/${id}/password`),
   
   delete: (id: number) => 
     api.delete(`/customers/${id}`),
