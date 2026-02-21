@@ -138,6 +138,18 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   });
   assert.equal(res.status, 401);
 
+  h.queryQueue.push(
+    { rows: [] },
+    { rows: [{ id: 1, password_hash: 'h1' }, { id: 2, password_hash: 'h2' }] }
+  );
+  res = await h.runRoute({
+    method: 'post',
+    path: '/login',
+    body: { identifier: '010-1111-2222', password: 'pw' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Ambiguous phone identifier');
+
   h.queryQueue.push({
     rows: [{ id: 1, email: 'u@example.com', role: 'admin', password_hash: 'hash' }],
   });

@@ -9,7 +9,7 @@ const router = express.Router();
 
 // 로그인
 router.post('/login',
-  body('identifier').notEmpty().withMessage('이메일 또는 전화번호를 입력해주세요.'),
+  body('identifier').trim().notEmpty().withMessage('이메일 또는 전화번호를 입력해주세요.'),
   body('password').notEmpty(),
   async (req, res) => {
     const errors = validationResult(req);
@@ -19,27 +19,46 @@ router.post('/login',
 
     const { identifier, password } = req.body as { identifier: string; password: string };
     const loginId = identifier.trim();
+    const normalizedPhoneIdentifier = loginId.replace(/\D/g, '');
 
     try {
-      const result = await pool.query(
-        `
-          SELECT u.*
-          FROM yoga_users u
-          LEFT JOIN yoga_customers c ON c.user_id = u.id
-          WHERE u.email = $1
-             OR regexp_replace(COALESCE(c.phone, ''), '[^0-9]', '', 'g')
-                = regexp_replace($1, '[^0-9]', '', 'g')
-          ORDER BY CASE WHEN u.email = $1 THEN 0 ELSE 1 END
-          LIMIT 1
-        `,
+      // 1) Prefer exact email match.
+      const emailResult = await pool.query(
+        'SELECT * FROM yoga_users WHERE email = $1 LIMIT 1',
         [loginId]
       );
 
-      if (result.rows.length === 0) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+      let user = emailResult.rows[0];
+
+      // 2) Fallback to phone match only when normalized identifier exists.
+      if (!user) {
+        if (!normalizedPhoneIdentifier) {
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const phoneResult = await pool.query(
+          `
+            SELECT u.*
+            FROM yoga_users u
+            INNER JOIN yoga_customers c ON c.user_id = u.id
+            WHERE regexp_replace(COALESCE(c.phone, ''), '[^0-9]', '', 'g') = $1
+            ORDER BY u.id ASC
+            LIMIT 2
+          `,
+          [normalizedPhoneIdentifier]
+        );
+
+        if (phoneResult.rows.length === 0) {
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        if (phoneResult.rows.length > 1) {
+          return res.status(400).json({ error: 'Ambiguous phone identifier' });
+        }
+
+        user = phoneResult.rows[0];
       }
 
-      const user = result.rows[0];
       const validPassword = await bcrypt.compare(password, user.password_hash);
 
       if (!validPassword) {
