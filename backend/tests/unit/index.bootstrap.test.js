@@ -37,13 +37,13 @@ const loadIndexWithMocks = ({
   };
 
   const expressMock = () => app;
-  expressMock.json = () => (_req, _res, next) => next();
+  expressMock.json = () => (...args) => args[2]();
 
   const originalLoad = Module._load;
   Module._load = function patched(request, parent, isMain) {
     if (request === 'express') return expressMock;
-    if (request === 'cors') return () => (_req, _res, next) => next();
-    if (request === 'morgan') return () => (_req, _res, next) => next();
+    if (request === 'cors') return () => (...args) => args[2]();
+    if (request === 'morgan') return () => (...args) => args[2]();
     if (request === 'dotenv') return { config: () => ({}) };
 
     if (request === './routes/auth') return { __esModule: true, default: {} };
@@ -52,7 +52,7 @@ const loadIndexWithMocks = ({
     if (request === './routes/attendances') return { __esModule: true, default: {} };
     if (request === './routes/classes') return { __esModule: true, default: {} };
     if (request === './middleware/errorHandler') {
-      return { __esModule: true, errorHandler: (_err, _req, _res, _next) => {} };
+      return { __esModule: true, errorHandler: () => {} };
     }
     if (request === './bootstrap/admin') {
       return {

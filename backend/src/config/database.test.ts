@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import pg from 'pg';
 import dotenv from 'dotenv';
+
+const localRequire = createRequire(__filename);
 
 test('database module configures parser and registers pool handlers', (t) => {
   const setTypeParserMock = t.mock.method(pg.types, 'setTypeParser', () => undefined);
@@ -12,9 +15,9 @@ test('database module configures parser and registers pool handlers', (t) => {
     return this;
   });
 
-  const dbModulePath = require.resolve('./database');
-  delete require.cache[dbModulePath];
-  const imported = require('./database');
+  const dbModulePath = localRequire.resolve('./database');
+  delete localRequire.cache[dbModulePath];
+  const imported = localRequire('./database');
 
   assert.ok(imported.default);
   assert.equal(dotenvMock.mock.calls.length, 1);
@@ -38,9 +41,9 @@ test('database connect/error handlers log and exit', (t) => {
   const errorMock = t.mock.method(console, 'error', () => undefined);
   const exitMock = t.mock.method(process, 'exit', (() => undefined) as any);
 
-  const dbModulePath = require.resolve('./database');
-  delete require.cache[dbModulePath];
-  require('./database');
+  const dbModulePath = localRequire.resolve('./database');
+  delete localRequire.cache[dbModulePath];
+  localRequire('./database');
 
   onHandlers.connect();
   assert.equal(logMock.mock.calls.length > 0, true);
