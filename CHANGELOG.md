@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0](https://github.com/star114/yoga-studio-management/compare/v1.2.0...v1.3.0) (2026-02-21)
+
+
+### Features
+
+* **admin-customers:** add one-click customer password reset ([de76e9b](https://github.com/star114/yoga-studio-management/commit/de76e9b203e28073e6eeab1df382d214d8e9d9bc))
+* **auth:** support login with email or phone identifier ([664afd3](https://github.com/star114/yoga-studio-management/commit/664afd37d3aaf871257637f2832dd65bd0fa0f61))
+* **customer:** add profile page and self password change ([1b0b208](https://github.com/star114/yoga-studio-management/commit/1b0b2089721fa4daafa22cc0e4e001b555d7013a))
+* **customers:** enforce contact ID rule and default initial password ([275378c](https://github.com/star114/yoga-studio-management/commit/275378cb3c79f6532c02db3d37b2e2d89b293011))
+
+
+### Bug Fixes
+
+* **auth:** prevent ambiguous phone-based login matches ([45d6957](https://github.com/star114/yoga-studio-management/commit/45d6957c65969bb1828108bb8ef0bc1bbc4ccb0e))
+* **lint:** resolve backend test lint violations ([6ccac19](https://github.com/star114/yoga-studio-management/commit/6ccac19ffd4531f7fcc18a8111a2349a3f7f491e))
+* **test:** use experimental test-isolation flag for broader node compatibility ([f73deef](https://github.com/star114/yoga-studio-management/commit/f73deef4278de6dea04f131179450e4e1512393c))
+
 ## [1.2.0](https://github.com/star114/yoga-studio-management/compare/v1.1.0...v1.2.0) (2026-02-21)
 
 
