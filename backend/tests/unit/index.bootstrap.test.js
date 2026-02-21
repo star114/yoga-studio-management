@@ -160,6 +160,7 @@ test('index bootstrap forces exit when graceful shutdown times out', async (t) =
   const harness = loadIndexWithMocks({ closeHangs: true });
   const exitCodes = [];
   const handlers = {};
+  let forceExitCallback = null;
 
   t.mock.method(process, 'on', (signal, handler) => {
     handlers[signal] = handler;
@@ -169,7 +170,7 @@ test('index bootstrap forces exit when graceful shutdown times out', async (t) =
     exitCodes.push(code);
   });
   t.mock.method(global, 'setTimeout', (fn) => {
-    fn();
+    forceExitCallback = fn;
     return 123;
   });
   t.mock.method(global, 'clearTimeout', () => {});
@@ -177,6 +178,8 @@ test('index bootstrap forces exit when graceful shutdown times out', async (t) =
   harness.requireIndex();
   await waitForAsync();
   handlers.SIGTERM();
+  assert.equal(typeof forceExitCallback, 'function');
+  forceExitCallback();
   await waitForAsync();
   assert.equal(exitCodes.includes(1), true);
   harness.restore();
