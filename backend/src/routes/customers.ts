@@ -12,7 +12,8 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
     const result = await pool.query(`
       SELECT 
         c.*,
-        u.email,
+        CASE WHEN POSITION('@' IN u.email) > 0 THEN u.email ELSE '' END AS email,
+        u.email AS login_id,
         COUNT(DISTINCT m.id) as membership_count,
         COUNT(DISTINCT a.id) as total_attendance
       FROM yoga_customers c
@@ -47,7 +48,10 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
   try {
     const customerResult = await pool.query(`
-      SELECT c.*, u.email
+      SELECT
+        c.*,
+        CASE WHEN POSITION('@' IN u.email) > 0 THEN u.email ELSE '' END AS email,
+        u.email AS login_id
       FROM yoga_customers c
       LEFT JOIN yoga_users u ON c.user_id = u.id
       WHERE c.id = $1
@@ -92,26 +96,55 @@ router.post('/',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
-  body('phone').notEmpty(),
-  body('email').isEmail(),
-  body('password').isLength({ min: 6 }),
+  body('phone').optional({ values: 'falsy' }).trim().isLength({ min: 1 }).withMessage('전화번호 형식이 올바르지 않습니다.'),
+  body('email').optional({ values: 'falsy' }).trim().isEmail().withMessage('이메일 형식이 올바르지 않습니다.'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone, email, password, birth_date, gender, address, notes } = req.body;
+    const { name, phone, email, birth_date, gender, address, notes } = req.body as {
+      name: string;
+      phone?: string;
+      email?: string;
+      birth_date?: string;
+      gender?: string;
+      address?: string;
+      notes?: string;
+    };
+    const trimmedPhone = (phone || '').trim();
+    const trimmedEmail = (email || '').trim().toLowerCase();
+
+    if (!trimmedPhone && !trimmedEmail) {
+      return res.status(400).json({ error: '이메일 또는 전화번호 중 하나는 필수입니다.' });
+    }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
+      if (trimmedPhone) {
+        const phoneCheck = await client.query(
+          `SELECT id
+           FROM yoga_customers
+           WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g')
+                 = regexp_replace($1, '[^0-9]', '', 'g')
+           LIMIT 1`,
+          [trimmedPhone]
+        );
+        if (phoneCheck.rows.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Phone already exists' });
+        }
+      }
+
       // 사용자 계정 생성
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash('12345', 10);
+      const loginId = trimmedEmail || trimmedPhone;
       const userResult = await client.query(
         'INSERT INTO yoga_users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
-        [email, passwordHash, 'customer']
+        [loginId, passwordHash, 'customer']
       );
 
       const userId = userResult.rows[0].id;
@@ -120,7 +153,7 @@ router.post('/',
       const customerResult = await client.query(
         `INSERT INTO yoga_customers (user_id, name, phone, birth_date, gender, address, notes)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [userId, name, phone, birth_date || null, gender || null, address || null, notes || null]
+        [userId, name, trimmedPhone, birth_date || null, gender || null, address || null, notes || null]
       );
 
       await client.query('COMMIT');
@@ -130,7 +163,7 @@ router.post('/',
       await client.query('ROLLBACK');
       console.error('Create customer error:', error);
       if (error.code === '23505') {
-        return res.status(400).json({ error: 'Email already exists' });
+        return res.status(400).json({ error: 'Login ID already exists' });
       }
       res.status(500).json({ error: 'Server error' });
     } finally {
