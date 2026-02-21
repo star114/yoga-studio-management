@@ -74,6 +74,22 @@ docker-compose up -d --build
 
 현재 프로젝트는 `docker-compose.prod.yml` + Docker Hub 이미지를 기준으로 배포합니다.
 
+### 버전/릴리즈 관리 (GitHub Release)
+- 워크플로우: `.github/workflows/release-please.yml`
+- 동작:
+  1. `main`에 커밋이 쌓이면 Release PR 자동 생성/업데이트
+  2. Release PR 머지 시 `vX.Y.Z` 태그 + GitHub Release 자동 생성
+  3. 생성된 태그로 `.github/workflows/docker-publish.yml`이 실행되어 Docker 이미지 태그 발행
+- 설정 파일:
+  - `release-please-config.json`
+  - `.release-please-manifest.json`
+  - `CHANGELOG.md` (자동 관리)
+
+권장 커밋 타입(Conventional Commits):
+- `feat:` 기능 추가 (minor)
+- `fix:` 버그 수정 (patch)
+- `feat!:` 또는 `BREAKING CHANGE:` 포함 (major)
+
 ### 1. GitHub Actions로 이미지 퍼블리시
 - 워크플로우: `.github/workflows/docker-publish.yml`
 - 트리거:
