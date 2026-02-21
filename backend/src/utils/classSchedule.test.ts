@@ -1,11 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
-const {
-  isValidTime,
-  timeToMinutes,
-  getRecurringClassDates,
-} = require('../dist/utils/classSchedule');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { getRecurringClassDates, isValidTime, timeToMinutes } from './classSchedule';
 
 test('isValidTime validates HH:mm and HH:mm:ss format', () => {
   assert.equal(isValidTime('07:00'), true);
@@ -47,5 +42,20 @@ test('getRecurringClassDates builds weekday-based schedule and applies exclusion
 
 test('getRecurringClassDates returns empty when no weekday matches in range', () => {
   const dates = getRecurringClassDates('2026-01-01', '2026-01-01', [2]);
+  assert.deepEqual(dates, []);
+});
+
+test('getRecurringClassDates handles empty weekdays input', () => {
+  const dates = getRecurringClassDates('2026-01-01', '2026-01-07', []);
+  assert.deepEqual(dates, []);
+});
+
+test('getRecurringClassDates handles undefined weekdays and non-array exclusions', () => {
+  const dates = getRecurringClassDates(
+    '2026-01-01',
+    '2026-01-07',
+    undefined as unknown as number[],
+    null as unknown as string[]
+  );
   assert.deepEqual(dates, []);
 });
