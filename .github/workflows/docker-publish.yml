@@ -2,11 +2,8 @@ name: Build and Publish Docker Images
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
-  workflow_dispatch:
 
 jobs:
   publish:
@@ -30,11 +27,7 @@ jobs:
       - name: Resolve image tag
         id: vars
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            TAG="sha-${GITHUB_SHA::7}"
-          fi
+          TAG="${GITHUB_REF#refs/tags/}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push backend image
