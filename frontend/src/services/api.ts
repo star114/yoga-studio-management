@@ -46,6 +46,9 @@ export const authAPI = {
   
   getCurrentUser: () => 
     api.get('/auth/me'),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.put('/auth/password', { currentPassword, newPassword }),
 };
 
 // Customer API

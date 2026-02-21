@@ -99,4 +99,50 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// 본인 비밀번호 변경
+router.put('/password',
+  authenticate,
+  body('currentPassword').notEmpty().withMessage('현재 비밀번호를 입력해주세요.'),
+  body('newPassword').isLength({ min: 6 }).withMessage('새 비밀번호는 6자 이상이어야 합니다.'),
+  async (req: AuthRequest, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword: string;
+      newPassword: string;
+    };
+
+    try {
+      const userResult = await pool.query(
+        'SELECT id, password_hash FROM yoga_users WHERE id = $1',
+        [req.user!.id]
+      );
+
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const user = userResult.rows[0];
+      const isValidCurrent = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!isValidCurrent) {
+        return res.status(400).json({ error: '현재 비밀번호가 일치하지 않습니다.' });
+      }
+
+      const nextPasswordHash = await bcrypt.hash(newPassword, 10);
+      await pool.query(
+        'UPDATE yoga_users SET password_hash = $1 WHERE id = $2',
+        [nextPasswordHash, req.user!.id]
+      );
+
+      res.json({ message: 'Password changed successfully' });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 export default router;

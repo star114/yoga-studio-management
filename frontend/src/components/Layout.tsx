@@ -18,7 +18,9 @@ const Layout: React.FC = () => {
           { to: '/membership-types', label: '회원권 관리' },
           { to: '/classes', label: '수업 관리' },
         ]
-      : []),
+      : [
+          { to: '/profile', label: '회원정보 관리' },
+        ]),
   ];
 
   const navClassName = ({ isActive }: { isActive: boolean }) =>

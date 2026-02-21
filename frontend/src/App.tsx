@@ -6,6 +6,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
 import CustomerManagement from './pages/CustomerManagement';
 import CustomerDetail from './pages/CustomerDetail';
+import CustomerProfile from './pages/CustomerProfile';
 import MembershipTypeManagement from './pages/MembershipTypeManagement';
 import ClassManagement from './pages/ClassManagement';
 import ClassDetail from './pages/ClassDetail';
@@ -67,6 +68,11 @@ const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         } />
         <Route path="memberships" element={<Navigate to="/customers" replace />} />
+        <Route path="profile" element={
+          <ProtectedRoute>
+            <CustomerProfile />
+          </ProtectedRoute>
+        } />
         <Route path="membership-types" element={
           <ProtectedRoute adminOnly>
             <MembershipTypeManagement />
