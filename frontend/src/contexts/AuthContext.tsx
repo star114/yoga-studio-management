@@ -36,7 +36,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const response = await authAPI.getCurrentUser();
           setUser(response.data.user);
           setCustomerInfo(response.data.customerInfo);
-        } catch (error) {
+        } catch {
           localStorage.removeItem('token');
         }
       }

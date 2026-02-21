@@ -89,7 +89,29 @@ const CustomerDetail: React.FC = () => {
       setError('유효하지 않은 고객 ID입니다.');
       return;
     }
-    void initialize();
+
+    const load = async () => {
+      try {
+        setError('');
+        setIsLoading(true);
+        const [customerRes, membershipTypesRes, membershipsRes] = await Promise.all([
+          customerAPI.getById(customerId),
+          membershipAPI.getTypes(),
+          membershipAPI.getByCustomer(customerId),
+        ]);
+
+        setCustomer(customerRes.data.customer);
+        setMembershipTypes(membershipTypesRes.data);
+        setMemberships(membershipsRes.data);
+      } catch (loadError) {
+        console.error('Failed to initialize customer detail page:', loadError);
+        setError('고객 상세 정보를 불러오지 못했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void load();
   }, [customerId, hasValidCustomerId]);
 
   const showNotice = (message: string) => {
@@ -97,27 +119,9 @@ const CustomerDetail: React.FC = () => {
     setTimeout(() => setNotice(''), 2500);
   };
 
-  const initialize = async () => {
-    try {
-      setError('');
-      setIsLoading(true);
-      await Promise.all([loadCustomer(), loadMembershipTypes(), loadMemberships()]);
-    } catch (loadError) {
-      console.error('Failed to initialize customer detail page:', loadError);
-      setError('고객 상세 정보를 불러오지 못했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const loadCustomer = async () => {
     const response = await customerAPI.getById(customerId);
     setCustomer(response.data.customer);
-  };
-
-  const loadMembershipTypes = async () => {
-    const response = await membershipAPI.getTypes();
-    setMembershipTypes(response.data);
   };
 
   const loadMemberships = async () => {

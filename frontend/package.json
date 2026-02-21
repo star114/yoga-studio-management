@@ -40,7 +40,13 @@
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "COVERAGE_SCOPE=api-error vitest run --coverage",
+    "test:coverage:core": "COVERAGE_SCOPE=core vitest run --coverage",
+    "test:coverage:shell": "COVERAGE_SCOPE=shell vitest run --coverage",
+    "test:coverage:admin-pages": "COVERAGE_SCOPE=admin-pages vitest run --coverage",
+    "test:coverage:customer-pages": "COVERAGE_SCOPE=customer-pages vitest run --coverage",
+    "test:coverage:all-src": "COVERAGE_SCOPE=all-src vitest run --coverage",
+    "test:coverage:parallel": "npm run test:coverage:core & npm run test:coverage:shell & npm run test:coverage:admin-pages & npm run test:coverage:customer-pages & wait"
   },
   "browserslist": {
     "production": [

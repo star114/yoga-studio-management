@@ -77,34 +77,34 @@ const ClassDetail: React.FC = () => {
       return;
     }
 
-    void initialize();
+    const load = async () => {
+      try {
+        setError('');
+        setIsLoading(true);
+        const [classRes, registrationsRes, customersRes] = await Promise.all([
+          classAPI.getById(classId),
+          classAPI.getRegistrations(classId),
+          customerAPI.getAll(),
+        ]);
+
+        setClassDetail(classRes.data);
+        setRegistrations(registrationsRes.data);
+        setCustomers(customersRes.data);
+        setCommentDrafts(
+          Object.fromEntries(
+            registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.registration_comment || ''])
+          )
+        );
+      } catch (loadError: unknown) {
+        console.error('Failed to load class detail:', loadError);
+        setError(parseApiError(loadError, '수업 상세 정보를 불러오지 못했습니다.'));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void load();
   }, [classId]);
-
-  const initialize = async () => {
-    try {
-      setError('');
-      setIsLoading(true);
-      const [classRes, registrationsRes, customersRes] = await Promise.all([
-        classAPI.getById(classId),
-        classAPI.getRegistrations(classId),
-        customerAPI.getAll(),
-      ]);
-
-      setClassDetail(classRes.data);
-      setRegistrations(registrationsRes.data);
-      setCustomers(customersRes.data);
-      setCommentDrafts(
-        Object.fromEntries(
-          registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.registration_comment || ''])
-        )
-      );
-    } catch (loadError: unknown) {
-      console.error('Failed to load class detail:', loadError);
-      setError(parseApiError(loadError, '수업 상세 정보를 불러오지 못했습니다.'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const refreshClassAndRegistrations = async () => {
     const [classRes, registrationsRes] = await Promise.all([
