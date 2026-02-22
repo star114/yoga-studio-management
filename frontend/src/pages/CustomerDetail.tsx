@@ -31,6 +31,16 @@ interface Membership {
   notes?: string | null;
 }
 
+interface Attendance {
+  id: number;
+  attendance_date: string;
+  class_title?: string | null;
+  class_type?: string | null;
+  class_date?: string | null;
+  class_start_time?: string | null;
+  instructor_comment?: string | null;
+}
+
 interface NewMembershipForm {
   membership_type_id: string;
   start_date: string;
@@ -66,6 +76,7 @@ const CustomerDetail: React.FC = () => {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [membershipTypes, setMembershipTypes] = useState<MembershipType[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [recentAttendances, setRecentAttendances] = useState<Attendance[]>([]);
   const [newMembershipForm, setNewMembershipForm] = useState<NewMembershipForm>(INITIAL_NEW_MEMBERSHIP_FORM);
   const [editingMembershipId, setEditingMembershipId] = useState<number | null>(null);
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
@@ -101,6 +112,7 @@ const CustomerDetail: React.FC = () => {
         ]);
 
         setCustomer(customerRes.data.customer);
+        setRecentAttendances(customerRes.data.recentAttendances || []);
         setMembershipTypes(membershipTypesRes.data);
         setMemberships(membershipsRes.data);
       } catch (loadError) {
@@ -122,6 +134,7 @@ const CustomerDetail: React.FC = () => {
   const loadCustomer = async () => {
     const response = await customerAPI.getById(customerId);
     setCustomer(response.data.customer);
+    setRecentAttendances(response.data.recentAttendances || []);
   };
 
   const loadMemberships = async () => {
@@ -287,6 +300,32 @@ const CustomerDetail: React.FC = () => {
             {isResettingPassword ? '초기화 중...' : '비밀번호 초기화'}
           </button>
         </div>
+      </section>
+
+      <section className="card">
+        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">참석 수업 및 코멘트</h2>
+        {recentAttendances.length === 0 ? (
+          <p className="text-warm-600 py-3">최근 출석 기록이 없습니다.</p>
+        ) : (
+          <div className="space-y-3">
+            {recentAttendances.map((attendance) => (
+              <div key={attendance.id} className="rounded-lg border border-warm-200 bg-warm-50 p-4">
+                <p className="text-primary-800 font-medium">
+                  {attendance.class_title || attendance.class_type || '수업 정보 없음'}
+                </p>
+                <p className="text-sm text-warm-700 mt-1">
+                  출석일: {attendance.attendance_date.slice(0, 10)}
+                  {attendance.class_date && attendance.class_start_time
+                    ? ` / 수업일시: ${attendance.class_date.slice(0, 10)} ${attendance.class_start_time.slice(0, 5)}`
+                    : ''}
+                </p>
+                <p className="text-sm text-warm-700 mt-2">
+                  강사 코멘트: {attendance.instructor_comment?.trim() || '-'}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {error && (

@@ -71,6 +71,7 @@ const seedLoadSuccess = () => {
         address: '서울',
         notes: '메모',
       },
+      recentAttendances: [],
     },
   });
   getTypesMock.mockResolvedValue({ data: [{ id: 5, name: '10회권' }] });
@@ -145,6 +146,44 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('홍길동')).toBeTruthy();
     expect(screen.getByText(/메모:/)).toBeTruthy();
     expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy();
+    expect(screen.getByText('최근 출석 기록이 없습니다.')).toBeTruthy();
+  });
+
+  it('renders attended classes and instructor comments', async () => {
+    getByIdMock.mockResolvedValueOnce({
+      data: {
+        customer: {
+          id: 1,
+          name: '홍길동',
+          phone: '010-1111-2222',
+          email: 'hong@test.com',
+        },
+        recentAttendances: [
+          {
+            id: 101,
+            attendance_date: '2026-02-20T10:00:00.000Z',
+            class_title: '아쉬탕가',
+            class_date: '2026-02-20',
+            class_start_time: '09:00:00',
+            instructor_comment: '호흡이 좋습니다.',
+          },
+          {
+            id: 102,
+            attendance_date: '2026-02-21T10:00:00.000Z',
+            class_type: '빈야사',
+            instructor_comment: '',
+          },
+        ],
+      },
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('참석 수업 및 코멘트')).toBeTruthy());
+    expect(screen.getByText('아쉬탕가')).toBeTruthy();
+    expect(screen.getByText('빈야사')).toBeTruthy();
+    expect(screen.getByText('강사 코멘트: 호흡이 좋습니다.')).toBeTruthy();
+    expect(screen.getByText('강사 코멘트: -')).toBeTruthy();
   });
 
   it('resets password with cancel and success paths', async () => {
