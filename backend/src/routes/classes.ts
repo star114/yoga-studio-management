@@ -150,10 +150,20 @@ router.get('/:id/registrations',
            r.customer_id,
            r.registered_at,
            r.registration_comment,
+           a.id AS attendance_id,
+           a.instructor_comment AS attendance_instructor_comment,
            c.name AS customer_name,
            c.phone AS customer_phone
          FROM yoga_class_registrations r
          INNER JOIN yoga_customers c ON r.customer_id = c.id
+         LEFT JOIN LATERAL (
+           SELECT id, instructor_comment
+           FROM yoga_attendances
+           WHERE class_id = r.class_id
+             AND customer_id = r.customer_id
+           ORDER BY attendance_date DESC, id DESC
+           LIMIT 1
+         ) a ON TRUE
          WHERE r.class_id = $1
          ORDER BY r.registered_at ASC`,
         [classId]
