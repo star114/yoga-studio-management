@@ -16,6 +16,9 @@ interface CustomerAttendance {
   id: number;
   attendance_date: string;
   class_type?: string | null;
+  class_title?: string | null;
+  class_date?: string | null;
+  class_start_time?: string | null;
   instructor_comment?: string | null;
 }
 
@@ -137,8 +140,13 @@ const CustomerDashboard: React.FC = () => {
                     <p className="font-medium text-primary-800">
                       {format(new Date(attendance.attendance_date), 'yyyy년 MM월 dd일 HH:mm')}
                     </p>
-                    {attendance.class_type && (
-                      <p className="text-sm text-warm-600 mt-1">{attendance.class_type}</p>
+                    {(attendance.class_title || attendance.class_type) && (
+                      <p className="text-sm text-warm-600 mt-1">
+                        {attendance.class_title || attendance.class_type}
+                        {attendance.class_date && attendance.class_start_time ? (
+                          <> · {attendance.class_date.slice(0, 10)} {attendance.class_start_time.slice(0, 5)}</>
+                        ) : null}
+                      </p>
                     )}
                   </div>
                 </div>

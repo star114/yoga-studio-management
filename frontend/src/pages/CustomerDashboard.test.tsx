@@ -94,6 +94,36 @@ describe('CustomerDashboard page', () => {
     expect(screen.getByText('💬 호흡이 안정적입니다.')).toBeTruthy();
   });
 
+  it('prefers matched class title/date info when class_type is missing', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          membership_type_name: '프리패스',
+          start_date: '2026-01-01',
+          is_active: true,
+        },
+      ],
+    });
+    attendanceGetAllMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          attendance_date: '2026-02-01T10:00:00Z',
+          class_type: null,
+          class_title: '아쉬탕가',
+          class_date: '2026-02-01',
+          class_start_time: '09:00:00',
+        },
+      ],
+    });
+
+    render(<CustomerDashboard />);
+
+    await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
+    expect(screen.getByText('아쉬탕가 · 2026-02-01 09:00')).toBeTruthy();
+  });
+
   it('handles API failure and still exits loading state', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     membershipGetByCustomerMock.mockRejectedValueOnce(new Error('failed'));
