@@ -100,6 +100,12 @@ ALTER TABLE yoga_classes
     ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS excluded_reason TEXT;
 
+ALTER TABLE yoga_attendances
+    ADD COLUMN IF NOT EXISTS class_id INTEGER REFERENCES yoga_classes(id) ON DELETE SET NULL;
+
+ALTER TABLE yoga_attendances
+    ALTER COLUMN class_id SET NOT NULL;
+
 -- 수업 신청 테이블
 CREATE TABLE IF NOT EXISTS yoga_class_registrations (
     id SERIAL PRIMARY KEY,
@@ -120,6 +126,7 @@ CREATE INDEX IF NOT EXISTS idx_memberships_customer_id ON yoga_memberships(custo
 CREATE INDEX IF NOT EXISTS idx_memberships_active ON yoga_memberships(is_active);
 CREATE INDEX IF NOT EXISTS idx_attendances_customer_id ON yoga_attendances(customer_id);
 CREATE INDEX IF NOT EXISTS idx_attendances_date ON yoga_attendances(attendance_date);
+CREATE INDEX IF NOT EXISTS idx_attendances_class_id ON yoga_attendances(class_id);
 CREATE INDEX IF NOT EXISTS idx_classes_date ON yoga_classes(class_date);
 CREATE INDEX IF NOT EXISTS idx_classes_open ON yoga_classes(is_open);
 CREATE INDEX IF NOT EXISTS idx_classes_recurring_series_id ON yoga_classes(recurring_series_id);
