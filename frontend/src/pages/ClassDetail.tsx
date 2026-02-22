@@ -30,6 +30,8 @@ interface ClassRegistration {
   customer_id: number;
   registered_at: string;
   registration_comment?: string | null;
+  attendance_id?: number | null;
+  attendance_instructor_comment?: string | null;
   customer_name: string;
   customer_phone: string;
 }
@@ -43,8 +45,8 @@ const ClassDetail: React.FC = () => {
   const [registrations, setRegistrations] = useState<ClassRegistration[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
-  const [savingCommentCustomerId, setSavingCommentCustomerId] = useState<number | null>(null);
+  const [instructorCommentDrafts, setInstructorCommentDrafts] = useState<Record<number, string>>({});
+  const [savingInstructorCommentCustomerId, setSavingInstructorCommentCustomerId] = useState<number | null>(null);
   const [checkingInCustomerId, setCheckingInCustomerId] = useState<number | null>(null);
   const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,9 +93,9 @@ const ClassDetail: React.FC = () => {
         setClassDetail(classRes.data);
         setRegistrations(registrationsRes.data);
         setCustomers(customersRes.data);
-        setCommentDrafts(
+        setInstructorCommentDrafts(
           Object.fromEntries(
-            registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.registration_comment || ''])
+            registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.attendance_instructor_comment || ''])
           )
         );
       } catch (loadError: unknown) {
@@ -114,9 +116,9 @@ const ClassDetail: React.FC = () => {
     ]);
     setClassDetail(classRes.data);
     setRegistrations(registrationsRes.data);
-    setCommentDrafts(
+    setInstructorCommentDrafts(
       Object.fromEntries(
-        registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.registration_comment || ''])
+        registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.attendance_instructor_comment || ''])
       )
     );
   };
@@ -160,38 +162,56 @@ const ClassDetail: React.FC = () => {
     }
   };
 
-  const handleSaveComment = async (customerId: number) => {
-    try {
-      setError('');
-      setNotice('');
-      setSavingCommentCustomerId(customerId);
-      const comment = (commentDrafts[customerId] || '').trim();
-      await classAPI.updateRegistrationComment(classId, customerId, comment);
-      await refreshClassAndRegistrations();
-      setNotice('신청자 코멘트를 저장했습니다.');
-    } catch (commentError: unknown) {
-      console.error('Failed to save registration comment:', commentError);
-      setError(parseApiError(commentError, '코멘트 저장에 실패했습니다.'));
-    } finally {
-      setSavingCommentCustomerId(null);
-    }
-  };
-
   const handleCheckIn = async (customerId: number) => {
     try {
       setError('');
       setNotice('');
       setCheckingInCustomerId(customerId);
+      const input = window.prompt(
+        '강사 코멘트(선택)를 입력하세요.',
+        instructorCommentDrafts[customerId] || ''
+      );
+      if (input === null) {
+        return;
+      }
+      const comment = input.trim();
       await attendanceAPI.checkIn({
         customer_id: customerId,
         class_id: classId,
+        instructor_comment: comment || null,
       });
+      setInstructorCommentDrafts((prev) => ({ ...prev, [customerId]: comment }));
+      await refreshClassAndRegistrations();
       setNotice('출석 체크를 완료했습니다.');
     } catch (checkInError: unknown) {
       console.error('Failed to check attendance:', checkInError);
       setError(parseApiError(checkInError, '출석 체크에 실패했습니다.'));
     } finally {
       setCheckingInCustomerId(null);
+    }
+  };
+
+  const handleSaveInstructorComment = async (registration: ClassRegistration) => {
+    if (!registration.attendance_id) {
+      setError('출석 체크 후 강사 코멘트를 저장할 수 있습니다.');
+      return;
+    }
+
+    try {
+      setError('');
+      setNotice('');
+      setSavingInstructorCommentCustomerId(registration.customer_id);
+      const comment = (instructorCommentDrafts[registration.customer_id] || '').trim();
+      await attendanceAPI.update(registration.attendance_id, {
+        instructor_comment: comment,
+      });
+      await refreshClassAndRegistrations();
+      setNotice('강사 코멘트를 저장했습니다.');
+    } catch (instructorCommentError: unknown) {
+      console.error('Failed to save instructor comment:', instructorCommentError);
+      setError(parseApiError(instructorCommentError, '강사 코멘트 저장에 실패했습니다.'));
+    } finally {
+      setSavingInstructorCommentCustomerId(null);
     }
   };
 
@@ -216,7 +236,7 @@ const ClassDetail: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-display font-bold text-primary-800">수업별 신청자 상세</h1>
+          <h1 className="text-3xl font-display font-bold text-primary-800">수업 상세</h1>
           <p className="text-warm-600 mt-2">
             {classDetail.class_date.slice(0, 10)} {classDetail.start_time.slice(0, 5)}-{classDetail.end_time.slice(0, 5)} / {classDetail.title}
           </p>
@@ -282,49 +302,63 @@ const ClassDetail: React.FC = () => {
                     <p className="text-xs text-warm-600 mt-1">
                       신청 시각: {new Date(registration.registered_at).toLocaleString('ko-KR')}
                     </p>
+                    <p className="text-xs text-warm-600 mt-1">
+                      출석 상태: {registration.attendance_id ? '출석 완료' : '출석 전'}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleCancelRegistration(registration.customer_id)}
-                    disabled={classDetail.class_status === 'completed'}
-                    className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    신청 취소
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleCheckIn(registration.customer_id)}
-                    disabled={classDetail.class_status === 'completed' || checkingInCustomerId === registration.customer_id}
-                    className="px-3 py-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {checkingInCustomerId === registration.customer_id ? '처리 중...' : '출석 체크'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void handleCancelRegistration(registration.customer_id)}
+                      disabled={classDetail.class_status === 'completed'}
+                      className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      신청 취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCheckIn(registration.customer_id)}
+                      disabled={classDetail.class_status === 'completed' || checkingInCustomerId === registration.customer_id}
+                      className="px-3 py-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {checkingInCustomerId === registration.customer_id ? '처리 중...' : '출석 체크'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveInstructorComment(registration)}
+                      className="px-3 py-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!registration.attendance_id || savingInstructorCommentCustomerId === registration.customer_id}
+                    >
+                      {savingInstructorCommentCustomerId === registration.customer_id ? '저장 중...' : '강사 코멘트 저장'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-4">
-                  <label className="label" htmlFor={`registration-comment-${registration.customer_id}`}>
-                    신청자 코멘트
+                  <p className="label">신청자 코멘트</p>
+                  <p className="text-sm text-warm-700">
+                    {registration.registration_comment?.trim() || '-'}
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <label className="label" htmlFor={`instructor-comment-${registration.customer_id}`}>
+                    강사 코멘트
                   </label>
                   <textarea
-                    id={`registration-comment-${registration.customer_id}`}
+                    id={`instructor-comment-${registration.customer_id}`}
                     className="input-field min-h-[88px]"
-                    placeholder="예: 초보반 선호, 허리 주의 필요 등"
-                    value={commentDrafts[registration.customer_id] || ''}
+                    placeholder="예: 자세 안정적, 다음 수업에서 호흡 연동 연습 권장"
+                    value={instructorCommentDrafts[registration.customer_id] || ''}
                     onChange={(event) => {
                       const value = event.target.value;
-                      setCommentDrafts((prev) => ({ ...prev, [registration.customer_id]: value }));
+                      setInstructorCommentDrafts((prev) => ({ ...prev, [registration.customer_id]: value }));
                     }}
+                    disabled={!registration.attendance_id}
                   />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveComment(registration.customer_id)}
-                      className="btn-secondary"
-                      disabled={savingCommentCustomerId === registration.customer_id}
-                    >
-                      {savingCommentCustomerId === registration.customer_id ? '저장 중...' : '코멘트 저장'}
-                    </button>
-                  </div>
+                  {!registration.attendance_id && (
+                    <p className="mt-2 text-xs text-warm-600">출석 체크 후 입력할 수 있습니다.</p>
+                  )}
                 </div>
               </div>
             ))}

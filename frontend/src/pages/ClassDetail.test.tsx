@@ -9,8 +9,8 @@ const {
   classGetRegistrationsMock,
   classRegisterMock,
   classCancelRegistrationMock,
-  classUpdateCommentMock,
   attendanceCheckInMock,
+  attendanceUpdateMock,
   customerGetAllMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
@@ -18,8 +18,8 @@ const {
   classGetRegistrationsMock: vi.fn(),
   classRegisterMock: vi.fn(),
   classCancelRegistrationMock: vi.fn(),
-  classUpdateCommentMock: vi.fn(),
   attendanceCheckInMock: vi.fn(),
+  attendanceUpdateMock: vi.fn(),
   customerGetAllMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
 }));
@@ -42,13 +42,13 @@ vi.mock('../services/api', () => ({
     getRegistrations: classGetRegistrationsMock,
     register: classRegisterMock,
     cancelRegistration: classCancelRegistrationMock,
-    updateRegistrationComment: classUpdateCommentMock,
   },
   customerAPI: {
     getAll: customerGetAllMock,
   },
   attendanceAPI: {
     checkIn: attendanceCheckInMock,
+    update: attendanceUpdateMock,
   },
 }));
 
@@ -87,6 +87,8 @@ const seedLoad = (overrides?: Record<string, unknown>) => {
         customer_id: 101,
         registered_at: '2026-03-01T01:00:00.000Z',
         registration_comment: '기존 코멘트',
+        attendance_id: 9001,
+        attendance_instructor_comment: '기존 강사 코멘트',
         customer_name: '홍길동',
         customer_phone: '010-1111-2222',
       },
@@ -144,7 +146,7 @@ describe('ClassDetail page', () => {
   it('renders class detail and unregistered customer options', async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('수업별 신청자 상세')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수업 상세')).toBeTruthy());
     expect(screen.getByText('상태: 오픈')).toBeTruthy();
     expect(screen.getByText('홍길동')).toBeTruthy();
     expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
@@ -275,30 +277,15 @@ describe('ClassDetail page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('saves registration comment and handles error fallback message', async () => {
-    classUpdateCommentMock.mockResolvedValueOnce(undefined);
-
+  it('renders registration comment as read-only customer-provided text', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: '코멘트 저장' })).toBeTruthy());
-
-    fireEvent.change(screen.getByLabelText('신청자 코멘트'), { target: { value: '  새 코멘트  ' } });
-    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
-
-    await waitFor(() => expect(classUpdateCommentMock).toHaveBeenCalledWith(1, 101, '새 코멘트'));
-    await waitFor(() => expect(screen.getByText('신청자 코멘트를 저장했습니다.')).toBeTruthy());
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    parseApiErrorMock.mockReturnValueOnce('코멘트 저장에 실패했습니다.');
-    classUpdateCommentMock.mockRejectedValueOnce(new Error('comment failed'));
-
-    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
-    await waitFor(() => expect(screen.getByText('코멘트 저장에 실패했습니다.')).toBeTruthy());
-    expect(parseApiErrorMock).toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    await waitFor(() => expect(screen.getByText('신청자 코멘트')).toBeTruthy());
+    expect(screen.getByText('기존 코멘트')).toBeTruthy();
   });
 
   it('checks attendance with class_id and shows error on failure', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt');
+    promptSpy.mockReturnValueOnce('  첫 출석 코멘트  ');
     attendanceCheckInMock.mockResolvedValueOnce(undefined);
 
     renderPage();
@@ -308,19 +295,22 @@ describe('ClassDetail page', () => {
     await waitFor(() => expect(attendanceCheckInMock).toHaveBeenCalledWith({
       customer_id: 101,
       class_id: 1,
+      instructor_comment: '첫 출석 코멘트',
     }));
     await waitFor(() => expect(screen.getByText('출석 체크를 완료했습니다.')).toBeTruthy());
 
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    promptSpy.mockReturnValueOnce('');
     attendanceCheckInMock.mockRejectedValueOnce(new Error('checkin failed'));
 
     fireEvent.click(screen.getByRole('button', { name: '출석 체크' }));
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
+    promptSpy.mockRestore();
   });
 
-  it('normalizes empty registration comment draft to empty string', async () => {
+  it('shows dash when registration comment is empty', async () => {
     classGetRegistrationsMock.mockResolvedValueOnce({
       data: [
         {
@@ -329,19 +319,62 @@ describe('ClassDetail page', () => {
           customer_id: 101,
           registered_at: '2026-03-01T01:00:00.000Z',
           registration_comment: null,
+          attendance_id: 9001,
+          attendance_instructor_comment: '',
           customer_name: '홍길동',
           customer_phone: '010-1111-2222',
         },
       ],
     });
-    classUpdateCommentMock.mockResolvedValueOnce(undefined);
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '코멘트 저장' })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
+    await waitFor(() => expect(screen.getByText('신청자 코멘트')).toBeTruthy());
+    expect(screen.getByText('-')).toBeTruthy();
+  });
 
-    await waitFor(() => expect(classUpdateCommentMock).toHaveBeenCalledWith(1, 101, ''));
+  it('saves instructor comment via attendance update and blocks when attendance is missing', async () => {
+    attendanceUpdateMock.mockResolvedValueOnce(undefined);
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          class_id: 1,
+          customer_id: 101,
+          registered_at: '2026-03-01T01:00:00.000Z',
+          registration_comment: '기존 코멘트',
+          attendance_id: 9001,
+          attendance_instructor_comment: '기존 강사 코멘트',
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+        {
+          id: 2,
+          class_id: 1,
+          customer_id: 102,
+          registered_at: '2026-03-01T01:10:00.000Z',
+          registration_comment: '',
+          attendance_id: null,
+          attendance_instructor_comment: null,
+          customer_name: '김영희',
+          customer_phone: '010-2222-3333',
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '강사 코멘트 저장' }).length).toBe(2));
+    expect(screen.getByText('출석 체크 후 입력할 수 있습니다.')).toBeTruthy();
+    expect((screen.getAllByRole('button', { name: '강사 코멘트 저장' })[1] as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getAllByLabelText('강사 코멘트')[0], { target: { value: '  수업 후 안정적입니다  ' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '강사 코멘트 저장' })[0]);
+
+    await waitFor(() => expect(attendanceUpdateMock).toHaveBeenCalledWith(9001, {
+      instructor_comment: '수업 후 안정적입니다',
+    }));
+    await waitFor(() => expect(screen.getByText('강사 코멘트를 저장했습니다.')).toBeTruthy());
   });
 
   it('disables register/cancel buttons for completed or unavailable class state', async () => {
