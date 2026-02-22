@@ -172,6 +172,16 @@ test('attendances list/update/today routes cover success and errors', async () =
   });
   assert.equal(res.status, 404);
 
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '8' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { class_id: 77 },
+  });
+  assert.equal(res.status, 400);
+
   h.queryQueue.push({ rows: [{ id: 8, instructor_comment: 'x2' }] });
   res = await h.runRoute({
     method: 'put',
@@ -179,6 +189,19 @@ test('attendances list/update/today routes cover success and errors', async () =
     params: { id: '8' },
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { instructor_comment: 'x2' },
+  });
+  assert.equal(res.status, 200);
+
+  h.queryQueue.push(
+    { rows: [{ id: 2, title: '빈야사' }] },
+    { rows: [{ id: 8, instructor_comment: 'x2', class_id: 2, class_type: '빈야사' }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '8' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { class_id: 2 },
   });
   assert.equal(res.status, 200);
 
@@ -232,7 +255,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3, membership_id: 9 },
+    body: { customer_id: 3, membership_id: 9, class_id: 5 },
   });
   assert.equal(res.status, 400);
 
@@ -240,6 +263,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   explicitMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 5, title: '빈야사' }] },
     { rows: [{ id: 13, membership_id: 9 }] },
     { rows: [], rowCount: 0 }
   );
@@ -248,7 +272,40 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3, membership_id: 9 },
+    body: { customer_id: 3, membership_id: 9, class_id: 5 },
+  });
+  assert.equal(res.status, 201);
+
+  const classMismatchClient = h.createDbClientMock();
+  classMismatchClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(classMismatchClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, membership_id: 9, class_id: 999 },
+  });
+  assert.equal(res.status, 400);
+
+  const classMatchClient = h.createDbClientMock();
+  classMatchClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [{ id: 15, membership_id: 9, class_id: 5, class_type: '아쉬탕가' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(classMatchClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, membership_id: 9, class_id: 5 },
   });
   assert.equal(res.status, 201);
 
@@ -263,7 +320,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3 },
+    body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 400);
 
@@ -278,7 +335,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3 },
+    body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 400);
 
@@ -293,7 +350,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3 },
+    body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 400);
 
@@ -301,6 +358,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   successClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 1, remaining_sessions: 5, end_date: null }] },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [{ id: 11, membership_id: 1 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
@@ -310,7 +368,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3, instructor_comment: 'ok' },
+    body: { customer_id: 3, class_id: 5, instructor_comment: 'ok' },
   });
   assert.equal(res.status, 201);
 
@@ -318,6 +376,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   successNoRemainClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 2, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [{ id: 12, membership_id: 2 }] },
     { rows: [], rowCount: 0 }
   );
@@ -326,7 +385,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3 },
+    body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 201);
 
@@ -341,7 +400,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3 },
+    body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 500);
 

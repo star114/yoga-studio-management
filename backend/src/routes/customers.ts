@@ -72,9 +72,18 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
     // 최근 출석 기록
     const attendancesResult = await pool.query(`
-      SELECT a.*, u.email as instructor_email
+      SELECT
+        a.*,
+        u.email as instructor_email,
+        cls.id as class_id,
+        cls.title as class_title,
+        cls.class_date,
+        cls.start_time as class_start_time,
+        cls.end_time as class_end_time,
+        COALESCE(a.class_type, cls.title) as class_type
       FROM yoga_attendances a
       LEFT JOIN yoga_users u ON a.instructor_id = u.id
+      LEFT JOIN yoga_classes cls ON cls.id = a.class_id
       WHERE a.customer_id = $1
       ORDER BY a.attendance_date DESC
       LIMIT 20

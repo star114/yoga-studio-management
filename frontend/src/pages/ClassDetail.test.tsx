@@ -10,6 +10,7 @@ const {
   classRegisterMock,
   classCancelRegistrationMock,
   classUpdateCommentMock,
+  attendanceCheckInMock,
   customerGetAllMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const {
   classRegisterMock: vi.fn(),
   classCancelRegistrationMock: vi.fn(),
   classUpdateCommentMock: vi.fn(),
+  attendanceCheckInMock: vi.fn(),
   customerGetAllMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
 }));
@@ -44,6 +46,9 @@ vi.mock('../services/api', () => ({
   },
   customerAPI: {
     getAll: customerGetAllMock,
+  },
+  attendanceAPI: {
+    checkIn: attendanceCheckInMock,
   },
 }));
 
@@ -289,6 +294,28 @@ describe('ClassDetail page', () => {
     fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
     await waitFor(() => expect(screen.getByText('코멘트 저장에 실패했습니다.')).toBeTruthy());
     expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('checks attendance with class_id and shows error on failure', async () => {
+    attendanceCheckInMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '출석 체크' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '출석 체크' }));
+    await waitFor(() => expect(attendanceCheckInMock).toHaveBeenCalledWith({
+      customer_id: 101,
+      class_id: 1,
+    }));
+    await waitFor(() => expect(screen.getByText('출석 체크를 완료했습니다.')).toBeTruthy());
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    attendanceCheckInMock.mockRejectedValueOnce(new Error('checkin failed'));
+
+    fireEvent.click(screen.getByRole('button', { name: '출석 체크' }));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });

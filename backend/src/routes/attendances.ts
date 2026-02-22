@@ -29,11 +29,18 @@ router.get('/', authenticate, async (req, res) => {
         a.*,
         c.name as customer_name,
         u.email as instructor_email,
-        m.id as membership_id
+        m.id as membership_id,
+        cls.id as class_id,
+        cls.title as class_title,
+        cls.class_date,
+        cls.start_time as class_start_time,
+        cls.end_time as class_end_time,
+        COALESCE(a.class_type, cls.title) as class_type
       FROM yoga_attendances a
       LEFT JOIN yoga_customers c ON a.customer_id = c.id
       LEFT JOIN yoga_users u ON a.instructor_id = u.id
       LEFT JOIN yoga_memberships m ON a.membership_id = m.id
+      LEFT JOIN yoga_classes cls ON cls.id = a.class_id
       WHERE 1=1
     `;
 
@@ -80,9 +87,10 @@ router.post('/',
   authenticate,
   requireAdmin,
   body('customer_id').isInt(),
+  body('class_id').isInt({ min: 1 }),
   validateRequest,
   async (req: AuthRequest, res) => {
-    const { customer_id, membership_id, instructor_comment, class_type } = req.body;
+    const { customer_id, membership_id, instructor_comment, class_type, class_id } = req.body;
 
     const client = await pool.connect();
     try {
@@ -136,17 +144,41 @@ router.post('/',
         }
       }
 
+      let resolvedClassId: number | null = null;
+      let resolvedClassType = typeof class_type === 'string' ? class_type.trim() : '';
+
+      const classId = Number(class_id);
+      const classResult = await client.query(
+        `SELECT cls.id, cls.title
+         FROM yoga_classes cls
+         INNER JOIN yoga_class_registrations reg ON reg.class_id = cls.id
+         WHERE cls.id = $1 AND reg.customer_id = $2
+         LIMIT 1`,
+        [classId, customer_id]
+      );
+
+      if (classResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Class not found or customer not registered' });
+      }
+
+      resolvedClassId = classResult.rows[0].id as number;
+      if (!resolvedClassType) {
+        resolvedClassType = String(classResult.rows[0].title ?? '').trim();
+      }
+
       // 출석 기록 생성
       const attendanceResult = await client.query(
         `INSERT INTO yoga_attendances 
-         (customer_id, membership_id, instructor_comment, instructor_id, class_type)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+         (customer_id, membership_id, class_id, instructor_comment, instructor_id, class_type)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [
           customer_id,
           activeMembership.id,
+          resolvedClassId,
           instructor_comment || null,
           req.user!.id,
-          class_type || null
+          resolvedClassType || null
         ]
       );
 
@@ -177,18 +209,43 @@ router.post('/',
 router.put('/:id',
   authenticate,
   requireAdmin,
+  body('class_id').optional().isInt({ min: 1 }),
+  validateRequest,
   async (req, res) => {
     const { id } = req.params;
-    const { instructor_comment, class_type } = req.body;
+    const { instructor_comment, class_type, class_id } = req.body;
 
     try {
+      let resolvedClassId: number | null | undefined;
+      let resolvedClassType = typeof class_type === 'string' ? class_type.trim() : undefined;
+
+      if (class_id !== undefined && class_id !== null) {
+        const classId = Number(class_id);
+        const classResult = await pool.query(
+          'SELECT id, title FROM yoga_classes WHERE id = $1',
+          [classId]
+        );
+
+        if (classResult.rows.length === 0) {
+          return res.status(400).json({ error: 'Class not found' });
+        }
+
+        resolvedClassId = classResult.rows[0].id as number;
+        if (!resolvedClassType) {
+          resolvedClassType = String(classResult.rows[0].title ?? '').trim() || undefined;
+        }
+      } else {
+        resolvedClassId = undefined;
+      }
+
       const result = await pool.query(
         `UPDATE yoga_attendances 
          SET instructor_comment = COALESCE($1, instructor_comment),
-             class_type = COALESCE($2, class_type)
-         WHERE id = $3
+             class_type = COALESCE($2, class_type),
+             class_id = COALESCE($3, class_id)
+         WHERE id = $4
          RETURNING *`,
-        [instructor_comment, class_type, id]
+        [instructor_comment, resolvedClassType, resolvedClassId, id]
       );
 
       if (result.rows.length === 0) {
@@ -266,9 +323,16 @@ router.get('/today', authenticate, requireAdmin, async (req, res) => {
       SELECT 
         a.*,
         c.name as customer_name,
-        c.phone as customer_phone
+        c.phone as customer_phone,
+        cls.id as class_id,
+        cls.title as class_title,
+        cls.class_date,
+        cls.start_time as class_start_time,
+        cls.end_time as class_end_time,
+        COALESCE(a.class_type, cls.title) as class_type
       FROM yoga_attendances a
       LEFT JOIN yoga_customers c ON a.customer_id = c.id
+      LEFT JOIN yoga_classes cls ON cls.id = a.class_id
       WHERE DATE(a.attendance_date) = CURRENT_DATE
       ORDER BY a.attendance_date DESC
     `);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { classAPI, customerAPI } from '../services/api';
+import { attendanceAPI, classAPI, customerAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 
 interface YogaClassDetail {
@@ -45,6 +45,7 @@ const ClassDetail: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
   const [savingCommentCustomerId, setSavingCommentCustomerId] = useState<number | null>(null);
+  const [checkingInCustomerId, setCheckingInCustomerId] = useState<number | null>(null);
   const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -176,6 +177,24 @@ const ClassDetail: React.FC = () => {
     }
   };
 
+  const handleCheckIn = async (customerId: number) => {
+    try {
+      setError('');
+      setNotice('');
+      setCheckingInCustomerId(customerId);
+      await attendanceAPI.checkIn({
+        customer_id: customerId,
+        class_id: classId,
+      });
+      setNotice('출석 체크를 완료했습니다.');
+    } catch (checkInError: unknown) {
+      console.error('Failed to check attendance:', checkInError);
+      setError(parseApiError(checkInError, '출석 체크에 실패했습니다.'));
+    } finally {
+      setCheckingInCustomerId(null);
+    }
+  };
+
   if (isLoading) {
     return <p className="text-warm-600 py-8">수업 상세 로딩 중...</p>;
   }
@@ -271,6 +290,14 @@ const ClassDetail: React.FC = () => {
                     className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     신청 취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCheckIn(registration.customer_id)}
+                    disabled={classDetail.class_status === 'completed' || checkingInCustomerId === registration.customer_id}
+                    className="px-3 py-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {checkingInCustomerId === registration.customer_id ? '처리 중...' : '출석 체크'}
                   </button>
                 </div>
 
