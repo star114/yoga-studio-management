@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { customerAPI, attendanceAPI, classAPI } from '../services/api';
 import {
   addDays,
@@ -56,6 +57,7 @@ const normalizeTime = (value: string) => value.slice(0, 5);
 const normalizeDate = (value: string) => value.slice(0, 10);
 
 const AdminDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalCustomers: 0,
     todayAttendance: 0,
@@ -295,7 +297,10 @@ const AdminDashboard: React.FC = () => {
                   <button
                     key={dateKey}
                     type="button"
-                    onClick={() => setFocusDate(date)}
+                    onClick={() => {
+                      setFocusDate(date);
+                      setCalendarView('day');
+                    }}
                     className={`min-h-[108px] rounded-xl border p-2 text-left transition-colors ${today ? 'border-primary-500 bg-primary-50/80' : active ? 'border-primary-300 bg-primary-50/50' : 'border-warm-200 bg-white/70'} ${inMonth ? 'text-primary-800' : 'text-warm-400'}`}
                   >
                     <div className="flex items-center justify-between">
@@ -326,7 +331,10 @@ const AdminDashboard: React.FC = () => {
                 <button
                   key={dateKey}
                   type="button"
-                  onClick={() => setFocusDate(date)}
+                  onClick={() => {
+                    setFocusDate(date);
+                    setCalendarView('day');
+                  }}
                   className={`rounded-xl border p-3 text-left min-h-[160px] ${today ? 'border-primary-500 bg-primary-50/80' : 'border-warm-200 bg-white/70'}`}
                 >
                   <p className="text-xs text-warm-600">{WEEKDAY_LABELS[date.getDay()]}</p>
@@ -352,7 +360,14 @@ const AdminDashboard: React.FC = () => {
             ) : (
               <div className="space-y-2">
                 {selectedDayClasses.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-warm-200 bg-warm-50 p-3">
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      window.location.href = `/classes/${item.id}`;
+                    }}
+                    className="w-full rounded-lg border border-warm-200 bg-warm-50 p-3 text-left hover:bg-warm-100 transition-colors"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-primary-800">{item.title}</p>
@@ -376,7 +391,7 @@ const AdminDashboard: React.FC = () => {
                     {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number' && (
                       <p className="mt-2 text-sm text-warm-700">신청: {item.current_enrollment}/{item.max_capacity}</p>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -421,7 +436,12 @@ const AdminDashboard: React.FC = () => {
               <p className="text-warm-500 text-center py-8">등록된 회원이 없습니다</p>
             ) : (
               recentCustomers.map((customer) => (
-                <div key={customer.id} className="flex items-center justify-between p-3 bg-warm-50 rounded-lg hover:bg-warm-100 transition-colors">
+                <button
+                  key={customer.id}
+                  type="button"
+                  onClick={() => navigate(`/customers/${customer.id}`)}
+                  className="w-full flex items-center justify-between p-3 bg-warm-50 rounded-lg hover:bg-warm-100 transition-colors text-left"
+                >
                   <div>
                     <p className="font-medium text-primary-800">{customer.name}</p>
                     <p className="text-sm text-warm-600">{customer.phone}</p>
@@ -430,7 +450,7 @@ const AdminDashboard: React.FC = () => {
                     <p>회원권 {customer.membership_count}개</p>
                     <p>출석 {customer.total_attendance}회</p>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import AdminDashboard from './AdminDashboard';
 
 const {
@@ -24,6 +25,12 @@ vi.mock('../services/api', () => ({
     getAll: classGetAllMock,
   },
 }));
+
+const renderPage = () => render(
+  <MemoryRouter>
+    <AdminDashboard />
+  </MemoryRouter>
+);
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
@@ -177,7 +184,7 @@ describe('AdminDashboard page', () => {
   });
 
   it('renders loading and then dashboard data', async () => {
-    render(<AdminDashboard />);
+    renderPage();
 
     expect(screen.getByText('로딩 중...')).toBeTruthy();
 
@@ -196,7 +203,7 @@ describe('AdminDashboard page', () => {
 
   it('supports calendar month/week/day navigation', async () => {
     const todayDate = formatDate(new Date());
-    render(<AdminDashboard />);
+    renderPage();
     await waitFor(() => expect(screen.getByText('수업 캘린더')).toBeTruthy());
 
     expect(screen.getByText('월간')).toBeTruthy();
@@ -233,7 +240,7 @@ describe('AdminDashboard page', () => {
     attendanceGetTodayMock.mockResolvedValueOnce({ data: [] });
     classGetAllMock.mockResolvedValueOnce({ data: [] });
 
-    render(<AdminDashboard />);
+    renderPage();
 
     await waitFor(() => expect(screen.getByText('대시보드')).toBeTruthy());
     expect(screen.getByText('아직 출석한 회원이 없습니다')).toBeTruthy();
@@ -247,7 +254,7 @@ describe('AdminDashboard page', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     customerGetAllMock.mockRejectedValueOnce(new Error('failed'));
 
-    render(<AdminDashboard />);
+    renderPage();
 
     await waitFor(() => expect(screen.getByText('대시보드')).toBeTruthy());
     expect(consoleSpy).toHaveBeenCalled();
