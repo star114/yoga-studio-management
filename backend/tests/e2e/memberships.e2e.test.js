@@ -111,9 +111,9 @@ const createMembershipsHarness = () => {
 };
 
 const adminToken = () =>
-  jwt.sign({ id: 1, email: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 1, login_id: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
 const customerToken = () =>
-  jwt.sign({ id: 10, email: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 10, login_id: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
 
 test('types routes cover success/not-found/validation/error', async () => {
   process.env.JWT_SECRET = 'test-secret';

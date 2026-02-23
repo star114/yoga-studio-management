@@ -152,9 +152,9 @@ const createCustomersHarness = () => {
 };
 
 const adminToken = () =>
-  jwt.sign({ id: 1, email: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 1, login_id: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
 const customerToken = () =>
-  jwt.sign({ id: 10, email: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 10, login_id: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
 
 test('GET / returns customers for admin and handles server error', async () => {
   process.env.JWT_SECRET = 'test-secret';
@@ -249,10 +249,10 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'N', phone: '', email: '' },
+    body: { name: 'N', phone: '' },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, '이메일 또는 전화번호 중 하나는 필수입니다.');
+  assert.ok(Array.isArray(res.body.errors));
 
   const dupPhoneClient = h.createDbClientMock();
   dupPhoneClient.queryQueue.push(
@@ -305,7 +305,6 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     headers: { authorization: `Bearer ${adminToken()}` },
     body: {
       name: 'N3',
-      email: 'N3@EXAMPLE.COM',
       phone: '01022223333',
       birth_date: '1990-01-01',
       gender: 'F',
@@ -319,6 +318,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
   const okClient2 = h.createDbClientMock();
   okClient2.queryQueue.push(
     { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [], rowCount: 0 }, // phone check
     { rows: [{ id: 34 }] }, // insert user
     { rows: [{ id: 51, user_id: 34, name: 'N3-2' }] }, // insert customer
     { rows: [], rowCount: 0 } // COMMIT
@@ -329,7 +329,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'N3-2', email: 'n32@example.com' },
+    body: { name: 'N3-2', phone: '01077778888' },
   });
   assert.equal(res.status, 201);
   assert.equal(res.body.name, 'N3-2');
@@ -337,6 +337,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
   const errClient = h.createDbClientMock();
   errClient.queryQueue.push(
     { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [], rowCount: 0 }, // phone check
     new Error('unexpected'), // user insert flow fail
     { rows: [], rowCount: 0 } // ROLLBACK
   );
@@ -345,7 +346,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'N4', email: 'n4@example.com' },
+    body: { name: 'N4', phone: '01066667777' },
   });
   assert.equal(res.status, 500);
 });

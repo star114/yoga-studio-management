@@ -28,7 +28,7 @@ router.get('/', authenticate, async (req, res) => {
       SELECT 
         a.*,
         c.name as customer_name,
-        u.email as instructor_email,
+        u.login_id as instructor_email,
         m.id as membership_id,
         cls.id as class_id,
         cls.title as class_title,

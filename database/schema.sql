@@ -1,10 +1,9 @@
 -- Yoga Studio Management System Schema
--- 기존 TeslaMate DB에 추가할 테이블들
 
 -- 사용자 테이블 (관리자 및 고객)
 CREATE TABLE IF NOT EXISTS yoga_users (
     id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
+    login_id VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'customer')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -157,4 +156,4 @@ CREATE TRIGGER update_yoga_memberships_updated_at BEFORE UPDATE ON yoga_membersh
 CREATE TRIGGER update_yoga_classes_updated_at BEFORE UPDATE ON yoga_classes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 초기 관리자 계정은 백엔드 시작 시 .env의 ADMIN_EMAIL / ADMIN_PASSWORD 값으로 생성/갱신됨
+-- 초기 관리자 계정은 백엔드 시작 시 .env의 ADMIN_ID / ADMIN_PASSWORD 값으로 생성/갱신됨

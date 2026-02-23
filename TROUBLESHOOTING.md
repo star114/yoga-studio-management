@@ -124,19 +124,19 @@ lsof -i :3001
 
 ### 8. 관리자 로그인 실패
 
-**증상**: admin@yoga.com으로 로그인 안 됨
+**증상**: admin으로 로그인 안 됨
 
 **해결**:
 ```bash
 # 백엔드 환경 변수 확인 (.env)
-# ADMIN_EMAIL, ADMIN_PASSWORD 값이 올바른지 확인
+# ADMIN_ID, ADMIN_PASSWORD 값이 올바른지 확인
 
 # 백엔드 재시작 (admin 계정은 시작 시 ensure/upsert 됩니다)
 docker-compose restart backend
 
 # 계정 존재 확인
 docker-compose exec -T db psql -U yoga_admin -d yoga_studio -c \
-"SELECT email, role, updated_at FROM yoga_users WHERE email = 'admin@yoga.com';"
+"SELECT login_id, role, updated_at FROM yoga_users WHERE login_id = 'admin';"
 ```
 
 ### 9. 데이터가 보이지 않음

@@ -51,7 +51,7 @@ docker-compose up -d --build
 브라우저에서 http://localhost:3000 열기
 
 **초기 로그인 정보:**
-- Email: `admin@yoga.com`
+- ID: `admin`
 - Password: `admin123`
 
 ⚠️ **첫 로그인 후 즉시 비밀번호를 변경하세요!**

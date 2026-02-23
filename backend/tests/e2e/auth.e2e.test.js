@@ -151,7 +151,7 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   assert.equal(res.body.error, 'Ambiguous phone identifier');
 
   h.queryQueue.push({
-    rows: [{ id: 1, email: 'u@example.com', role: 'admin', password_hash: 'hash' }],
+    rows: [{ id: 1, login_id: 'u@example.com', role: 'admin', password_hash: 'hash' }],
   });
   t.mock.method(bcrypt, 'compare', async () => false);
   res = await h.runRoute({
@@ -162,14 +162,15 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   assert.equal(res.status, 401);
 
   h.queryQueue.push(
-    { rows: [{ id: 10, email: 'c@example.com', role: 'customer', password_hash: 'hash2' }] },
+    { rows: [] },
+    { rows: [{ id: 10, login_id: 'c@example.com', role: 'customer', password_hash: 'hash2' }] },
     { rows: [{ id: 99, user_id: 10, name: '고객' }] }
   );
   t.mock.method(bcrypt, 'compare', async () => true);
   res = await h.runRoute({
     method: 'post',
     path: '/login',
-    body: { identifier: 'c@example.com', password: 'ok-password' },
+    body: { identifier: '010-1234-5678', password: 'ok-password' },
   });
   assert.equal(res.status, 200);
   assert.ok(res.body.token);
@@ -177,14 +178,15 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   assert.equal(res.body.customerInfo.name, '고객');
 
   h.queryQueue.push(
-    { rows: [{ id: 11, email: 'c2@example.com', role: 'customer', password_hash: 'hash3' }] },
+    { rows: [] },
+    { rows: [{ id: 11, login_id: 'c2@example.com', role: 'customer', password_hash: 'hash3' }] },
     { rows: [] }
   );
   t.mock.method(bcrypt, 'compare', async () => true);
   res = await h.runRoute({
     method: 'post',
     path: '/login',
-    body: { identifier: 'c2@example.com', password: 'ok-password' },
+    body: { identifier: '010-9999-8888', password: 'ok-password' },
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.customerInfo, null);
@@ -204,7 +206,7 @@ test('GET /me and PUT /password cover main branches', async (t) => {
   const envBackup = process.env.JWT_SECRET;
   process.env.JWT_SECRET = 'test-secret';
   const token = jwt.sign(
-    { id: 7, email: 'c@example.com', role: 'customer' },
+    { id: 7, login_id: 'c@example.com', role: 'customer' },
     process.env.JWT_SECRET
   );
   const h = createAuthHarness();
@@ -218,7 +220,7 @@ test('GET /me and PUT /password cover main branches', async (t) => {
   assert.equal(res.status, 404);
 
   h.queryQueue.push(
-    { rows: [{ id: 7, email: 'c@example.com', role: 'customer' }] },
+    { rows: [{ id: 7, login_id: 'c@example.com', role: 'customer' }] },
     { rows: [{ id: 70, user_id: 7, name: '고객7' }] }
   );
   res = await h.runRoute({
@@ -231,7 +233,7 @@ test('GET /me and PUT /password cover main branches', async (t) => {
   assert.equal(res.body.customerInfo.name, '고객7');
 
   h.queryQueue.push(
-    { rows: [{ id: 7, email: 'c@example.com', role: 'customer' }] },
+    { rows: [{ id: 7, login_id: 'c@example.com', role: 'customer' }] },
     { rows: [] }
   );
   res = await h.runRoute({

@@ -137,7 +137,7 @@ const createAttendancesHarness = () => {
 };
 
 const adminToken = () =>
-  jwt.sign({ id: 1, email: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 1, login_id: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
 
 test('attendances list/update/today routes cover success and errors', async () => {
   process.env.JWT_SECRET = 'test-secret';

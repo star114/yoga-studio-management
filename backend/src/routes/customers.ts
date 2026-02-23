@@ -12,15 +12,13 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
     const result = await pool.query(`
       SELECT 
         c.*,
-        CASE WHEN POSITION('@' IN u.email) > 0 THEN u.email ELSE '' END AS email,
-        u.email AS login_id,
+        c.phone AS login_id,
         COUNT(DISTINCT m.id) as membership_count,
         COUNT(DISTINCT a.id) as total_attendance
       FROM yoga_customers c
-      LEFT JOIN yoga_users u ON c.user_id = u.id
       LEFT JOIN yoga_memberships m ON c.id = m.customer_id
       LEFT JOIN yoga_attendances a ON c.id = a.customer_id
-      GROUP BY c.id, u.email
+      GROUP BY c.id
       ORDER BY c.created_at DESC
     `);
 
@@ -50,10 +48,8 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
     const customerResult = await pool.query(`
       SELECT
         c.*,
-        CASE WHEN POSITION('@' IN u.email) > 0 THEN u.email ELSE '' END AS email,
-        u.email AS login_id
+        c.phone AS login_id
       FROM yoga_customers c
-      LEFT JOIN yoga_users u ON c.user_id = u.id
       WHERE c.id = $1
     `, [id]);
 
@@ -74,7 +70,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
     const attendancesResult = await pool.query(`
       SELECT
         a.*,
-        u.email as instructor_email,
+        u.login_id as instructor_email,
         cls.id as class_id,
         cls.title as class_title,
         cls.class_date,
@@ -105,28 +101,25 @@ router.post('/',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
-  body('phone').optional({ values: 'falsy' }).trim().isLength({ min: 1 }).withMessage('전화번호 형식이 올바르지 않습니다.'),
-  body('email').optional({ values: 'falsy' }).trim().isEmail().withMessage('이메일 형식이 올바르지 않습니다.'),
+  body('phone').trim().notEmpty().withMessage('전화번호는 필수입니다.'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone, email, birth_date, gender, address, notes } = req.body as {
+    const { name, phone, birth_date, gender, address, notes } = req.body as {
       name: string;
-      phone?: string;
-      email?: string;
+      phone: string;
       birth_date?: string;
       gender?: string;
       address?: string;
       notes?: string;
     };
     const trimmedPhone = (phone || '').trim();
-    const trimmedEmail = (email || '').trim().toLowerCase();
 
-    if (!trimmedPhone && !trimmedEmail) {
-      return res.status(400).json({ error: '이메일 또는 전화번호 중 하나는 필수입니다.' });
+    if (!trimmedPhone) {
+      return res.status(400).json({ error: '전화번호는 필수입니다.' });
     }
 
     const client = await pool.connect();
@@ -150,9 +143,9 @@ router.post('/',
 
       // 사용자 계정 생성
       const passwordHash = await bcrypt.hash('12345', 10);
-      const loginId = trimmedEmail || trimmedPhone;
+      const loginId = trimmedPhone;
       const userResult = await client.query(
-        'INSERT INTO yoga_users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
+        'INSERT INTO yoga_users (login_id, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
         [loginId, passwordHash, 'customer']
       );
 

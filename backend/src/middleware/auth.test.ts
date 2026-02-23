@@ -55,7 +55,7 @@ test('authenticate returns 401 when token is invalid', (t) => {
 test('authenticate sets user and calls next on valid token', (t) => {
   const verifyMock = t.mock.method(jwt, 'verify', () => ({
     id: 7,
-    email: 'admin@example.com',
+    login_id: 'admin@example.com',
     role: 'admin',
   }));
   const { res, payload } = createResponse();
@@ -71,7 +71,7 @@ test('authenticate sets user and calls next on valid token', (t) => {
   assert.equal(called, true);
   assert.deepEqual(req.user, {
     id: 7,
-    email: 'admin@example.com',
+    login_id: 'admin@example.com',
     role: 'admin',
   });
   assert.equal(payload.status, undefined);
@@ -79,7 +79,7 @@ test('authenticate sets user and calls next on valid token', (t) => {
 
 test('requireAdmin blocks non-admin users', () => {
   const { res, payload } = createResponse();
-  const req = { user: { id: 1, email: 'user@example.com', role: 'customer' } } as AuthRequest;
+  const req = { user: { id: 1, login_id: 'user@example.com', role: 'customer' } } as AuthRequest;
   let called = false;
   const next = () => {
     called = true;
@@ -94,7 +94,7 @@ test('requireAdmin blocks non-admin users', () => {
 
 test('requireAdmin allows admin user', () => {
   const { res } = createResponse();
-  const req = { user: { id: 9, email: 'root@example.com', role: 'admin' } } as AuthRequest;
+  const req = { user: { id: 9, login_id: 'root@example.com', role: 'admin' } } as AuthRequest;
   let called = false;
   const next = () => {
     called = true;

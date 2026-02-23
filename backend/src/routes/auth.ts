@@ -9,7 +9,7 @@ const router = express.Router();
 
 // 로그인
 router.post('/login',
-  body('identifier').trim().notEmpty().withMessage('이메일 또는 전화번호를 입력해주세요.'),
+  body('identifier').trim().notEmpty().withMessage('아이디 또는 전화번호를 입력해주세요.'),
   body('password').notEmpty(),
   async (req, res) => {
     const errors = validationResult(req);
@@ -22,15 +22,23 @@ router.post('/login',
     const normalizedPhoneIdentifier = loginId.replace(/\D/g, '');
 
     try {
-      // 1) Prefer exact email match.
-      const emailResult = await pool.query(
-        'SELECT * FROM yoga_users WHERE email = $1 LIMIT 1',
+      // 1) 관리자 계정은 아이디(문자열)로 로그인
+      const adminResult = await pool.query(
+        `SELECT
+           id,
+           login_id,
+           role,
+           password_hash
+         FROM yoga_users
+         WHERE login_id = $1
+           AND role = 'admin'
+         LIMIT 1`,
         [loginId]
       );
 
-      let user = emailResult.rows[0];
+      let user = adminResult.rows[0];
 
-      // 2) Fallback to phone match only when normalized identifier exists.
+      // 2) 고객 계정은 전화번호로만 로그인
       if (!user) {
         if (!normalizedPhoneIdentifier) {
           return res.status(401).json({ error: 'Invalid credentials' });
@@ -38,10 +46,15 @@ router.post('/login',
 
         const phoneResult = await pool.query(
           `
-            SELECT u.*
+            SELECT
+              u.id,
+              u.login_id,
+              u.role,
+              u.password_hash
             FROM yoga_users u
             INNER JOIN yoga_customers c ON c.user_id = u.id
-            WHERE regexp_replace(COALESCE(c.phone, ''), '[^0-9]', '', 'g') = $1
+            WHERE u.role = 'customer'
+              AND regexp_replace(COALESCE(c.phone, ''), '[^0-9]', '', 'g') = $1
             ORDER BY u.id ASC
             LIMIT 2
           `,
@@ -66,7 +79,7 @@ router.post('/login',
       }
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, login_id: user.login_id, role: user.role },
         process.env.JWT_SECRET!,
         { expiresIn: '7d' }
       );
@@ -85,7 +98,7 @@ router.post('/login',
         token,
         user: {
           id: user.id,
-          email: user.email,
+          login_id: user.login_id,
           role: user.role
         },
         customerInfo
@@ -101,7 +114,7 @@ router.post('/login',
 router.get('/me', authenticate, async (req: AuthRequest, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, role FROM yoga_users WHERE id = $1',
+      'SELECT id, login_id, role FROM yoga_users WHERE id = $1',
       [req.user!.id]
     );
 

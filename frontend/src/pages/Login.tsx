@@ -48,7 +48,7 @@ const Login: React.FC = () => {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="identifier" className="label">
-                이메일 또는 전화번호
+                아이디(관리자) 또는 전화번호
               </label>
               <input
                 id="identifier"
@@ -57,7 +57,7 @@ const Login: React.FC = () => {
                 autoComplete="username"
                 required
                 className="input-field"
-                placeholder="admin@yoga.com 또는 010-1234-5678"
+                placeholder="admin 또는 010-1234-5678"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
               />
