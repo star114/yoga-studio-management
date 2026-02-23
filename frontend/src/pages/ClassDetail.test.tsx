@@ -9,6 +9,7 @@ const {
   classGetRegistrationsMock,
   classRegisterMock,
   classCancelRegistrationMock,
+  classUpdateRegistrationStatusMock,
   attendanceCheckInMock,
   attendanceUpdateMock,
   customerGetAllMock,
@@ -18,6 +19,7 @@ const {
   classGetRegistrationsMock: vi.fn(),
   classRegisterMock: vi.fn(),
   classCancelRegistrationMock: vi.fn(),
+  classUpdateRegistrationStatusMock: vi.fn(),
   attendanceCheckInMock: vi.fn(),
   attendanceUpdateMock: vi.fn(),
   customerGetAllMock: vi.fn(),
@@ -42,6 +44,7 @@ vi.mock('../services/api', () => ({
     getRegistrations: classGetRegistrationsMock,
     register: classRegisterMock,
     cancelRegistration: classCancelRegistrationMock,
+    updateRegistrationStatus: classUpdateRegistrationStatusMock,
   },
   customerAPI: {
     getAll: customerGetAllMock,
@@ -226,7 +229,7 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '102' } });
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(1, { customer_id: 102 }));
@@ -240,7 +243,7 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '102' } });
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
@@ -281,6 +284,18 @@ describe('ClassDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('신청자 코멘트')).toBeTruthy());
     expect(screen.getByText('기존 코멘트')).toBeTruthy();
+  });
+
+  it('updates attendance status from registration list', async () => {
+    classUpdateRegistrationStatusMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('출석 상태')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('출석 상태'), { target: { value: 'absent' } });
+
+    await waitFor(() => expect(classUpdateRegistrationStatusMock).toHaveBeenCalledWith(1, 101, 'absent'));
+    await waitFor(() => expect(screen.getByText('출석 상태를 변경했습니다.')).toBeTruthy());
   });
 
   it('checks attendance with class_id and shows error on failure', async () => {

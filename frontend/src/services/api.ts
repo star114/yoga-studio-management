@@ -153,6 +153,9 @@ export const classAPI = {
   updateRegistrationComment: (classId: number, customerId: number, registration_comment: string) =>
     api.put(`/classes/${classId}/registrations/${customerId}/comment`, { registration_comment }),
 
+  updateRegistrationStatus: (classId: number, customerId: number, attendance_status: 'reserved' | 'attended' | 'absent') =>
+    api.put(`/classes/${classId}/registrations/${customerId}/status`, { attendance_status }),
+
   cancelRegistration: (classId: number, customerId: number) =>
     api.delete(`/classes/${classId}/registrations/${customerId}`),
 

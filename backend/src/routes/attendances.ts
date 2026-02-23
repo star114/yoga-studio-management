@@ -182,6 +182,13 @@ router.post('/',
         ]
       );
 
+      await client.query(
+        `UPDATE yoga_class_registrations
+         SET attendance_status = 'attended'
+         WHERE class_id = $1 AND customer_id = $2`,
+        [resolvedClassId, customer_id]
+      );
+
       // 횟수제 회원권인 경우 잔여 횟수 차감
       if (activeMembership.remaining_sessions !== null) {
         await client.query(

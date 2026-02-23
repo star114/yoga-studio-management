@@ -77,7 +77,7 @@ describe('CustomerDashboard page', () => {
 
     render(<CustomerDashboard />);
 
-    await waitFor(() => expect(screen.getByText('빈야사')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('빈야사').length).toBeGreaterThan(0));
     expect(screen.getByText('💬 호흡이 안정적입니다.')).toBeTruthy();
   });
 
@@ -110,6 +110,7 @@ describe('CustomerDashboard page', () => {
         {
           registration_id: 10,
           class_id: 5,
+          attendance_status: 'reserved',
           title: '빈야사 기초',
           class_date: '2099-12-30',
           start_time: '09:00:00',

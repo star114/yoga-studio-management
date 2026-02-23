@@ -148,6 +148,7 @@ router.get('/:id/registrations',
            r.id,
            r.class_id,
            r.customer_id,
+           r.attendance_status,
            r.registered_at,
            r.registration_comment,
            a.id AS attendance_id,
@@ -213,6 +214,40 @@ router.put('/:id/registrations/:customerId/comment',
   }
 );
 
+// 수업 신청자 출석 상태 변경 (관리자)
+router.put('/:id/registrations/:customerId/status',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  param('customerId').isInt({ min: 1 }),
+  body('attendance_status').isIn(['reserved', 'attended', 'absent']),
+  validateRequest,
+  async (req, res) => {
+    const classId = Number(req.params.id);
+    const customerId = Number(req.params.customerId);
+    const attendanceStatus = String(req.body.attendance_status);
+
+    try {
+      const result = await pool.query(
+        `UPDATE yoga_class_registrations
+         SET attendance_status = $3
+         WHERE class_id = $1 AND customer_id = $2
+         RETURNING id, class_id, customer_id, attendance_status, registration_comment, registered_at`,
+        [classId, customerId, attendanceStatus]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Registration not found' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Update registration attendance status error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 // 내 수업 신청 목록 조회 (고객 본인)
 router.get('/registrations/me',
   authenticate,
@@ -232,6 +267,7 @@ router.get('/registrations/me',
            r.id AS registration_id,
            r.class_id,
            r.customer_id,
+           r.attendance_status,
            r.registration_comment,
            r.registered_at,
            c.title,

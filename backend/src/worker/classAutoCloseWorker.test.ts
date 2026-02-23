@@ -53,15 +53,16 @@ test('worker starts with fallback interval, runs query, and stops', async (t) =>
   const stop = startClassAutoCloseWorker();
   await flushAsync();
 
-  assert.equal(queryMock.mock.calls.length, 1);
+  assert.equal(queryMock.mock.calls.length, 2);
   assert.equal(typeof capturedCallback, 'function');
   const initialLogs = logMock.mock.calls.map((call) => String(call.arguments[0]));
+  assert.equal(initialLogs.some((line) => /Auto-marked 2 registration/.test(line)), true);
   assert.equal(initialLogs.some((line) => /Auto-closed 2 completed class/.test(line)), true);
   assert.equal(initialLogs.some((line) => /interval: 60000ms/.test(line)), true);
 
   (capturedCallback as () => void)();
   await flushAsync();
-  assert.equal(queryMock.mock.calls.length, 2);
+  assert.equal(queryMock.mock.calls.length, 4);
 
   stop();
   stop();
@@ -108,7 +109,7 @@ test('worker uses default env values when variables are missing', async (t) => {
   await flushAsync();
 
   assert.equal(capturedIntervalMs, 60000);
-  assert.equal(queryMock.mock.calls.length, 1);
+  assert.equal(queryMock.mock.calls.length, 2);
 });
 
 test('worker prevents overlapping run execution when already running', async (t) => {
@@ -150,8 +151,9 @@ test('worker prevents overlapping run execution when already running', async (t)
 
   resolveFirst();
   await flushAsync();
+  assert.equal(queryMock.mock.calls.length, 2);
 
   (capturedCallback as () => void)();
   await flushAsync();
-  assert.equal(queryMock.mock.calls.length, 2);
+  assert.equal(queryMock.mock.calls.length, 4);
 });

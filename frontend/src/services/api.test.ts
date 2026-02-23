@@ -153,6 +153,7 @@ describe('api service', () => {
     classAPI.register(2);
     classAPI.register(2, { customer_id: 7 });
     classAPI.updateRegistrationComment(2, 7, 'note');
+    classAPI.updateRegistrationStatus(2, 7, 'absent');
     classAPI.cancelRegistration(2, 7);
     classAPI.cancelMyRegistration(2);
     classAPI.delete(2);
@@ -200,6 +201,7 @@ describe('api service', () => {
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', {});
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7 });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment', { registration_comment: 'note' });
+    expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/status', { attendance_status: 'absent' });
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/7');
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/me');
     expect(deleteMock).toHaveBeenCalledWith('/classes/2');

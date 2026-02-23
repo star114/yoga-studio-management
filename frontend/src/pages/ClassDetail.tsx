@@ -28,6 +28,7 @@ interface ClassRegistration {
   id: number;
   class_id: number;
   customer_id: number;
+  attendance_status?: 'reserved' | 'attended' | 'absent';
   registered_at: string;
   registration_comment?: string | null;
   attendance_id?: number | null;
@@ -47,6 +48,7 @@ const ClassDetail: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [instructorCommentDrafts, setInstructorCommentDrafts] = useState<Record<number, string>>({});
   const [savingInstructorCommentCustomerId, setSavingInstructorCommentCustomerId] = useState<number | null>(null);
+  const [savingAttendanceStatusCustomerId, setSavingAttendanceStatusCustomerId] = useState<number | null>(null);
   const [checkingInCustomerId, setCheckingInCustomerId] = useState<number | null>(null);
   const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -215,6 +217,25 @@ const ClassDetail: React.FC = () => {
     }
   };
 
+  const handleAttendanceStatusChange = async (
+    customerId: number,
+    attendanceStatus: 'reserved' | 'attended' | 'absent'
+  ) => {
+    try {
+      setError('');
+      setNotice('');
+      setSavingAttendanceStatusCustomerId(customerId);
+      await classAPI.updateRegistrationStatus(classId, customerId, attendanceStatus);
+      await refreshClassAndRegistrations();
+      setNotice('출석 상태를 변경했습니다.');
+    } catch (attendanceStatusError: unknown) {
+      console.error('Failed to update attendance status:', attendanceStatusError);
+      setError(parseApiError(attendanceStatusError, '출석 상태 변경에 실패했습니다.'));
+    } finally {
+      setSavingAttendanceStatusCustomerId(null);
+    }
+  };
+
   if (isLoading) {
     return <p className="text-warm-600 py-8">수업 상세 로딩 중...</p>;
   }
@@ -303,7 +324,11 @@ const ClassDetail: React.FC = () => {
                       신청 시각: {new Date(registration.registered_at).toLocaleString('ko-KR')}
                     </p>
                     <p className="text-xs text-warm-600 mt-1">
-                      출석 상태: {registration.attendance_id ? '출석 완료' : '출석 전'}
+                      출석 상태: {registration.attendance_status === 'attended'
+                        ? '출석'
+                        : registration.attendance_status === 'absent'
+                          ? '결석'
+                          : '예약'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 md:justify-end">
@@ -332,6 +357,28 @@ const ClassDetail: React.FC = () => {
                       {savingInstructorCommentCustomerId === registration.customer_id ? '저장 중...' : '강사 코멘트 저장'}
                     </button>
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="label" htmlFor={`attendance-status-${registration.customer_id}`}>
+                    출석 상태
+                  </label>
+                  <select
+                    id={`attendance-status-${registration.customer_id}`}
+                    className="input-field md:max-w-xs"
+                    value={registration.attendance_status || 'reserved'}
+                    onChange={(event) => {
+                      void handleAttendanceStatusChange(
+                        registration.customer_id,
+                        event.target.value as 'reserved' | 'attended' | 'absent'
+                      );
+                    }}
+                    disabled={savingAttendanceStatusCustomerId === registration.customer_id}
+                  >
+                    <option value="reserved">예약</option>
+                    <option value="attended">출석</option>
+                    <option value="absent">결석</option>
+                  </select>
                 </div>
 
                 <div className="mt-4">

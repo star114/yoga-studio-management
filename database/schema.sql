@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS yoga_class_registrations (
     id SERIAL PRIMARY KEY,
     class_id INTEGER NOT NULL REFERENCES yoga_classes(id) ON DELETE CASCADE,
     customer_id INTEGER NOT NULL REFERENCES yoga_customers(id) ON DELETE CASCADE,
+    attendance_status VARCHAR(20) NOT NULL DEFAULT 'reserved' CHECK (attendance_status IN ('reserved', 'attended', 'absent')),
     registration_comment TEXT,
     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (class_id, customer_id)
