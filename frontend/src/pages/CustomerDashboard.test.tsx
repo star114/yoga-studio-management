@@ -3,9 +3,9 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomerDashboard from './CustomerDashboard';
 
-const { membershipGetByCustomerMock, attendanceGetAllMock } = vi.hoisted(() => ({
-  membershipGetByCustomerMock: vi.fn(),
+const { attendanceGetAllMock, classGetMyRegistrationsMock } = vi.hoisted(() => ({
   attendanceGetAllMock: vi.fn(),
+  classGetMyRegistrationsMock: vi.fn(),
 }));
 
 let customerInfoState: { id: number; name: string; phone: string } | null = {
@@ -21,11 +21,11 @@ vi.mock('../contexts/AuthContext', () => ({
 }));
 
 vi.mock('../services/api', () => ({
-  membershipAPI: {
-    getByCustomer: membershipGetByCustomerMock,
-  },
   attendanceAPI: {
     getAll: attendanceGetAllMock,
+  },
+  classAPI: {
+    getMyRegistrations: classGetMyRegistrationsMock,
   },
 }));
 
@@ -43,38 +43,24 @@ describe('CustomerDashboard page', () => {
     customerInfoState = null;
     render(<CustomerDashboard />);
     expect(screen.getByText('로딩 중...')).toBeTruthy();
-    expect(membershipGetByCustomerMock).not.toHaveBeenCalled();
     expect(attendanceGetAllMock).not.toHaveBeenCalled();
   });
 
-  it('renders empty states when no active memberships and no attendances', async () => {
-    membershipGetByCustomerMock.mockResolvedValueOnce({
-      data: [{ id: 2, membership_type_name: '10회권', start_date: '2026-01-01', is_active: false }],
-    });
+  it('renders empty state when no attendances', async () => {
     attendanceGetAllMock.mockResolvedValueOnce({ data: [] });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     render(<CustomerDashboard />);
 
-    await waitFor(() => expect(screen.getByText('안녕하세요, 홍길동님')).toBeTruthy());
-    expect(screen.getByText('활성화된 회원권이 없습니다')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('다음 수업')).toBeTruthy());
+    expect(screen.getByText('예정된 수업이 없습니다')).toBeTruthy();
+    expect(screen.getByText('지난 수업')).toBeTruthy();
     expect(screen.getByText('출석 기록이 없습니다')).toBeTruthy();
-    expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1);
-    expect(attendanceGetAllMock).toHaveBeenCalledWith({ customer_id: 1, limit: 10 });
+    expect(attendanceGetAllMock).toHaveBeenCalledWith({ customer_id: 1, limit: 20 });
+    expect(classGetMyRegistrationsMock).toHaveBeenCalled();
   });
 
-  it('renders active membership and attendance details', async () => {
-    membershipGetByCustomerMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 1,
-          membership_type_name: '프리패스',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
-          remaining_sessions: 5,
-          is_active: true,
-        },
-      ],
-    });
+  it('renders attendance details', async () => {
     attendanceGetAllMock.mockResolvedValueOnce({
       data: [
         {
@@ -85,26 +71,17 @@ describe('CustomerDashboard page', () => {
         },
       ],
     });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({
+      data: [],
+    });
 
     render(<CustomerDashboard />);
 
-    await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
-    expect(screen.getByText('5회')).toBeTruthy();
-    expect(screen.getByText('빈야사')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('빈야사')).toBeTruthy());
     expect(screen.getByText('💬 호흡이 안정적입니다.')).toBeTruthy();
   });
 
-  it('prefers matched class title/date info when class_type is missing', async () => {
-    membershipGetByCustomerMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 1,
-          membership_type_name: '프리패스',
-          start_date: '2026-01-01',
-          is_active: true,
-        },
-      ],
-    });
+  it('prefers class title/date info when class_type is missing', async () => {
     attendanceGetAllMock.mockResolvedValueOnce({
       data: [
         {
@@ -117,24 +94,37 @@ describe('CustomerDashboard page', () => {
         },
       ],
     });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({
+      data: [],
+    });
 
     render(<CustomerDashboard />);
 
-    await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
-    expect(screen.getByText('아쉬탕가 · 2026-02-01 09:00')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('아쉬탕가 · 2026-02-01 09:00')).toBeTruthy());
   });
 
-  it('handles API failure and still exits loading state', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    membershipGetByCustomerMock.mockRejectedValueOnce(new Error('failed'));
-    attendanceGetAllMock.mockRejectedValueOnce(new Error('failed'));
+  it('renders upcoming classes from my registrations', async () => {
+    attendanceGetAllMock.mockResolvedValueOnce({ data: [] });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          registration_id: 10,
+          class_id: 5,
+          title: '빈야사 기초',
+          class_date: '2099-12-30',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          is_open: true,
+          is_excluded: false,
+          instructor_name: '강사A',
+        },
+      ],
+    });
 
     render(<CustomerDashboard />);
 
-    await waitFor(() => expect(screen.getByText('안녕하세요, 홍길동님')).toBeTruthy());
-    expect(screen.getByText('활성화된 회원권이 없습니다')).toBeTruthy();
-    expect(screen.getByText('출석 기록이 없습니다')).toBeTruthy();
-    expect(consoleErrorSpy).toHaveBeenCalled();
-    consoleErrorSpy.mockRestore();
+    await waitFor(() => expect(screen.getByText('빈야사 기초')).toBeTruthy());
+    expect(screen.getByText('2099-12-30 09:00 - 10:00')).toBeTruthy();
+    expect(screen.getByText('강사: 강사A')).toBeTruthy();
   });
 });

@@ -128,6 +128,9 @@ export const classAPI = {
   getRegistrations: (classId: number) =>
     api.get(`/classes/${classId}/registrations`),
 
+  getMyRegistrations: () =>
+    api.get('/classes/registrations/me'),
+
   create: (data: unknown) =>
     api.post('/classes', data),
 

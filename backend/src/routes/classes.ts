@@ -213,6 +213,49 @@ router.put('/:id/registrations/:customerId/comment',
   }
 );
 
+// 내 수업 신청 목록 조회 (고객 본인)
+router.get('/registrations/me',
+  authenticate,
+  async (req: AuthRequest, res) => {
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin account does not have personal registrations' });
+    }
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const result = await pool.query(
+        `SELECT
+           r.id AS registration_id,
+           r.class_id,
+           r.customer_id,
+           r.registration_comment,
+           r.registered_at,
+           c.title,
+           c.instructor_name,
+           c.class_date,
+           c.start_time,
+           c.end_time,
+           c.is_open,
+           c.is_excluded
+         FROM yoga_class_registrations r
+         INNER JOIN yoga_classes c ON c.id = r.class_id
+         WHERE r.customer_id = $1
+         ORDER BY c.class_date ASC, c.start_time ASC`,
+        [customerId]
+      );
+
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Get my class registrations error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 // 수업 신청 (관리자/고객)
 router.post('/:id/registrations',
   authenticate,

@@ -145,6 +145,7 @@ describe('api service', () => {
     classAPI.getAll({ limit: 10 });
     classAPI.getById(2);
     classAPI.getRegistrations(2);
+    classAPI.getMyRegistrations();
     classAPI.create(payload);
     classAPI.update(2, payload);
     classAPI.createRecurring(payload);
@@ -187,6 +188,7 @@ describe('api service', () => {
     expect(getMock).toHaveBeenCalledWith('/classes', { params: { limit: 10 } });
     expect(getMock).toHaveBeenCalledWith('/classes/2');
     expect(getMock).toHaveBeenCalledWith('/classes/2/registrations');
+    expect(getMock).toHaveBeenCalledWith('/classes/registrations/me');
     expect(postMock).toHaveBeenCalledWith('/classes', payload);
     expect(putMock).toHaveBeenCalledWith('/classes/2', payload);
     expect(postMock).toHaveBeenCalledWith('/classes/recurring', payload);

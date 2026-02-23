@@ -1,16 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { membershipAPI, attendanceAPI } from '../services/api';
+import { attendanceAPI, classAPI } from '../services/api';
 import { format } from 'date-fns';
-
-interface CustomerMembership {
-  id: number;
-  membership_type_name: string;
-  start_date: string;
-  end_date?: string | null;
-  remaining_sessions?: number | null;
-  is_active: boolean;
-}
 
 interface CustomerAttendance {
   id: number;
@@ -22,23 +13,41 @@ interface CustomerAttendance {
   instructor_comment?: string | null;
 }
 
+interface MyRegistrationClass {
+  registration_id: number;
+  class_id: number;
+  title: string;
+  instructor_name?: string | null;
+  class_date: string;
+  start_time: string;
+  end_time: string;
+  is_open: boolean;
+  is_excluded: boolean;
+}
+
 const CustomerDashboard: React.FC = () => {
   const { customerInfo } = useAuth();
-  const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
   const [attendances, setAttendances] = useState<CustomerAttendance[]>([]);
+  const [upcomingClasses, setUpcomingClasses] = useState<MyRegistrationClass[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadCustomerData = useCallback(async () => {
+  const loadAttendanceData = useCallback(async () => {
     try {
-      const [membershipsRes, attendancesRes] = await Promise.all([
-        membershipAPI.getByCustomer(customerInfo.id),
-        attendanceAPI.getAll({ customer_id: customerInfo.id, limit: 10 }),
+      const [attendancesRes, registrationsRes] = await Promise.all([
+        attendanceAPI.getAll({ customer_id: customerInfo.id, limit: 20 }),
+        classAPI.getMyRegistrations(),
       ]);
 
-      setMemberships(membershipsRes.data);
       setAttendances(attendancesRes.data);
+
+      const now = new Date();
+      const nextClasses = (registrationsRes.data as MyRegistrationClass[]).filter((item) => {
+        const classStartAt = new Date(`${String(item.class_date).slice(0, 10)}T${String(item.start_time).slice(0, 8)}`);
+        return classStartAt >= now && !item.is_excluded;
+      });
+      setUpcomingClasses(nextClasses);
     } catch (error) {
-      console.error('Failed to load customer data:', error);
+      console.error('Failed to load attendance data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -46,9 +55,9 @@ const CustomerDashboard: React.FC = () => {
 
   useEffect(() => {
     if (customerInfo) {
-      void loadCustomerData();
+      void loadAttendanceData();
     }
-  }, [customerInfo, loadCustomerData]);
+  }, [customerInfo, loadAttendanceData]);
 
   if (isLoading) {
     return (
@@ -61,73 +70,38 @@ const CustomerDashboard: React.FC = () => {
     );
   }
 
-  const activeMemberships = memberships.filter((membership) => membership.is_active);
-
   return (
     <div className="space-y-6 fade-in">
       <div>
-        <h1 className="text-3xl font-display font-bold text-primary-800 mb-2">
-          안녕하세요, {customerInfo?.name}님
-        </h1>
-        <p className="text-warm-600">오늘도 건강한 하루 되세요</p>
+        <p className="text-warm-600">수련의 흐름과 몸과 마음의 상태를 간단히 기록하고 나누는 공간입니다.</p>
       </div>
 
-      {/* 활성 회원권 */}
       <div className="card">
         <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-          내 회원권
+          다음 수업
         </h2>
-        <div className="space-y-4">
-          {activeMemberships.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-warm-500 mb-2">활성화된 회원권이 없습니다</p>
-              <p className="text-sm text-warm-400">원장님께 문의해주세요</p>
-            </div>
+        <div className="space-y-3">
+          {upcomingClasses.length === 0 ? (
+            <p className="text-warm-500 text-center py-8">예정된 수업이 없습니다</p>
           ) : (
-            activeMemberships.map((membership) => (
-              <div key={membership.id} className="p-4 bg-gradient-to-r from-primary-50 to-warm-50 rounded-lg border border-primary-100">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-primary-800 text-lg">
-                      {membership.membership_type_name}
-                    </h3>
-                    <p className="text-sm text-warm-600 mt-1">
-                      {format(new Date(membership.start_date), 'yyyy년 MM월 dd일')} 시작
-                    </p>
-                  </div>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-medium">
-                    활성
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  {membership.remaining_sessions !== null && (
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-sm text-warm-600 mb-1">잔여 횟수</p>
-                      <p className="text-2xl font-bold text-primary-800">
-                        {membership.remaining_sessions}회
-                      </p>
-                    </div>
-                  )}
-                  {membership.end_date && (
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-sm text-warm-600 mb-1">종료일</p>
-                      <p className="text-lg font-semibold text-primary-800">
-                        {format(new Date(membership.end_date), 'MM/dd')}
-                      </p>
-                    </div>
-                  )}
-                </div>
+            upcomingClasses.map((item) => (
+              <div key={item.registration_id} className="p-4 bg-primary-50 rounded-lg border border-primary-100">
+                <p className="font-semibold text-primary-800">{item.title}</p>
+                <p className="text-sm text-warm-700 mt-1">
+                  {item.class_date.slice(0, 10)} {item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}
+                </p>
+                {item.instructor_name && (
+                  <p className="text-sm text-warm-600 mt-1">강사: {item.instructor_name}</p>
+                )}
               </div>
             ))
           )}
         </div>
       </div>
 
-      {/* 최근 출석 기록 */}
       <div className="card">
         <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-          최근 출석 기록
+          지난 수업
         </h2>
         <div className="space-y-3">
           {attendances.length === 0 ? (
