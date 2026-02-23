@@ -246,7 +246,7 @@ const MembershipManagement: React.FC = () => {
               </option>
             ))}
           </select>
-          {selectedCustomer && <p className="text-sm text-warm-600">로그인 전화번호: {selectedCustomer.phone}</p>}
+          {selectedCustomer && <p className="text-sm text-warm-600">로그인 아이디: {selectedCustomer.phone}</p>}
         </div>
       </section>
 

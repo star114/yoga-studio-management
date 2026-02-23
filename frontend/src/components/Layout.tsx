@@ -65,10 +65,10 @@ const Layout: React.FC = () => {
             <div className="flex items-center space-x-2 sm:space-x-4">
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-medium text-primary-800">
-                  {user?.role === 'admin' ? user?.login_id : customerInfo?.phone || '-'}
+                  {user?.login_id || '-'}
                 </p>
                 <p className="text-xs text-warm-600">
-                  {user?.role === 'admin' ? '관리자' : '회원(전화번호 로그인)'}
+                  {user?.role === 'admin' ? '관리자' : '회원(아이디 로그인)'}
                 </p>
               </div>
               <button

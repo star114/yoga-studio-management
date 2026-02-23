@@ -138,18 +138,6 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   });
   assert.equal(res.status, 401);
 
-  h.queryQueue.push(
-    { rows: [] },
-    { rows: [{ id: 1, password_hash: 'h1' }, { id: 2, password_hash: 'h2' }] }
-  );
-  res = await h.runRoute({
-    method: 'post',
-    path: '/login',
-    body: { identifier: '010-1111-2222', password: 'pw' },
-  });
-  assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Ambiguous phone identifier');
-
   h.queryQueue.push({
     rows: [{ id: 1, login_id: 'u@example.com', role: 'admin', password_hash: 'hash' }],
   });
@@ -162,7 +150,6 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   assert.equal(res.status, 401);
 
   h.queryQueue.push(
-    { rows: [] },
     { rows: [{ id: 10, login_id: 'c@example.com', role: 'customer', password_hash: 'hash2' }] },
     { rows: [{ id: 99, user_id: 10, name: '고객' }] }
   );
@@ -178,7 +165,6 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   assert.equal(res.body.customerInfo.name, '고객');
 
   h.queryQueue.push(
-    { rows: [] },
     { rows: [{ id: 11, login_id: 'c2@example.com', role: 'customer', password_hash: 'hash3' }] },
     { rows: [] }
   );

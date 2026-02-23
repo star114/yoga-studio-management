@@ -54,7 +54,7 @@ describe('Layout', () => {
 
   it('renders customer navigation and customer role label', () => {
     authState = {
-      user: { id: 2, login_id: 'customer@yoga.com', role: 'customer' },
+      user: { id: 2, login_id: '010-1111-2222', role: 'customer' },
       customerInfo: { id: 2, name: '고객', phone: '010-1111-2222' },
       logout: vi.fn(),
     };
@@ -62,7 +62,7 @@ describe('Layout', () => {
     expect(screen.getAllByText('🧘 수련 기록').length).toBeGreaterThan(0);
     expect(screen.getAllByText('🎟️ 회원권').length).toBeGreaterThan(0);
     expect(screen.getAllByText('👤 내 정보').length).toBeGreaterThan(0);
-    expect(screen.getByText('회원(전화번호 로그인)')).toBeTruthy();
+    expect(screen.getByText('회원(아이디 로그인)')).toBeTruthy();
     expect(screen.getByText('010-1111-2222')).toBeTruthy();
   });
 

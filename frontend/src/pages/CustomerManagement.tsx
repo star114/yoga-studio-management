@@ -160,7 +160,7 @@ const CustomerManagement: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-display font-bold text-primary-800">고객 관리</h1>
-        <p className="text-warm-600">고객 로그인 계정을 전화번호 기반으로 생성하고 기본 정보를 관리합니다.</p>
+        <p className="text-warm-600">고객 로그인 계정을 생성하고 기본 정보를 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
@@ -190,7 +190,7 @@ const CustomerManagement: React.FC = () => {
                 onChange={(e) => handleFormChange('phone', e.target.value)}
                 required
               />
-              <p className="mt-1 text-xs text-warm-500">신규 고객은 전화번호로 로그인합니다.</p>
+              <p className="mt-1 text-xs text-warm-500">입력한 전화번호가 로그인 아이디로 사용됩니다.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

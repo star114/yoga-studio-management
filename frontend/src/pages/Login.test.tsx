@@ -37,7 +37,7 @@ describe('Login page', () => {
     loginMock.mockResolvedValueOnce(undefined);
     render(<Login />);
 
-    fireEvent.change(screen.getByLabelText('아이디(관리자) 또는 전화번호'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText('아이디'), { target: { value: 'admin' } });
     fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'password' } });
     fireEvent.click(screen.getByRole('button', { name: '로그인' }));
 
@@ -49,7 +49,7 @@ describe('Login page', () => {
     loginMock.mockRejectedValueOnce(new Error('failed'));
     render(<Login />);
 
-    fireEvent.change(screen.getByLabelText('아이디(관리자) 또는 전화번호'), { target: { value: '01012341234' } });
+    fireEvent.change(screen.getByLabelText('아이디'), { target: { value: '01012341234' } });
     fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'wrong' } });
     fireEvent.click(screen.getByRole('button', { name: '로그인' }));
 
