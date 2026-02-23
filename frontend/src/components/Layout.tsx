@@ -26,17 +26,11 @@ const Layout: React.FC = () => {
   ];
 
   const navClassName = ({ isActive }: { isActive: boolean }) =>
-    isAdmin
-      ? `inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border transition-all whitespace-nowrap ${
-          isActive
-            ? 'bg-primary-700 text-white border-primary-700 shadow-sm'
-            : 'bg-white/85 text-warm-700 border-warm-200 hover:bg-primary-50 hover:border-primary-300'
-        }`
-      : `inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-          isActive
-            ? 'bg-white text-primary-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border border-white/90'
-            : 'text-slate-600 hover:text-primary-800 border border-transparent'
-        }`;
+    `inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+      isActive
+        ? 'bg-white text-primary-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border border-white/90'
+        : 'text-slate-600 hover:text-primary-800 border border-transparent'
+    }`;
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -47,7 +41,7 @@ const Layout: React.FC = () => {
       <header className="sticky top-0 z-20 bg-white/68 backdrop-blur-md border-b border-warm-100/80 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className={`flex items-center ${isAdmin ? 'space-x-6' : 'flex-1'}`}>
+            <div className="flex items-center flex-1">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,7 +53,7 @@ const Layout: React.FC = () => {
                 </h1>
               </div>
 
-              <nav className={`hidden md:inline-flex items-center gap-1 ${isAdmin ? '' : 'mx-auto rounded-full bg-[rgba(120,120,128,0.14)] border border-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] p-1 backdrop-blur-sm'}`}>
+              <nav className="hidden md:inline-flex items-center gap-1 mx-auto rounded-full bg-[rgba(120,120,128,0.14)] border border-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] p-1 backdrop-blur-sm">
                 {navItems.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.end} className={navClassName}>
                     {item.label}
@@ -99,7 +93,7 @@ const Layout: React.FC = () => {
           </div>
 
           <nav className="md:hidden pb-3 flex justify-center">
-            <div className={`inline-flex max-w-full flex-wrap gap-1 ${isAdmin ? '' : 'mx-auto rounded-full bg-[rgba(120,120,128,0.14)] border border-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] p-1 backdrop-blur-sm'}`}>
+            <div className="inline-flex max-w-full flex-wrap gap-1 mx-auto rounded-full bg-[rgba(120,120,128,0.14)] border border-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] p-1 backdrop-blur-sm">
               {navItems.map((item) => (
                 <NavLink key={`mobile-${item.to}`} to={item.to} end={item.end} className={navClassName}>
                   {item.label}
