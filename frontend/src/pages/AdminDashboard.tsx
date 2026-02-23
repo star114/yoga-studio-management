@@ -280,12 +280,12 @@ const AdminDashboard: React.FC = () => {
 
         {calendarView === 'month' && (
           <div className="space-y-2">
-            <div className="grid grid-cols-7 gap-2 text-xs text-warm-600">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-[11px] sm:text-xs text-warm-600">
               {WEEKDAY_LABELS.map((label) => (
                 <div key={label} className="text-center py-1 font-medium">{label}</div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {visibleDates.map((date) => {
                 const dateKey = format(date, 'yyyy-MM-dd');
                 const dayClasses = classesByDate[dateKey] || [];
@@ -301,17 +301,20 @@ const AdminDashboard: React.FC = () => {
                       setFocusDate(date);
                       setCalendarView('day');
                     }}
-                    className={`min-h-[108px] rounded-xl border p-2 text-left transition-colors ${today ? 'border-primary-500 bg-primary-50/80' : active ? 'border-primary-300 bg-primary-50/50' : 'border-warm-200 bg-white/70'} ${inMonth ? 'text-primary-800' : 'text-warm-400'}`}
+                    className={`min-h-[58px] sm:min-h-[108px] rounded-lg sm:rounded-xl border p-1 sm:p-2 text-left transition-colors ${today ? 'border-primary-500 bg-primary-50/80' : active ? 'border-primary-300 bg-primary-50/50' : 'border-warm-200 bg-white/70'} ${inMonth ? 'text-primary-800' : 'text-warm-400'}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`text-sm font-semibold ${today ? 'text-primary-700' : ''}`}>{format(date, 'd')}</span>
-                      {today && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-600 text-white">오늘</span>}
+                      <span className={`text-xs sm:text-sm font-semibold ${today ? 'text-primary-700' : ''}`}>{format(date, 'd')}</span>
+                      {today && <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-full bg-primary-600 text-white">오늘</span>}
                     </div>
-                    <div className="mt-2 space-y-1">
+                    <div className="mt-2 space-y-1 hidden sm:block">
                       {dayClasses.slice(0, 2).map(renderClassChip)}
                       {dayClasses.length > 2 && (
                         <p className="text-[11px] text-warm-600">+{dayClasses.length - 2}개 더 있음</p>
                       )}
+                    </div>
+                    <div className="sm:hidden mt-1 text-[10px] text-warm-600 font-medium min-h-[10px]">
+                      {dayClasses.length > 0 ? `${dayClasses.length}개` : ''}
                     </div>
                   </button>
                 );
