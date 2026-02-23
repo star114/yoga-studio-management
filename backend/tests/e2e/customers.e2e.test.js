@@ -306,9 +306,6 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     body: {
       name: 'N3',
       phone: '01022223333',
-      birth_date: '1990-01-01',
-      gender: 'F',
-      address: 'Seoul',
       notes: 'memo',
     },
   });

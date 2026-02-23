@@ -8,9 +8,6 @@ interface Customer {
   user_id: number;
   name: string;
   phone: string;
-  birth_date?: string | null;
-  gender?: string | null;
-  address?: string | null;
   notes?: string | null;
   membership_count?: string | number;
   total_attendance?: string | number;
@@ -19,18 +16,12 @@ interface Customer {
 interface CustomerForm {
   name: string;
   phone: string;
-  birth_date: string;
-  gender: string;
-  address: string;
   notes: string;
 }
 
 const INITIAL_FORM: CustomerForm = {
   name: '',
   phone: '',
-  birth_date: '',
-  gender: '',
-  address: '',
   notes: '',
 };
 
@@ -86,9 +77,6 @@ const CustomerManagement: React.FC = () => {
     setForm({
       name: customer.name,
       phone: customer.phone,
-      birth_date: customer.birth_date ? customer.birth_date.slice(0, 10) : '',
-      gender: customer.gender || '',
-      address: customer.address || '',
       notes: customer.notes || '',
     });
   };
@@ -114,18 +102,12 @@ const CustomerManagement: React.FC = () => {
         await customerAPI.update(editingCustomerId, {
           name: form.name,
           phone: trimmedPhone,
-          birth_date: form.birth_date || null,
-          gender: form.gender || null,
-          address: form.address || null,
           notes: form.notes || null,
         });
       } else {
         await customerAPI.create({
           name: form.name,
           phone: trimmedPhone,
-          birth_date: form.birth_date || null,
-          gender: form.gender || null,
-          address: form.address || null,
           notes: form.notes || null,
         });
       }
@@ -191,42 +173,6 @@ const CustomerManagement: React.FC = () => {
                 required
               />
               <p className="mt-1 text-xs text-warm-500">입력한 전화번호가 로그인 아이디로 사용됩니다.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="label" htmlFor="customer-birth-date">생년월일</label>
-                <input
-                  id="customer-birth-date"
-                  type="date"
-                  className="input-field"
-                  value={form.birth_date}
-                  onChange={(e) => handleFormChange('birth_date', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="customer-gender">성별</label>
-                <select
-                  id="customer-gender"
-                  className="input-field"
-                  value={form.gender}
-                  onChange={(e) => handleFormChange('gender', e.target.value)}
-                >
-                  <option value="">선택 안 함</option>
-                  <option value="female">여성</option>
-                  <option value="male">남성</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="label" htmlFor="customer-address">주소</label>
-              <input
-                id="customer-address"
-                className="input-field"
-                value={form.address}
-                onChange={(e) => handleFormChange('address', e.target.value)}
-              />
             </div>
 
             <div>

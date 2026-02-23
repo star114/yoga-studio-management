@@ -123,7 +123,6 @@ docker-compose up -d --build
 
 ### 스키마
 - 기본 스키마: `database/schema.sql`
-- 마이그레이션: `backend/migrations/*.sql`
 
 ### 반복 수업 관련 테이블/컬럼
 - `yoga_class_series`
@@ -138,8 +137,7 @@ docker-compose exec -T backend npm run migrate
 
 ### 마이그레이션 운영 원칙
 - 신규 DB: `database/schema.sql`이 컨테이너 초기화 시 1회 적용됩니다.
-- 기존 DB: 애플리케이션 시작 시(`start.sh`, `start-local.sh`, backend 컨테이너 CMD) pending migration이 자동 적용됩니다.
-- 이미 적용된 migration 파일은 checksum으로 무결성을 검증합니다.
+- 애플리케이션 시작 시(`start.sh`, `start-local.sh`, backend 컨테이너 CMD) `npm run migrate`가 실행되며, 현재는 적용할 migration 파일이 없으면 그대로 종료됩니다.
 
 ## 운영 유틸리티
 

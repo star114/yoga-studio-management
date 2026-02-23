@@ -97,18 +97,12 @@ describe('CustomerManagement page', () => {
     await waitFor(() => expect(screen.getByText('표시할 고객이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '홍길동' } });
     fireEvent.change(screen.getByLabelText('전화번호'), { target: { value: ' 010-1234-5678 ' } });
-    fireEvent.change(screen.getByLabelText('생년월일'), { target: { value: '1990-01-01' } });
-    fireEvent.change(screen.getByLabelText('성별'), { target: { value: 'male' } });
-    fireEvent.change(screen.getByLabelText('주소'), { target: { value: '서울' } });
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: 'VIP' } });
     fireEvent.click(screen.getByRole('button', { name: '고객 생성' }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalledWith({
       name: '홍길동',
       phone: '010-1234-5678',
-      birth_date: '1990-01-01',
-      gender: 'male',
-      address: '서울',
       notes: 'VIP',
     }));
 
@@ -179,9 +173,6 @@ describe('CustomerManagement page', () => {
             user_id: 100,
             name: '수정대상',
             phone: '010-9999-9999',
-            birth_date: '1992-03-04T00:00:00.000Z',
-            gender: null,
-            address: null,
             notes: null,
             membership_count: 1,
             total_attendance: 3,
@@ -210,18 +201,12 @@ describe('CustomerManagement page', () => {
 
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '수정완료' } });
     fireEvent.change(screen.getByLabelText('전화번호'), { target: { value: ' 010-8888-8888 ' } });
-    fireEvent.change(screen.getByLabelText('생년월일'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('성별'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('주소'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '정보 저장' }));
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledWith(5, {
       name: '수정완료',
       phone: '010-8888-8888',
-      birth_date: null,
-      gender: null,
-      address: null,
       notes: null,
     }));
 

@@ -9,9 +9,6 @@ interface Customer {
   user_id?: number;
   name: string;
   phone: string;
-  birth_date?: string | null;
-  gender?: string | null;
-  address?: string | null;
   notes?: string | null;
 }
 
@@ -273,9 +270,6 @@ const CustomerDetail: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
           <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
-          <p><span className="text-warm-600">생년월일:</span> <span className="text-primary-800">{customer.birth_date ? formatKoreanDate(customer.birth_date, false) : '-'}</span></p>
-          <p><span className="text-warm-600">성별:</span> <span className="text-primary-800">{customer.gender || '-'}</span></p>
-          <p><span className="text-warm-600">주소:</span> <span className="text-primary-800">{customer.address || '-'}</span></p>
         </div>
         {customer.notes && (
           <div className="mt-3 text-sm text-warm-700">

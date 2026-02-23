@@ -108,12 +108,9 @@ router.post('/',
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone, birth_date, gender, address, notes } = req.body as {
+    const { name, phone, notes } = req.body as {
       name: string;
       phone: string;
-      birth_date?: string;
-      gender?: string;
-      address?: string;
       notes?: string;
     };
     const trimmedPhone = (phone || '').trim();
@@ -153,9 +150,9 @@ router.post('/',
 
       // 고객 정보 생성
       const customerResult = await client.query(
-        `INSERT INTO yoga_customers (user_id, name, phone, birth_date, gender, address, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [userId, name, trimmedPhone, birth_date || null, gender || null, address || null, notes || null]
+        `INSERT INTO yoga_customers (user_id, name, phone, notes)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [userId, name, trimmedPhone, notes || null]
       );
 
       await client.query('COMMIT');
@@ -180,20 +177,17 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { name, phone, birth_date, gender, address, notes } = req.body;
+    const { name, phone, notes } = req.body;
 
     try {
       const result = await pool.query(
         `UPDATE yoga_customers 
          SET name = COALESCE($1, name),
              phone = COALESCE($2, phone),
-             birth_date = COALESCE($3, birth_date),
-             gender = COALESCE($4, gender),
-             address = COALESCE($5, address),
-             notes = COALESCE($6, notes)
-         WHERE id = $7
+             notes = COALESCE($3, notes)
+         WHERE id = $4
          RETURNING *`,
-        [name, phone, birth_date, gender, address, notes, id]
+        [name, phone, notes, id]
       );
 
       if (result.rows.length === 0) {

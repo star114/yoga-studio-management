@@ -29,7 +29,15 @@ const getAppliedMigrations = async (): Promise<Map<string, string>> => {
 };
 
 const getSqlFiles = async (): Promise<string[]> => {
-  const entries = await fs.readdir(migrationsDir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await fs.readdir(migrationsDir, { withFileTypes: true });
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
     .map((entry) => entry.name)

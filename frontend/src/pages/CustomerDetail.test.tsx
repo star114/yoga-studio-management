@@ -65,9 +65,6 @@ const seedLoadSuccess = () => {
         id: 1,
         name: '홍길동',
         phone: '010-1111-2222',
-        birth_date: '1990-01-01T00:00:00.000Z',
-        gender: 'male',
-        address: '서울',
         notes: '메모',
       },
       recentAttendances: [],
@@ -123,9 +120,6 @@ describe('CustomerDetail page', () => {
           id: 1,
           name: '옵션없음',
           phone: '010-0000-0000',
-          birth_date: null,
-          gender: null,
-          address: null,
           notes: null,
         },
       },
@@ -134,7 +128,9 @@ describe('CustomerDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('옵션없음')).toBeTruthy());
-    expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText('생년월일:')).toBeNull();
+    expect(screen.queryByText('성별:')).toBeNull();
+    expect(screen.queryByText('주소:')).toBeNull();
   });
 
   it('renders detail info and empty memberships state', async () => {
