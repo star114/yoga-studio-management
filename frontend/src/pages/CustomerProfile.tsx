@@ -58,8 +58,8 @@ const CustomerProfile: React.FC = () => {
         <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">기본 정보</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customerInfo?.name || '-'}</span></p>
-          <p><span className="text-warm-600">이메일:</span> <span className="text-primary-800">{user.email}</span></p>
           <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customerInfo?.phone || '-'}</span></p>
+          <p><span className="text-warm-600">로그인 방식:</span> <span className="text-primary-800">전화번호</span></p>
         </div>
       </section>
 

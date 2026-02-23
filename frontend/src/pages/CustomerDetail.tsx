@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { customerAPI, membershipAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatKoreanDate, formatKoreanDateTime } from '../utils/dateFormat';
 
 interface Customer {
   id: number;
   user_id?: number;
   name: string;
   phone: string;
-  email: string;
   birth_date?: string | null;
   gender?: string | null;
   address?: string | null;
@@ -273,8 +273,7 @@ const CustomerDetail: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
           <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
-          <p><span className="text-warm-600">이메일:</span> <span className="text-primary-800">{customer.email}</span></p>
-          <p><span className="text-warm-600">생년월일:</span> <span className="text-primary-800">{customer.birth_date ? customer.birth_date.slice(0, 10) : '-'}</span></p>
+          <p><span className="text-warm-600">생년월일:</span> <span className="text-primary-800">{customer.birth_date ? formatKoreanDate(customer.birth_date, false) : '-'}</span></p>
           <p><span className="text-warm-600">성별:</span> <span className="text-primary-800">{customer.gender || '-'}</span></p>
           <p><span className="text-warm-600">주소:</span> <span className="text-primary-800">{customer.address || '-'}</span></p>
         </div>
@@ -314,9 +313,9 @@ const CustomerDetail: React.FC = () => {
                   {attendance.class_title || attendance.class_type || '수업 정보 없음'}
                 </p>
                 <p className="text-sm text-warm-700 mt-1">
-                  출석일: {attendance.attendance_date.slice(0, 10)}
+                  출석일: {formatKoreanDate(attendance.attendance_date)}
                   {attendance.class_date && attendance.class_start_time
-                    ? ` / 수업일시: ${attendance.class_date.slice(0, 10)} ${attendance.class_start_time.slice(0, 5)}`
+                    ? ` / 수업일시: ${formatKoreanDateTime(attendance.class_date, attendance.class_start_time)}`
                     : ''}
                 </p>
                 <p className="text-sm text-warm-700 mt-2">
@@ -458,8 +457,8 @@ const CustomerDetail: React.FC = () => {
                         <div>
                           <p className="font-semibold text-primary-800">{membership.membership_type_name}</p>
                           <p className="text-sm text-warm-600">
-                            시작일 {membership.start_date.slice(0, 10)}
-                            {membership.end_date ? ` / 종료일 ${membership.end_date.slice(0, 10)}` : ''}
+                            시작일 {formatKoreanDate(membership.start_date)}
+                            {membership.end_date ? ` / 종료일 ${formatKoreanDate(membership.end_date)}` : ''}
                           </p>
                         </div>
                         <span className={`px-2.5 py-1 text-xs rounded-full ${membership.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>

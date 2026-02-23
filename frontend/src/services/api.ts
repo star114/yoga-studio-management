@@ -125,6 +125,9 @@ export const classAPI = {
   getById: (classId: number) =>
     api.get(`/classes/${classId}`),
 
+  getMyClassDetail: (classId: number) =>
+    api.get(`/classes/${classId}/me`),
+
   getRegistrations: (classId: number) =>
     api.get(`/classes/${classId}/registrations`),
 
@@ -152,6 +155,9 @@ export const classAPI = {
 
   updateRegistrationComment: (classId: number, customerId: number, registration_comment: string) =>
     api.put(`/classes/${classId}/registrations/${customerId}/comment`, { registration_comment }),
+
+  updateMyRegistrationComment: (classId: number, registration_comment: string) =>
+    api.put(`/classes/${classId}/registrations/me/comment`, { registration_comment }),
 
   updateRegistrationStatus: (classId: number, customerId: number, attendance_status: 'reserved' | 'attended' | 'absent') =>
     api.put(`/classes/${classId}/registrations/${customerId}/status`, { attendance_status }),

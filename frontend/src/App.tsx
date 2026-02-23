@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
 import CustomerMemberships from './pages/CustomerMemberships';
+import CustomerClassDetail from './pages/CustomerClassDetail';
 import CustomerManagement from './pages/CustomerManagement';
 import CustomerDetail from './pages/CustomerDetail';
 import CustomerProfile from './pages/CustomerProfile';
@@ -89,8 +90,8 @@ const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         } />
         <Route path="classes/:id" element={
-          <ProtectedRoute adminOnly>
-            <ClassDetail />
+          <ProtectedRoute>
+            {user?.role === 'admin' ? <ClassDetail /> : <CustomerClassDetail />}
           </ProtectedRoute>
         } />
         {/* 추가 라우트들은 여기에 추가 */}

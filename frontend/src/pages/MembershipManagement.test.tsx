@@ -41,8 +41,8 @@ vi.mock('../utils/apiError', () => ({
 const seedInitSuccess = () => {
   customerGetAllMock.mockResolvedValue({
     data: [
-      { id: 1, name: '홍길동', phone: '010-1111-2222', email: 'hong@test.com' },
-      { id: 2, name: '김영희', phone: '010-3333-4444', email: 'kim@test.com' },
+      { id: 1, name: '홍길동', phone: '010-1111-2222' },
+      { id: 2, name: '김영희', phone: '010-3333-4444' },
     ],
   });
   membershipGetTypesMock.mockResolvedValue({ data: [{ id: 5, name: '10회권' }] });
@@ -77,7 +77,7 @@ describe('MembershipManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
     expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1);
-    expect(screen.getByText('로그인 계정: hong@test.com')).toBeTruthy();
+    expect(screen.getByText('로그인 전화번호: 010-1111-2222')).toBeTruthy();
   });
 
   it('creates membership successfully', async () => {
@@ -389,7 +389,7 @@ describe('MembershipManagement page', () => {
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText('고객 선택'), { target: { value: '' } });
-    expect(screen.queryByText(/로그인 계정:/)).toBeNull();
+    expect(screen.queryByText(/로그인 전화번호:/)).toBeNull();
   });
 
 });

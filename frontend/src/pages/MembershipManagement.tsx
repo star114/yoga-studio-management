@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { customerAPI, membershipAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatKoreanDate } from '../utils/dateFormat';
 
 interface Customer {
   id: number;
   name: string;
   phone: string;
-  email: string;
 }
 
 interface MembershipType {
@@ -246,7 +246,7 @@ const MembershipManagement: React.FC = () => {
               </option>
             ))}
           </select>
-          {selectedCustomer && <p className="text-sm text-warm-600">로그인 계정: {selectedCustomer.email}</p>}
+          {selectedCustomer && <p className="text-sm text-warm-600">로그인 전화번호: {selectedCustomer.phone}</p>}
         </div>
       </section>
 
@@ -373,8 +373,8 @@ const MembershipManagement: React.FC = () => {
                         <div>
                           <p className="font-semibold text-primary-800">{membership.membership_type_name}</p>
                           <p className="text-sm text-warm-600">
-                            시작일 {membership.start_date.slice(0, 10)}
-                            {membership.end_date ? ` / 종료일 ${membership.end_date.slice(0, 10)}` : ''}
+                            시작일 {formatKoreanDate(membership.start_date)}
+                            {membership.end_date ? ` / 종료일 ${formatKoreanDate(membership.end_date)}` : ''}
                           </p>
                         </div>
                         <span className={`px-2.5 py-1 text-xs rounded-full ${membership.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>

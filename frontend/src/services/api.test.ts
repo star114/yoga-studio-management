@@ -144,6 +144,7 @@ describe('api service', () => {
 
     classAPI.getAll({ limit: 10 });
     classAPI.getById(2);
+    classAPI.getMyClassDetail(2);
     classAPI.getRegistrations(2);
     classAPI.getMyRegistrations();
     classAPI.create(payload);
@@ -153,6 +154,7 @@ describe('api service', () => {
     classAPI.register(2);
     classAPI.register(2, { customer_id: 7 });
     classAPI.updateRegistrationComment(2, 7, 'note');
+    classAPI.updateMyRegistrationComment(2, 'self note');
     classAPI.updateRegistrationStatus(2, 7, 'absent');
     classAPI.cancelRegistration(2, 7);
     classAPI.cancelMyRegistration(2);
@@ -188,6 +190,7 @@ describe('api service', () => {
 
     expect(getMock).toHaveBeenCalledWith('/classes', { params: { limit: 10 } });
     expect(getMock).toHaveBeenCalledWith('/classes/2');
+    expect(getMock).toHaveBeenCalledWith('/classes/2/me');
     expect(getMock).toHaveBeenCalledWith('/classes/2/registrations');
     expect(getMock).toHaveBeenCalledWith('/classes/registrations/me');
     expect(postMock).toHaveBeenCalledWith('/classes', payload);
@@ -201,6 +204,7 @@ describe('api service', () => {
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', {});
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7 });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment', { registration_comment: 'note' });
+    expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/me/comment', { registration_comment: 'self note' });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/status', { attendance_status: 'absent' });
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/7');
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/me');

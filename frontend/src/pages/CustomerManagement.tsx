@@ -8,7 +8,6 @@ interface Customer {
   user_id: number;
   name: string;
   phone: string;
-  email: string;
   birth_date?: string | null;
   gender?: string | null;
   address?: string | null;
@@ -20,7 +19,6 @@ interface Customer {
 interface CustomerForm {
   name: string;
   phone: string;
-  email: string;
   birth_date: string;
   gender: string;
   address: string;
@@ -30,7 +28,6 @@ interface CustomerForm {
 const INITIAL_FORM: CustomerForm = {
   name: '',
   phone: '',
-  email: '',
   birth_date: '',
   gender: '',
   address: '',
@@ -56,7 +53,6 @@ const CustomerManagement: React.FC = () => {
     return customers.filter((customer) => (
       customer.name.toLowerCase().includes(keyword)
       || customer.phone.toLowerCase().includes(keyword)
-      || customer.email.toLowerCase().includes(keyword)
     ));
   }, [customers, search]);
 
@@ -90,7 +86,6 @@ const CustomerManagement: React.FC = () => {
     setForm({
       name: customer.name,
       phone: customer.phone,
-      email: customer.email,
       birth_date: customer.birth_date ? customer.birth_date.slice(0, 10) : '',
       gender: customer.gender || '',
       address: customer.address || '',
@@ -109,10 +104,9 @@ const CustomerManagement: React.FC = () => {
 
     try {
       const trimmedPhone = form.phone.trim();
-      const trimmedEmail = form.email.trim();
 
-      if (!isEditMode && !trimmedPhone && !trimmedEmail) {
-        setFormError('이메일 또는 전화번호 중 하나는 필수입니다.');
+      if (!trimmedPhone) {
+        setFormError('전화번호는 필수입니다.');
         return;
       }
 
@@ -129,7 +123,6 @@ const CustomerManagement: React.FC = () => {
         await customerAPI.create({
           name: form.name,
           phone: trimmedPhone,
-          email: trimmedEmail,
           birth_date: form.birth_date || null,
           gender: form.gender || null,
           address: form.address || null,
@@ -167,7 +160,7 @@ const CustomerManagement: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-display font-bold text-primary-800">고객 관리</h1>
-        <p className="text-warm-600">고객 로그인 계정을 생성하고 기본 정보를 관리합니다.</p>
+        <p className="text-warm-600">고객 로그인 계정을 전화번호 기반으로 생성하고 기본 정보를 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
@@ -195,25 +188,9 @@ const CustomerManagement: React.FC = () => {
                 className="input-field"
                 value={form.phone}
                 onChange={(e) => handleFormChange('phone', e.target.value)}
+                required
               />
-              {!isEditMode && (
-                <p className="mt-1 text-xs text-warm-500">이메일이 없으면 전화번호를 로그인 ID로 사용합니다.</p>
-              )}
-            </div>
-
-            <div>
-              <label className="label" htmlFor="customer-email">이메일</label>
-              <input
-                id="customer-email"
-                type="email"
-                className="input-field"
-                value={form.email}
-                onChange={(e) => handleFormChange('email', e.target.value)}
-                disabled={isEditMode}
-              />
-              {!isEditMode && (
-                <p className="mt-1 text-xs text-warm-500">전화번호와 이메일 중 하나만 입력해도 됩니다.</p>
-              )}
+              <p className="mt-1 text-xs text-warm-500">신규 고객은 전화번호로 로그인합니다.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -296,7 +273,7 @@ const CustomerManagement: React.FC = () => {
             <h2 className="text-xl font-display font-semibold text-primary-800">고객 목록</h2>
             <input
               className="input-field md:max-w-xs"
-              placeholder="이름/전화번호/이메일 검색"
+              placeholder="이름/전화번호 검색"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -319,7 +296,6 @@ const CustomerManagement: React.FC = () => {
                   <tr className="border-b border-warm-200 text-left text-warm-600">
                     <th className="py-2 pr-4">이름</th>
                     <th className="py-2 pr-4">전화번호</th>
-                    <th className="py-2 pr-4">이메일</th>
                     <th className="py-2 pr-4">회원권</th>
                     <th className="py-2 pr-4">출석</th>
                     <th className="py-2 pr-0 text-right">작업</th>
@@ -330,7 +306,6 @@ const CustomerManagement: React.FC = () => {
                     <tr key={customer.id} className="border-b border-warm-100">
                       <td className="py-3 pr-4 font-medium text-primary-800">{customer.name}</td>
                       <td className="py-3 pr-4">{customer.phone}</td>
-                      <td className="py-3 pr-4">{customer.email}</td>
                       <td className="py-3 pr-4">{customer.membership_count ?? 0}</td>
                       <td className="py-3 pr-4">{customer.total_attendance ?? 0}</td>
                       <td className="py-3 pr-0">

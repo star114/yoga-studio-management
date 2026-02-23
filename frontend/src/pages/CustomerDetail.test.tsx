@@ -65,7 +65,6 @@ const seedLoadSuccess = () => {
         id: 1,
         name: '홍길동',
         phone: '010-1111-2222',
-        email: 'hong@test.com',
         birth_date: '1990-01-01T00:00:00.000Z',
         gender: 'male',
         address: '서울',
@@ -124,7 +123,6 @@ describe('CustomerDetail page', () => {
           id: 1,
           name: '옵션없음',
           phone: '010-0000-0000',
-          email: 'none@test.com',
           birth_date: null,
           gender: null,
           address: null,
@@ -156,7 +154,6 @@ describe('CustomerDetail page', () => {
           id: 1,
           name: '홍길동',
           phone: '010-1111-2222',
-          email: 'hong@test.com',
         },
         recentAttendances: [
           {

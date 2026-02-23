@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customerAPI, attendanceAPI, classAPI } from '../services/api';
+import { formatKoreanDate } from '../utils/dateFormat';
 import {
   addDays,
   addMonths,
@@ -110,12 +111,12 @@ const AdminDashboard: React.FC = () => {
 
   const calendarTitle = useMemo(() => {
     if (calendarView === 'day') {
-      return format(focusDate, 'yyyy년 M월 d일 (EEE)');
+      return formatKoreanDate(focusDate);
     }
     if (calendarView === 'week') {
       const weekStart = startOfWeek(focusDate, { weekStartsOn: 0 });
       const weekEnd = endOfWeek(focusDate, { weekStartsOn: 0 });
-      return `${format(weekStart, 'yyyy년 M월 d일')} - ${format(weekEnd, 'M월 d일')}`;
+      return `${formatKoreanDate(weekStart, false)} - ${formatKoreanDate(weekEnd, false)}`;
     }
     return format(focusDate, 'yyyy년 M월');
   }, [calendarView, focusDate]);
@@ -293,9 +294,8 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center">
           <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
-          <p className="text-xs text-warm-500">기준일: {format(focusDate, 'yyyy-MM-dd')}</p>
         </div>
 
         {calendarView === 'month' && (
@@ -377,7 +377,7 @@ const AdminDashboard: React.FC = () => {
 
         {calendarView === 'day' && (
           <div className="rounded-xl border border-warm-200 bg-white/70 p-4">
-            <p className="text-sm text-warm-600 mb-2">{format(focusDate, 'yyyy년 M월 d일 (EEE)')}</p>
+            <p className="text-sm text-warm-600 mb-2">{formatKoreanDate(focusDate)}</p>
             {selectedDayClasses.length === 0 ? (
               <p className="text-warm-500">해당 날짜에 등록된 수업이 없습니다.</p>
             ) : (

@@ -202,7 +202,6 @@ describe('AdminDashboard page', () => {
   });
 
   it('supports calendar month/week/day navigation', async () => {
-    const todayDate = formatDate(new Date());
     renderPage();
     await waitFor(() => expect(screen.getByText('수업 캘린더')).toBeTruthy());
 
@@ -219,8 +218,6 @@ describe('AdminDashboard page', () => {
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
     fireEvent.click(screen.getByRole('button', { name: '이전' }));
     fireEvent.click(screen.getByRole('button', { name: '오늘' }));
-    await waitFor(() => expect(screen.getByText(new RegExp(todayDate))).toBeTruthy());
-
     fireEvent.click(screen.getByRole('button', { name: '일간' }));
     await waitFor(() => expect(screen.getAllByText('접수중').length).toBeGreaterThan(0));
     expect(screen.getByText('완료')).toBeTruthy();
@@ -232,7 +229,6 @@ describe('AdminDashboard page', () => {
     fireEvent.click(screen.getByRole('button', { name: '이전' }));
 
     fireEvent.click(screen.getByRole('button', { name: '오늘' }));
-    expect(screen.getByText(/기준일:/)).toBeTruthy();
   });
 
   it('shows empty states for day view, attendance, and customers', async () => {

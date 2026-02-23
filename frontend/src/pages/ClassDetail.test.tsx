@@ -282,7 +282,7 @@ describe('ClassDetail page', () => {
 
   it('renders registration comment as read-only customer-provided text', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText('신청자 코멘트')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수련생 코멘트')).toBeTruthy());
     expect(screen.getByText('기존 코멘트')).toBeTruthy();
   });
 
@@ -344,7 +344,7 @@ describe('ClassDetail page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('신청자 코멘트')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수련생 코멘트')).toBeTruthy());
     expect(screen.getByText('-')).toBeTruthy();
   });
 

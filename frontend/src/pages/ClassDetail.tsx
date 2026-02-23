@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { attendanceAPI, classAPI, customerAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 
 interface YogaClassDetail {
   id: number;
@@ -259,7 +260,7 @@ const ClassDetail: React.FC = () => {
         <div>
           <h1 className="text-3xl font-display font-bold text-primary-800">수업 상세</h1>
           <p className="text-warm-600 mt-2">
-            {classDetail.class_date.slice(0, 10)} {classDetail.start_time.slice(0, 5)}-{classDetail.end_time.slice(0, 5)} / {classDetail.title}
+            {formatKoreanDateTime(classDetail.class_date, classDetail.start_time)} ~ {formatKoreanTime(classDetail.end_time)} / {classDetail.title}
           </p>
         </div>
         <Link to="/classes" className="btn-secondary">
@@ -309,9 +310,9 @@ const ClassDetail: React.FC = () => {
       </section>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">신청자 목록</h2>
+        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">수련생 목록</h2>
         {registrations.length === 0 ? (
-          <p className="text-warm-600 py-4">신청자가 없습니다.</p>
+          <p className="text-warm-600 py-4">수련생이 없습니다.</p>
         ) : (
           <div className="space-y-4">
             {registrations.map((registration) => (
@@ -382,7 +383,7 @@ const ClassDetail: React.FC = () => {
                 </div>
 
                 <div className="mt-4">
-                  <p className="label">신청자 코멘트</p>
+                  <p className="label">수련생 코멘트</p>
                   <p className="text-sm text-warm-700">
                     {registration.registration_comment?.trim() || '-'}
                   </p>

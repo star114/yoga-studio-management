@@ -9,10 +9,10 @@ const { changePasswordMock, parseApiErrorMock } = vi.hoisted(() => ({
 }));
 
 let authState: {
-  user: { id: number; email: string; role: 'admin' | 'customer' } | null;
+  user: { id: number; login_id: string; role: 'admin' | 'customer' } | null;
   customerInfo: { id: number; name: string; phone: string } | null;
 } = {
-  user: { id: 1, email: 'user@yoga.com', role: 'customer' },
+  user: { id: 1, login_id: 'user@yoga.com', role: 'customer' },
   customerInfo: { id: 1, name: '홍길동', phone: '010-0000-0000' },
 };
 
@@ -42,7 +42,7 @@ describe('CustomerProfile page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState = {
-      user: { id: 1, email: 'user@yoga.com', role: 'customer' },
+      user: { id: 1, login_id: 'user@yoga.com', role: 'customer' },
       customerInfo: { id: 1, name: '홍길동', phone: '010-0000-0000' },
     };
   });
@@ -53,7 +53,7 @@ describe('CustomerProfile page', () => {
 
   it('redirects when user is not customer', () => {
     authState = {
-      user: { id: 9, email: 'admin@yoga.com', role: 'admin' },
+      user: { id: 9, login_id: 'admin@yoga.com', role: 'admin' },
       customerInfo: null,
     };
     render(<CustomerProfile />);
@@ -62,7 +62,7 @@ describe('CustomerProfile page', () => {
 
   it('renders fallback profile values when customer info is missing', () => {
     authState = {
-      user: { id: 1, email: 'user@yoga.com', role: 'customer' },
+      user: { id: 1, login_id: 'user@yoga.com', role: 'customer' },
       customerInfo: null,
     };
     render(<CustomerProfile />);

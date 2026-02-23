@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 
 interface YogaClass {
   id: number;
@@ -525,7 +526,7 @@ const ClassManagement: React.FC = () => {
                     <tr key={item.id} className="border-b border-warm-100">
                       <td className="py-3 pr-4 font-medium text-primary-800">{item.title}</td>
                       <td className="py-3 pr-4">{item.instructor_name || '-'}</td>
-                      <td className="py-3 pr-4">{item.class_date.slice(0, 10)} {item.start_time.slice(0, 5)}-{item.end_time.slice(0, 5)}</td>
+                      <td className="py-3 pr-4">{formatKoreanDateTime(item.class_date, item.start_time)} ~ {formatKoreanTime(item.end_time)}</td>
                       <td className="py-3 pr-4">{item.max_capacity}명</td>
                       <td className="py-3 pr-4">{item.current_enrollment ?? 0}명</td>
                       <td className="py-3 pr-4">

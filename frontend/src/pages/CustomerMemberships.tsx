@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { membershipAPI } from '../services/api';
-import { format } from 'date-fns';
+import { formatKoreanDate } from '../utils/dateFormat';
 
 interface CustomerMembership {
   id: number;
@@ -72,7 +72,7 @@ const CustomerMemberships: React.FC = () => {
                   <div>
                     <h3 className="font-semibold text-primary-800 text-lg">{membership.membership_type_name}</h3>
                     <p className="text-sm text-warm-600 mt-1">
-                      {format(new Date(membership.start_date), 'yyyy년 MM월 dd일')} 시작
+                      {formatKoreanDate(membership.start_date)} 시작
                     </p>
                   </div>
                   <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-medium">활성</span>
@@ -88,7 +88,7 @@ const CustomerMemberships: React.FC = () => {
                   {membership.end_date && (
                     <div className="bg-white p-3 rounded-lg">
                       <p className="text-sm text-warm-600 mb-1">종료일</p>
-                      <p className="text-lg font-semibold text-primary-800">{format(new Date(membership.end_date), 'MM/dd')}</p>
+                      <p className="text-sm font-semibold text-primary-800">{formatKoreanDate(membership.end_date)}</p>
                     </div>
                   )}
                 </div>

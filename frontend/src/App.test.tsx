@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type AuthState = {
-  user: { id: number; email: string; role: 'admin' | 'customer' } | null;
+  user: { id: number; login_id: string; role: 'admin' | 'customer' } | null;
   isLoading: boolean;
 };
 
@@ -30,6 +30,7 @@ vi.mock('./pages/Login', () => ({ default: () => <div>Login Page</div> }));
 vi.mock('./pages/AdminDashboard', () => ({ default: () => <div>Admin Dashboard</div> }));
 vi.mock('./pages/CustomerDashboard', () => ({ default: () => <div>Customer Dashboard</div> }));
 vi.mock('./pages/CustomerMemberships', () => ({ default: () => <div>Customer Memberships</div> }));
+vi.mock('./pages/CustomerClassDetail', () => ({ default: () => <div>Customer Class Detail</div> }));
 vi.mock('./pages/CustomerManagement', () => ({ default: () => <div>Customer Management</div> }));
 vi.mock('./pages/CustomerDetail', () => ({ default: () => <div>Customer Detail</div> }));
 vi.mock('./pages/CustomerProfile', () => ({ default: () => <div>Customer Profile</div> }));
@@ -65,32 +66,32 @@ describe('App routing shell', () => {
   });
 
   it('redirects logged-in users away from login', async () => {
-    authState = { user: { id: 1, email: 'admin@yoga.com', role: 'admin' }, isLoading: false };
+    authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
     await renderAt('/login');
     expect(screen.getByText('Layout')).toBeTruthy();
     expect(screen.getByText('Admin Dashboard')).toBeTruthy();
   });
 
   it('renders customer dashboard for customer users', async () => {
-    authState = { user: { id: 2, email: 'user@yoga.com', role: 'customer' }, isLoading: false };
+    authState = { user: { id: 2, login_id: 'user@yoga.com', role: 'customer' }, isLoading: false };
     await renderAt('/');
     expect(screen.getByText('Customer Dashboard')).toBeTruthy();
   });
 
   it('blocks admin-only routes for customer users', async () => {
-    authState = { user: { id: 2, email: 'user@yoga.com', role: 'customer' }, isLoading: false };
+    authState = { user: { id: 2, login_id: 'user@yoga.com', role: 'customer' }, isLoading: false };
     await renderAt('/customers');
     expect(screen.getByText('Customer Dashboard')).toBeTruthy();
   });
 
   it('renders admin routes for admin users', async () => {
-    authState = { user: { id: 1, email: 'admin@yoga.com', role: 'admin' }, isLoading: false };
+    authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
     await renderAt('/classes/1');
     expect(screen.getByText('Class Detail')).toBeTruthy();
   });
 
   it('handles nested redirects and wildcard fallback', async () => {
-    authState = { user: { id: 1, email: 'admin@yoga.com', role: 'admin' }, isLoading: false };
+    authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
     await renderAt('/memberships');
     expect(screen.getByText('Customer Management')).toBeTruthy();
 
@@ -100,14 +101,20 @@ describe('App routing shell', () => {
   });
 
   it('renders customer profile route', async () => {
-    authState = { user: { id: 2, email: 'user@yoga.com', role: 'customer' }, isLoading: false };
+    authState = { user: { id: 2, login_id: 'user@yoga.com', role: 'customer' }, isLoading: false };
     await renderAt('/profile');
     expect(screen.getByText('Customer Profile')).toBeTruthy();
   });
 
   it('renders customer memberships route', async () => {
-    authState = { user: { id: 2, email: 'user@yoga.com', role: 'customer' }, isLoading: false };
+    authState = { user: { id: 2, login_id: 'user@yoga.com', role: 'customer' }, isLoading: false };
     await renderAt('/memberships');
     expect(screen.getByText('Customer Memberships')).toBeTruthy();
+  });
+
+  it('renders customer class detail route', async () => {
+    authState = { user: { id: 2, login_id: 'user@yoga.com', role: 'customer' }, isLoading: false };
+    await renderAt('/classes/1');
+    expect(screen.getByText('Customer Class Detail')).toBeTruthy();
   });
 });

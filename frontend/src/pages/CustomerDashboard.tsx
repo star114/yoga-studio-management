@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceAPI, classAPI } from '../services/api';
+import { formatKoreanDate, formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 import {
   addDays,
   addMonths,
@@ -22,11 +24,13 @@ import {
 
 interface CustomerAttendance {
   id: number;
+  class_id?: number | null;
   attendance_date: string;
   class_type?: string | null;
   class_title?: string | null;
   class_date?: string | null;
   class_start_time?: string | null;
+  class_end_time?: string | null;
   instructor_comment?: string | null;
 }
 
@@ -34,6 +38,7 @@ interface MyRegistrationClass {
   registration_id: number;
   class_id: number;
   attendance_status: 'reserved' | 'attended' | 'absent';
+  registration_comment?: string | null;
   title: string;
   instructor_name?: string | null;
   class_date: string;
@@ -45,6 +50,7 @@ interface MyRegistrationClass {
 
 interface CustomerCalendarEntry {
   id: string;
+  class_id: number | null;
   title: string;
   class_date: string;
   start_time?: string | null;
@@ -64,6 +70,12 @@ const normalizeTime = (value?: string | null) => {
 };
 
 const normalizeDate = (value: string) => value.slice(0, 10);
+const QUICK_COMMENT_OPTIONS = [
+  '월경 중입니다',
+  '오늘은 조용히 수련하고 싶어요',
+  '선생님의 터치가 부담스러울 거 같아요 (no 핸즈온)',
+];
+
 const isAfterGraceTime = (entry: CustomerCalendarEntry, now: Date) => {
   if (!entry.start_time) return false;
   const classStart = new Date(`${normalizeDate(entry.class_date)}T${String(entry.start_time).slice(0, 8)}`);
@@ -71,14 +83,56 @@ const isAfterGraceTime = (entry: CustomerCalendarEntry, now: Date) => {
   return now >= graceTime;
 };
 
+const composeRegistrationComment = (quickComments: string[], directInput: string) => {
+  const normalizedQuick = Array.from(new Set(quickComments.map((item) => item.trim()).filter(Boolean)));
+  const normalizedDirect = directInput
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const parts = [...normalizedQuick, ...Array.from(new Set(normalizedDirect))];
+  return parts.join('\n');
+};
+
+const mergeCalendarEntries = (
+  registrations: CustomerCalendarEntry[],
+  attendances: CustomerCalendarEntry[],
+) => {
+  const mergedByClassId = new Map<number, CustomerCalendarEntry>();
+  const withoutClassId: CustomerCalendarEntry[] = [];
+
+  registrations.forEach((item) => {
+    if (typeof item.class_id === 'number') {
+      mergedByClassId.set(item.class_id, item);
+      return;
+    }
+    withoutClassId.push(item);
+  });
+
+  attendances.forEach((item) => {
+    if (typeof item.class_id === 'number') {
+      // 같은 수업이 등록/출석에 모두 있으면 출석 기록(완료)을 우선 표시
+      mergedByClassId.set(item.class_id, item);
+      return;
+    }
+    withoutClassId.push(item);
+  });
+
+  return [...mergedByClassId.values(), ...withoutClassId];
+};
+
 const CustomerDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const { customerInfo } = useAuth();
-  const [attendances, setAttendances] = useState<CustomerAttendance[]>([]);
-  const [upcomingClasses, setUpcomingClasses] = useState<MyRegistrationClass[]>([]);
+  const [nextUpcomingClass, setNextUpcomingClass] = useState<MyRegistrationClass | null>(null);
   const [calendarEntries, setCalendarEntries] = useState<CustomerCalendarEntry[]>([]);
   const [calendarView, setCalendarView] = useState<CalendarView>('month');
   const [focusDate, setFocusDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedQuickComments, setSelectedQuickComments] = useState<string[]>([]);
+  const [customCommentChips, setCustomCommentChips] = useState<string[]>([]);
+  const [isDirectCommentOpen, setIsDirectCommentOpen] = useState(false);
+  const [directCommentInput, setDirectCommentInput] = useState('');
+  const [isSavingComment, setIsSavingComment] = useState(false);
 
   const loadAttendanceData = useCallback(async () => {
     try {
@@ -89,17 +143,22 @@ const CustomerDashboard: React.FC = () => {
 
       const attendanceItems = attendancesRes.data as CustomerAttendance[];
       const registrationItems = (registrationsRes.data as MyRegistrationClass[]).filter((item) => !item.is_excluded);
-      setAttendances(attendanceItems);
 
       const now = new Date();
       const nextClasses = registrationItems.filter((item) => {
         const classStartAt = new Date(`${normalizeDate(item.class_date)}T${String(item.start_time).slice(0, 8)}`);
         return classStartAt >= now && item.attendance_status === 'reserved';
       });
-      setUpcomingClasses(nextClasses);
+      nextClasses.sort((a, b) => {
+        const aStartAt = new Date(`${normalizeDate(a.class_date)}T${String(a.start_time).slice(0, 8)}`).getTime();
+        const bStartAt = new Date(`${normalizeDate(b.class_date)}T${String(b.start_time).slice(0, 8)}`).getTime();
+        return aStartAt - bStartAt;
+      });
+      setNextUpcomingClass(nextClasses[0] || null);
 
       const entriesFromRegistrations: CustomerCalendarEntry[] = registrationItems.map((item) => ({
         id: `reg-${item.registration_id}`,
+        class_id: item.class_id,
         title: item.title,
         class_date: normalizeDate(item.class_date),
         start_time: item.start_time,
@@ -113,16 +172,17 @@ const CustomerDashboard: React.FC = () => {
         const fallbackDate = normalizeDate(item.attendance_date);
         return {
           id: `att-${item.id}`,
+          class_id: typeof item.class_id === 'number' ? item.class_id : null,
           title: String(item.class_title || item.class_type || '수업 기록'),
           class_date: item.class_date ? normalizeDate(item.class_date) : fallbackDate,
           start_time: item.class_start_time || null,
-          end_time: null,
+          end_time: item.class_end_time || null,
           instructor_name: null,
           source: 'attendance',
         };
       });
 
-      setCalendarEntries([...entriesFromRegistrations, ...entriesFromAttendances]);
+      setCalendarEntries(mergeCalendarEntries(entriesFromRegistrations, entriesFromAttendances));
     } catch (error) {
       console.error('Failed to load attendance data:', error);
     } finally {
@@ -135,6 +195,29 @@ const CustomerDashboard: React.FC = () => {
       void loadAttendanceData();
     }
   }, [customerInfo, loadAttendanceData]);
+
+  useEffect(() => {
+    const savedComment = (nextUpcomingClass?.registration_comment || '').trim();
+    if (!savedComment) {
+      setSelectedQuickComments([]);
+      setCustomCommentChips([]);
+      setDirectCommentInput('');
+      setIsDirectCommentOpen(false);
+      return;
+    }
+
+    const commentLines = savedComment
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const quickSelections = commentLines.filter((line) => QUICK_COMMENT_OPTIONS.includes(line));
+    const customLines = commentLines.filter((line) => !QUICK_COMMENT_OPTIONS.includes(line));
+
+    setSelectedQuickComments(quickSelections);
+    setCustomCommentChips(customLines);
+    setDirectCommentInput('');
+    setIsDirectCommentOpen(false);
+  }, [nextUpcomingClass]);
 
   const entriesByDate = useMemo(() => {
     return calendarEntries.reduce<Record<string, CustomerCalendarEntry[]>>((acc, item) => {
@@ -173,12 +256,12 @@ const CustomerDashboard: React.FC = () => {
 
   const calendarTitle = useMemo(() => {
     if (calendarView === 'day') {
-      return format(focusDate, 'yyyy년 M월 d일 (EEE)');
+      return formatKoreanDate(focusDate);
     }
     if (calendarView === 'week') {
       const weekStart = startOfWeek(focusDate, { weekStartsOn: 0 });
       const weekEnd = endOfWeek(focusDate, { weekStartsOn: 0 });
-      return `${format(weekStart, 'yyyy년 M월 d일')} - ${format(weekEnd, 'M월 d일')}`;
+      return `${formatKoreanDate(weekStart, false)} - ${formatKoreanDate(weekEnd, false)}`;
     }
     return format(focusDate, 'yyyy년 M월');
   }, [calendarView, focusDate]);
@@ -207,6 +290,41 @@ const CustomerDashboard: React.FC = () => {
     setFocusDate((prev) => addMonths(prev, 1));
   };
 
+  const persistComment = async (rawComment: string) => {
+    if (!nextUpcomingClass) return;
+    const mergedComment = rawComment.trim();
+
+    setIsSavingComment(true);
+
+    try {
+      await classAPI.updateMyRegistrationComment(nextUpcomingClass.class_id, mergedComment);
+      setNextUpcomingClass((prev) => (prev ? { ...prev, registration_comment: mergedComment || null } : prev));
+    } catch (error) {
+      console.error('Failed to save registration comment:', error);
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
+  const saveComment = async (quickComments: string[], directInput: string) => {
+    const mergedComment = composeRegistrationComment(quickComments, directInput);
+    await persistComment(mergedComment);
+  };
+
+  const handleQuickCommentClick = async (comment: string) => {
+    const nextSelectedComments = selectedQuickComments.includes(comment)
+      ? selectedQuickComments.filter((item) => item !== comment)
+      : [...selectedQuickComments, comment];
+    setSelectedQuickComments(nextSelectedComments);
+    await saveComment(nextSelectedComments, customCommentChips.join('\n'));
+  };
+
+  const handleCustomCommentChipClick = async (comment: string) => {
+    const nextCustomChips = customCommentChips.filter((item) => item !== comment);
+    setCustomCommentChips(nextCustomChips);
+    await saveComment(selectedQuickComments, nextCustomChips.join('\n'));
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -224,6 +342,116 @@ const CustomerDashboard: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div>
         <p className="text-warm-600">수련의 흐름과 몸과 마음의 상태를 간단히 기록하고 나누는 공간입니다.</p>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+          다음 수업
+        </h2>
+        {nextUpcomingClass ? (
+          <div className="p-4 bg-primary-50 rounded-lg border border-primary-100 space-y-4">
+            <p className="font-semibold text-primary-800">{nextUpcomingClass.title}</p>
+            <p className="text-sm text-warm-700 mt-1">
+              {formatKoreanDateTime(nextUpcomingClass.class_date, nextUpcomingClass.start_time)}
+              {' '}~ {formatKoreanTime(nextUpcomingClass.end_time)}
+            </p>
+            <div className="pt-1 border-t border-primary-100">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-primary-800">강사에게 전달할 코멘트</p>
+                {nextUpcomingClass.registration_comment?.trim() && (
+                  <button
+                    type="button"
+                    className="btn-secondary text-sm px-3 py-1.5 disabled:opacity-60"
+                    disabled={isSavingComment}
+                    onClick={() => void persistComment('')}
+                  >
+                    초기화
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-warm-600 mb-2">여러 개 선택할 수 있어요.</p>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_COMMENT_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    disabled={isSavingComment}
+                    onClick={() => void handleQuickCommentClick(option)}
+                    className={`px-3 py-1.5 text-xs sm:text-sm rounded-full border transition-colors ${
+                      selectedQuickComments.includes(option)
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-primary-800 border-primary-200 hover:bg-primary-100'
+                    } disabled:opacity-60`}
+                  >
+                    {option}
+                  </button>
+                ))}
+                {customCommentChips.map((comment) => (
+                  <button
+                    key={`custom-${comment}`}
+                    type="button"
+                    disabled={isSavingComment}
+                    onClick={() => void handleCustomCommentChipClick(comment)}
+                    className="max-w-full px-3 py-1.5 text-xs sm:text-sm rounded-full border border-primary-600 bg-primary-600 text-white hover:bg-primary-700 truncate disabled:opacity-60"
+                    title="클릭하면 해당 직접 입력 코멘트 선택이 해제됩니다."
+                  >
+                    {comment}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={isSavingComment}
+                  onClick={() => {
+                    setIsDirectCommentOpen(true);
+                  }}
+                  className={`px-3 py-1.5 text-xs sm:text-sm rounded-full border transition-colors ${
+                    isDirectCommentOpen
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-primary-800 border-primary-200 hover:bg-primary-100'
+                  } disabled:opacity-60`}
+                >
+                  직접 입력
+                </button>
+              </div>
+
+              {isDirectCommentOpen && (
+                <div className="mt-3 space-y-2">
+                  <textarea
+                    value={directCommentInput}
+                    onChange={(e) => setDirectCommentInput(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="강사에게 전달할 컨디션/주의사항을 입력해 주세요. 예) 어깨가 뭉쳐 있어요, OO 부위에 통증이 있어요, 하루 종일 무기력했어요, 차분하고 느긋한 상태예요, 어제 밤잠을 설쳤어요 등"
+                    className="input-field resize-none"
+                    disabled={isSavingComment}
+                  />
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-warm-500">{directCommentInput.trim().length}/500</p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const normalized = directCommentInput.trim();
+                        const nextCustomChips = normalized
+                          ? Array.from(new Set([...customCommentChips, normalized]))
+                          : customCommentChips;
+                        setCustomCommentChips(nextCustomChips);
+                        await saveComment(selectedQuickComments, nextCustomChips.join('\n'));
+                        setDirectCommentInput('');
+                        setIsDirectCommentOpen(false);
+                      }}
+                      disabled={isSavingComment}
+                      className="btn-primary text-sm px-4 py-2 disabled:opacity-60"
+                    >
+                      {isSavingComment ? '저장 중...' : '코멘트 저장'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="text-warm-500 text-center py-8">예정된 수업이 없습니다</p>
+        )}
       </div>
 
       <section className="card space-y-4">
@@ -272,9 +500,8 @@ const CustomerDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center">
           <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
-          <p className="text-xs text-warm-500">기준일: {format(focusDate, 'yyyy-MM-dd')}</p>
         </div>
 
         {calendarView === 'month' && (
@@ -384,13 +611,23 @@ const CustomerDashboard: React.FC = () => {
 
         {calendarView === 'day' && (
           <div className="rounded-xl border border-warm-200 bg-white/70 p-4">
-            <p className="text-sm text-warm-600 mb-2">{format(focusDate, 'yyyy년 M월 d일 (EEE)')}</p>
+            <p className="text-sm text-warm-600 mb-2">{formatKoreanDate(focusDate)}</p>
             {selectedDayEntries.length === 0 ? (
               <p className="text-warm-500">해당 날짜에 등록된 수업이 없습니다.</p>
             ) : (
               <div className="space-y-2">
                 {selectedDayEntries.map((item) => (
-                  <div key={item.id} className="w-full rounded-lg border border-warm-200 bg-warm-50 p-3 text-left">
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      if (item.class_id) {
+                        navigate(`/classes/${item.class_id}`);
+                      }
+                    }}
+                    disabled={!item.class_id}
+                    className="w-full rounded-lg border border-warm-200 bg-warm-50 p-3 text-left disabled:opacity-60 disabled:cursor-not-allowed hover:bg-warm-100 transition-colors"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-primary-800">{item.title}</p>
@@ -404,74 +641,13 @@ const CustomerDashboard: React.FC = () => {
                         {item.source === 'registration' ? '예정' : '완료'}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
         )}
       </section>
-
-      <div className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-          다음 수업
-        </h2>
-        <div className="space-y-3">
-          {upcomingClasses.length === 0 ? (
-            <p className="text-warm-500 text-center py-8">예정된 수업이 없습니다</p>
-          ) : (
-            upcomingClasses.map((item) => (
-              <div key={item.registration_id} className="p-4 bg-primary-50 rounded-lg border border-primary-100">
-                <p className="font-semibold text-primary-800">{item.title}</p>
-                <p className="text-sm text-warm-700 mt-1">
-                  {item.class_date.slice(0, 10)} {item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}
-                </p>
-                {item.instructor_name && (
-                  <p className="text-sm text-warm-600 mt-1">강사: {item.instructor_name}</p>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-          지난 수업
-        </h2>
-        <div className="space-y-3">
-          {attendances.length === 0 ? (
-            <p className="text-warm-500 text-center py-8">출석 기록이 없습니다</p>
-          ) : (
-            attendances.map((attendance) => (
-              <div key={attendance.id} className="p-4 bg-warm-50 rounded-lg">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-medium text-primary-800">
-                      {format(new Date(attendance.attendance_date), 'yyyy년 MM월 dd일 HH:mm')}
-                    </p>
-                    {(attendance.class_title || attendance.class_type) && (
-                      <p className="text-sm text-warm-600 mt-1">
-                        {attendance.class_title || attendance.class_type}
-                        {attendance.class_date && attendance.class_start_time ? (
-                          <> · {attendance.class_date.slice(0, 10)} {attendance.class_start_time.slice(0, 5)}</>
-                        ) : null}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {attendance.instructor_comment && (
-                  <div className="mt-2 p-3 bg-white rounded border border-warm-100">
-                    <p className="text-sm text-warm-700">
-                      💬 {attendance.instructor_comment}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
     </div>
   );
 };
