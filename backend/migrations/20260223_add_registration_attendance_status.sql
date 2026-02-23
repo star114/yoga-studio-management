@@ -5,9 +5,18 @@ UPDATE yoga_class_registrations
 SET attendance_status = 'reserved'
 WHERE attendance_status IS NULL;
 
-ALTER TABLE yoga_class_registrations
-    ADD CONSTRAINT yoga_class_registrations_attendance_status_check
-    CHECK (attendance_status IN ('reserved', 'attended', 'absent'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'yoga_class_registrations_attendance_status_check'
+    ) THEN
+        ALTER TABLE yoga_class_registrations
+            ADD CONSTRAINT yoga_class_registrations_attendance_status_check
+            CHECK (attendance_status IN ('reserved', 'attended', 'absent'));
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_class_registrations_attendance_status
     ON yoga_class_registrations(attendance_status);
