@@ -254,22 +254,42 @@ const AdminDashboard: React.FC = () => {
             <p className="text-sm text-warm-600">현재 날짜는 강조 표시됩니다.</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-xl border border-warm-200 bg-white/75 p-1">
+          <div className="flex w-full flex-wrap items-center gap-1.5 sm:gap-2 lg:w-auto">
+            <div className="inline-flex rounded-lg sm:rounded-xl border border-warm-200 bg-white/75 p-0.5 sm:p-1">
               {(['month', 'week', 'day'] as CalendarView[]).map((view) => (
                 <button
                   key={view}
                   type="button"
-                  className={`px-3 py-1.5 text-sm rounded-lg ${calendarView === view ? 'bg-primary-600 text-white' : 'text-primary-800 hover:bg-warm-100'}`}
+                  className={`px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg ${calendarView === view ? 'bg-primary-600 text-white' : 'text-primary-800 hover:bg-warm-100'}`}
                   onClick={() => setCalendarView(view)}
                 >
                   {view === 'month' ? '월간' : view === 'week' ? '주간' : '일간'}
                 </button>
               ))}
             </div>
-            <button type="button" className="btn-secondary" onClick={() => setFocusDate(startOfDay(new Date()))}>오늘</button>
-            <button type="button" className="btn-secondary" onClick={movePrev}>이전</button>
-            <button type="button" className="btn-secondary" onClick={moveNext}>다음</button>
+            <div className="ml-auto inline-flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                onClick={() => setFocusDate(startOfDay(new Date()))}
+              >
+                오늘
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                onClick={movePrev}
+              >
+                이전
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                onClick={moveNext}
+              >
+                다음
+              </button>
+            </div>
           </div>
         </div>
 
