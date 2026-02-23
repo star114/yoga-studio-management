@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
+import CustomerMemberships from './pages/CustomerMemberships';
 import CustomerManagement from './pages/CustomerManagement';
 import CustomerDetail from './pages/CustomerDetail';
 import CustomerProfile from './pages/CustomerProfile';
@@ -67,7 +68,11 @@ const AppRoutes: React.FC = () => {
             <CustomerDetail />
           </ProtectedRoute>
         } />
-        <Route path="memberships" element={<Navigate to="/customers" replace />} />
+        <Route path="memberships" element={
+          user?.role === 'admin'
+            ? <Navigate to="/customers" replace />
+            : <CustomerMemberships />
+        } />
         <Route path="profile" element={
           <ProtectedRoute>
             <CustomerProfile />

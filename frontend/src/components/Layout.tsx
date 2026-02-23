@@ -10,23 +10,33 @@ interface NavItem {
 
 const Layout: React.FC = () => {
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const navItems: NavItem[] = [
-    { to: '/', label: '대시보드', end: true },
-    ...(user?.role === 'admin'
+    { to: '/', label: isAdmin ? '대시보드' : '🧘 수련 기록', end: true },
+    ...(isAdmin
       ? [
           { to: '/customers', label: '고객 관리' },
           { to: '/membership-types', label: '회원권 관리' },
           { to: '/classes', label: '수업 관리' },
         ]
       : [
-          { to: '/profile', label: '회원정보 관리' },
+          { to: '/memberships', label: '🎟️ 회원권' },
+          { to: '/profile', label: '👤 내 정보' },
         ]),
   ];
 
   const navClassName = ({ isActive }: { isActive: boolean }) =>
-    `px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-      isActive ? 'bg-primary-100 text-primary-800' : 'text-warm-700 hover:bg-warm-100'
-    }`;
+    isAdmin
+      ? `inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border transition-all whitespace-nowrap ${
+          isActive
+            ? 'bg-primary-700 text-white border-primary-700 shadow-sm'
+            : 'bg-white/85 text-warm-700 border-warm-200 hover:bg-primary-50 hover:border-primary-300'
+        }`
+      : `inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+          isActive
+            ? 'bg-white text-primary-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border border-white/90'
+            : 'text-slate-600 hover:text-primary-800 border border-transparent'
+        }`;
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -37,7 +47,7 @@ const Layout: React.FC = () => {
       <header className="sticky top-0 z-20 bg-white/68 backdrop-blur-md border-b border-warm-100/80 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-6">
+            <div className={`flex items-center ${isAdmin ? 'space-x-6' : 'flex-1'}`}>
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -45,11 +55,11 @@ const Layout: React.FC = () => {
                   </svg>
                 </div>
                 <h1 className="text-xl font-display font-bold text-primary-800">
-                  숨의 정원
+                  숨의정원요가
                 </h1>
               </div>
 
-              <nav className="hidden md:flex items-center gap-2">
+              <nav className={`hidden md:inline-flex items-center gap-1 ${isAdmin ? '' : 'mx-auto rounded-full bg-[rgba(120,120,128,0.14)] border border-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] p-1 backdrop-blur-sm'}`}>
                 {navItems.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.end} className={navClassName}>
                     {item.label}
@@ -88,8 +98,8 @@ const Layout: React.FC = () => {
             </div>
           </div>
 
-          <nav className="md:hidden pb-3">
-            <div className="grid grid-cols-3 gap-2">
+          <nav className="md:hidden pb-3 flex justify-center">
+            <div className={`inline-flex max-w-full flex-wrap gap-1 ${isAdmin ? '' : 'mx-auto rounded-full bg-[rgba(120,120,128,0.14)] border border-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] p-1 backdrop-blur-sm'}`}>
               {navItems.map((item) => (
                 <NavLink key={`mobile-${item.to}`} to={item.to} end={item.end} className={navClassName}>
                   {item.label}

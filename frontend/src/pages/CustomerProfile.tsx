@@ -50,7 +50,7 @@ const CustomerProfile: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div>
-        <h1 className="text-3xl font-display font-bold text-primary-800 mb-2">회원정보 관리</h1>
+        <h1 className="text-3xl font-display font-bold text-primary-800 mb-2">내 정보</h1>
         <p className="text-warm-600">내 계정 정보를 확인하고 비밀번호를 변경할 수 있습니다.</p>
       </div>
 

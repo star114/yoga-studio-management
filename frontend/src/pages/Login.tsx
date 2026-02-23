@@ -39,7 +39,7 @@ const Login: React.FC = () => {
             </svg>
           </div>
           <h1 className="text-4xl font-display font-bold text-primary-800 mb-2">
-            숨의 정원
+            숨의정원요가
           </h1>
           <p className="text-warm-700">마음을 담은 회원 관리</p>
         </div>

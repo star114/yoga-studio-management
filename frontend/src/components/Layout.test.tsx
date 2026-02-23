@@ -57,7 +57,9 @@ describe('Layout', () => {
       logout: vi.fn(),
     };
     renderLayout();
-    expect(screen.getAllByText('회원정보 관리').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('🧘 수련 기록').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('🎟️ 회원권').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('👤 내 정보').length).toBeGreaterThan(0);
     expect(screen.getByText('회원')).toBeTruthy();
   });
 
@@ -67,4 +69,3 @@ describe('Layout', () => {
     expect(authState.logout).toHaveBeenCalledTimes(1);
   });
 });
-

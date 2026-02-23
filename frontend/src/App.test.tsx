@@ -29,6 +29,7 @@ vi.mock('./components/Layout', async () => {
 vi.mock('./pages/Login', () => ({ default: () => <div>Login Page</div> }));
 vi.mock('./pages/AdminDashboard', () => ({ default: () => <div>Admin Dashboard</div> }));
 vi.mock('./pages/CustomerDashboard', () => ({ default: () => <div>Customer Dashboard</div> }));
+vi.mock('./pages/CustomerMemberships', () => ({ default: () => <div>Customer Memberships</div> }));
 vi.mock('./pages/CustomerManagement', () => ({ default: () => <div>Customer Management</div> }));
 vi.mock('./pages/CustomerDetail', () => ({ default: () => <div>Customer Detail</div> }));
 vi.mock('./pages/CustomerProfile', () => ({ default: () => <div>Customer Profile</div> }));
@@ -103,5 +104,10 @@ describe('App routing shell', () => {
     await renderAt('/profile');
     expect(screen.getByText('Customer Profile')).toBeTruthy();
   });
-});
 
+  it('renders customer memberships route', async () => {
+    authState = { user: { id: 2, email: 'user@yoga.com', role: 'customer' }, isLoading: false };
+    await renderAt('/memberships');
+    expect(screen.getByText('Customer Memberships')).toBeTruthy();
+  });
+});
