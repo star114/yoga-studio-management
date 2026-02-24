@@ -122,6 +122,7 @@ describe('api service', () => {
 
     customerAPI.getAll();
     customerAPI.getById(1);
+    customerAPI.getAttendances(1, { page: 2 });
     customerAPI.create(payload);
     customerAPI.update(1, payload);
     customerAPI.resetPassword(1);
@@ -144,14 +145,17 @@ describe('api service', () => {
 
     classAPI.getAll({ limit: 10 });
     classAPI.getById(2);
+    classAPI.getMyClassDetail(2);
     classAPI.getRegistrations(2);
+    classAPI.getMyRegistrations();
     classAPI.create(payload);
-    classAPI.update(2, payload);
     classAPI.createRecurring(payload);
-    classAPI.excludeRecurringOccurrence(3, '2026-01-01', 2, 'skip');
+    classAPI.update(2, payload);
     classAPI.register(2);
     classAPI.register(2, { customer_id: 7 });
     classAPI.updateRegistrationComment(2, 7, 'note');
+    classAPI.updateMyRegistrationComment(2, 'self note');
+    classAPI.updateRegistrationStatus(2, 7, 'absent');
     classAPI.cancelRegistration(2, 7);
     classAPI.cancelMyRegistration(2);
     classAPI.delete(2);
@@ -164,6 +168,7 @@ describe('api service', () => {
 
     expect(getMock).toHaveBeenCalledWith('/customers');
     expect(getMock).toHaveBeenCalledWith('/customers/1');
+    expect(getMock).toHaveBeenCalledWith('/customers/1/attendances', { params: { page: 2 } });
     expect(postMock).toHaveBeenCalledWith('/customers', payload);
     expect(putMock).toHaveBeenCalledWith('/customers/1', payload);
     expect(putMock).toHaveBeenCalledWith('/customers/1/password');
@@ -186,18 +191,17 @@ describe('api service', () => {
 
     expect(getMock).toHaveBeenCalledWith('/classes', { params: { limit: 10 } });
     expect(getMock).toHaveBeenCalledWith('/classes/2');
+    expect(getMock).toHaveBeenCalledWith('/classes/2/me');
     expect(getMock).toHaveBeenCalledWith('/classes/2/registrations');
+    expect(getMock).toHaveBeenCalledWith('/classes/registrations/me');
     expect(postMock).toHaveBeenCalledWith('/classes', payload);
-    expect(putMock).toHaveBeenCalledWith('/classes/2', payload);
     expect(postMock).toHaveBeenCalledWith('/classes/recurring', payload);
-    expect(postMock).toHaveBeenCalledWith('/classes/series/3/exclusions', {
-      class_id: 2,
-      class_date: '2026-01-01',
-      reason: 'skip',
-    });
+    expect(putMock).toHaveBeenCalledWith('/classes/2', payload);
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', {});
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7 });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment', { registration_comment: 'note' });
+    expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/me/comment', { registration_comment: 'self note' });
+    expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/status', { attendance_status: 'absent' });
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/7');
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/me');
     expect(deleteMock).toHaveBeenCalledWith('/classes/2');

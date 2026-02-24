@@ -68,9 +68,7 @@ describe('MembershipTypeManagement page', () => {
             id: 1,
             name: '10회권',
             description: null,
-            duration_days: null,
             total_sessions: null,
-            price: null,
             is_active: true,
           },
         ],
@@ -81,18 +79,14 @@ describe('MembershipTypeManagement page', () => {
     await waitFor(() => expect(screen.getByText('운영 중인 회원권 관리 항목이 없습니다.')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '10회권' } });
-    fireEvent.change(screen.getByLabelText('기간(일)'), { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('가격'), { target: { value: '120000' } });
     fireEvent.change(screen.getByLabelText('설명'), { target: { value: '입문자용' } });
     fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
 
     await waitFor(() => expect(createTypeMock).toHaveBeenCalledWith({
       name: '10회권',
       description: '입문자용',
-      duration_days: 30,
       total_sessions: 10,
-      price: 120000,
     }));
 
     expect(screen.getByText('회원권 관리 항목을 추가했습니다.')).toBeTruthy();
@@ -107,9 +101,7 @@ describe('MembershipTypeManagement page', () => {
             id: 7,
             name: '프리패스',
             description: '기존 설명',
-            duration_days: 365,
             total_sessions: null,
-            price: '200000.4',
             is_active: true,
           },
         ],
@@ -120,9 +112,7 @@ describe('MembershipTypeManagement page', () => {
             id: 7,
             name: '프리패스+',
             description: null,
-            duration_days: null,
             total_sessions: 20,
-            price: 'abc',
             is_active: true,
           },
         ],
@@ -135,22 +125,18 @@ describe('MembershipTypeManagement page', () => {
 
     expect(screen.getByRole('button', { name: '수정 저장' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '프리패스+' } });
-    fireEvent.change(screen.getByLabelText('기간(일)'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText('가격'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('설명'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
 
     await waitFor(() => expect(updateTypeMock).toHaveBeenCalledWith(7, {
       name: '프리패스+',
       description: null,
-      duration_days: null,
       total_sessions: 20,
-      price: null,
     }));
 
     await waitFor(() => expect(screen.getByText('회원권 관리 정보를 수정했습니다.')).toBeTruthy());
-    expect(screen.getByText(/가격:\s*-/)).toBeTruthy();
+    expect(screen.getByText(/횟수:\s*20/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.click(screen.getByRole('button', { name: '취소' }));
@@ -182,9 +168,7 @@ describe('MembershipTypeManagement page', () => {
           id: 3,
           name: '테스트권',
           description: '',
-          duration_days: 10,
           total_sessions: 3,
-          price: 30000,
           is_active: true,
         },
       ],
@@ -220,9 +204,7 @@ describe('MembershipTypeManagement page', () => {
             id: 11,
             name: '요가 기본권',
             description: '기본권',
-            duration_days: 30,
             total_sessions: 8,
-            price: 110000,
             is_active: true,
           },
         ],
@@ -246,16 +228,14 @@ describe('MembershipTypeManagement page', () => {
     confirmSpy.mockRestore();
   });
 
-  it('fills empty price value when editing a type with null price', async () => {
+  it('keeps total sessions input editable when editing a type', async () => {
     getTypesMock.mockResolvedValueOnce({
       data: [
         {
           id: 15,
-          name: '가격미정권',
+          name: '기본 횟수권',
           description: null,
-          duration_days: 14,
           total_sessions: 4,
-          price: null,
           is_active: true,
         },
       ],
@@ -263,8 +243,8 @@ describe('MembershipTypeManagement page', () => {
 
     render(<MembershipTypeManagement />);
 
-    await waitFor(() => expect(screen.getByText('가격미정권')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('기본 횟수권')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    expect((screen.getByLabelText('가격') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('총 횟수') as HTMLInputElement).value).toBe('4');
   });
 });

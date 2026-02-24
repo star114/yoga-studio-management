@@ -14,6 +14,7 @@ const checksumOf = (value) =>
 
 const runMigrateScript = async ({
   readdirEntries,
+  readdirError,
   readFileMap,
   poolQueryQueue,
   clientQueryQueue = [],
@@ -63,7 +64,12 @@ const runMigrateScript = async ({
     exports: { __esModule: true, default: poolMock },
   };
 
-  const readdirMock = () => readdirEntries;
+  const readdirMock = () => {
+    if (readdirError) {
+      throw readdirError;
+    }
+    return readdirEntries;
+  };
   const readFileMock = (filePath) => {
     const filename = String(filePath).split('/').pop();
     const content = readFileMap[filename];
@@ -101,6 +107,36 @@ test('migrate script exits 0 when no migration files exist', async () => {
   assert.equal(result.endCalls, 1);
   assert.equal(result.exitCodes.includes(0), true);
   assert.equal(result.poolCalls.length >= 2, true);
+});
+
+test('migrate script exits 1 when migrations directory is missing (ENOENT)', async () => {
+  const missingDirError = new Error('missing');
+  missingDirError.code = 'ENOENT';
+
+  const result = await runMigrateScript({
+    readdirError: missingDirError,
+    readdirEntries: [],
+    readFileMap: {},
+    poolQueryQueue: [{ rows: [] }, { rows: [] }],
+  });
+
+  assert.equal(result.endCalls, 1);
+  assert.equal(result.exitCodes.includes(1), true);
+});
+
+test('migrate script exits 1 when reading migration directory fails unexpectedly', async () => {
+  const fsError = new Error('permission denied');
+  fsError.code = 'EACCES';
+
+  const result = await runMigrateScript({
+    readdirError: fsError,
+    readdirEntries: [],
+    readFileMap: {},
+    poolQueryQueue: [{ rows: [] }, { rows: [] }],
+  });
+
+  assert.equal(result.endCalls, 1);
+  assert.equal(result.exitCodes.includes(1), true);
 });
 
 test('migrate script exits 1 on checksum mismatch', async () => {

@@ -8,10 +8,6 @@ interface Customer {
   user_id: number;
   name: string;
   phone: string;
-  email: string;
-  birth_date?: string | null;
-  gender?: string | null;
-  address?: string | null;
   notes?: string | null;
   membership_count?: string | number;
   total_attendance?: string | number;
@@ -20,20 +16,12 @@ interface Customer {
 interface CustomerForm {
   name: string;
   phone: string;
-  email: string;
-  birth_date: string;
-  gender: string;
-  address: string;
   notes: string;
 }
 
 const INITIAL_FORM: CustomerForm = {
   name: '',
   phone: '',
-  email: '',
-  birth_date: '',
-  gender: '',
-  address: '',
   notes: '',
 };
 
@@ -44,10 +32,7 @@ const CustomerManagement: React.FC = () => {
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
   const [search, setSearch] = useState('');
-  const [editingCustomerId, setEditingCustomerId] = useState<number | null>(null);
   const [form, setForm] = useState<CustomerForm>(INITIAL_FORM);
-
-  const isEditMode = editingCustomerId !== null;
 
   const filteredCustomers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -56,7 +41,6 @@ const CustomerManagement: React.FC = () => {
     return customers.filter((customer) => (
       customer.name.toLowerCase().includes(keyword)
       || customer.phone.toLowerCase().includes(keyword)
-      || customer.email.toLowerCase().includes(keyword)
     ));
   }, [customers, search]);
 
@@ -81,21 +65,6 @@ const CustomerManagement: React.FC = () => {
   const resetForm = () => {
     setForm(INITIAL_FORM);
     setFormError('');
-    setEditingCustomerId(null);
-  };
-
-  const startEdit = (customer: Customer) => {
-    setEditingCustomerId(customer.id);
-    setFormError('');
-    setForm({
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email,
-      birth_date: customer.birth_date ? customer.birth_date.slice(0, 10) : '',
-      gender: customer.gender || '',
-      address: customer.address || '',
-      notes: customer.notes || '',
-    });
   };
 
   const handleFormChange = (key: keyof CustomerForm, value: string) => {
@@ -109,33 +78,17 @@ const CustomerManagement: React.FC = () => {
 
     try {
       const trimmedPhone = form.phone.trim();
-      const trimmedEmail = form.email.trim();
 
-      if (!isEditMode && !trimmedPhone && !trimmedEmail) {
-        setFormError('이메일 또는 전화번호 중 하나는 필수입니다.');
+      if (!trimmedPhone) {
+        setFormError('전화번호는 필수입니다.');
         return;
       }
 
-      if (isEditMode && editingCustomerId) {
-        await customerAPI.update(editingCustomerId, {
-          name: form.name,
-          phone: trimmedPhone,
-          birth_date: form.birth_date || null,
-          gender: form.gender || null,
-          address: form.address || null,
-          notes: form.notes || null,
-        });
-      } else {
-        await customerAPI.create({
-          name: form.name,
-          phone: trimmedPhone,
-          email: trimmedEmail,
-          birth_date: form.birth_date || null,
-          gender: form.gender || null,
-          address: form.address || null,
-          notes: form.notes || null,
-        });
-      }
+      await customerAPI.create({
+        name: form.name,
+        phone: trimmedPhone,
+        notes: form.notes || null,
+      });
 
       await loadCustomers();
       resetForm();
@@ -154,9 +107,6 @@ const CustomerManagement: React.FC = () => {
     try {
       await customerAPI.delete(customer.id);
       await loadCustomers();
-      if (editingCustomerId === customer.id) {
-        resetForm();
-      }
     } catch (deleteError: unknown) {
       console.error('Failed to delete customer:', deleteError);
       setError(parseApiError(deleteError));
@@ -172,9 +122,7 @@ const CustomerManagement: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-            {isEditMode ? '고객 정보 수정' : '신규 고객 계정 생성'}
-          </h2>
+          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">신규 고객 계정 생성</h2>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
@@ -195,61 +143,9 @@ const CustomerManagement: React.FC = () => {
                 className="input-field"
                 value={form.phone}
                 onChange={(e) => handleFormChange('phone', e.target.value)}
+                required
               />
-              {!isEditMode && (
-                <p className="mt-1 text-xs text-warm-500">이메일이 없으면 전화번호를 로그인 ID로 사용합니다.</p>
-              )}
-            </div>
-
-            <div>
-              <label className="label" htmlFor="customer-email">이메일</label>
-              <input
-                id="customer-email"
-                type="email"
-                className="input-field"
-                value={form.email}
-                onChange={(e) => handleFormChange('email', e.target.value)}
-                disabled={isEditMode}
-              />
-              {!isEditMode && (
-                <p className="mt-1 text-xs text-warm-500">전화번호와 이메일 중 하나만 입력해도 됩니다.</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="label" htmlFor="customer-birth-date">생년월일</label>
-                <input
-                  id="customer-birth-date"
-                  type="date"
-                  className="input-field"
-                  value={form.birth_date}
-                  onChange={(e) => handleFormChange('birth_date', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="customer-gender">성별</label>
-                <select
-                  id="customer-gender"
-                  className="input-field"
-                  value={form.gender}
-                  onChange={(e) => handleFormChange('gender', e.target.value)}
-                >
-                  <option value="">선택 안 함</option>
-                  <option value="female">여성</option>
-                  <option value="male">남성</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="label" htmlFor="customer-address">주소</label>
-              <input
-                id="customer-address"
-                className="input-field"
-                value={form.address}
-                onChange={(e) => handleFormChange('address', e.target.value)}
-              />
+              <p className="mt-1 text-xs text-warm-500">입력한 전화번호가 로그인 아이디로 사용됩니다.</p>
             </div>
 
             <div>
@@ -268,25 +164,18 @@ const CustomerManagement: React.FC = () => {
               </p>
             )}
 
-            {!isEditMode && (
-              <p className="text-xs text-warm-500">
-                신규 고객의 초기 비밀번호는 <span className="font-semibold text-primary-800">12345</span>로 자동 설정됩니다.
-              </p>
-            )}
+            <p className="text-xs text-warm-500">
+              신규 고객의 초기 비밀번호는 <span className="font-semibold text-primary-800">12345</span>로 자동 설정됩니다.
+            </p>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
               <button
                 type="submit"
                 disabled={isSubmitting}
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? '저장 중...' : isEditMode ? '정보 저장' : '고객 생성'}
+                {isSubmitting ? '저장 중...' : '고객 생성'}
               </button>
-              {isEditMode && (
-                <button type="button" className="btn-secondary" onClick={resetForm}>
-                  취소
-                </button>
-              )}
             </div>
           </form>
         </section>
@@ -296,7 +185,7 @@ const CustomerManagement: React.FC = () => {
             <h2 className="text-xl font-display font-semibold text-primary-800">고객 목록</h2>
             <input
               className="input-field md:max-w-xs"
-              placeholder="이름/전화번호/이메일 검색"
+              placeholder="이름/전화번호 검색"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -319,7 +208,6 @@ const CustomerManagement: React.FC = () => {
                   <tr className="border-b border-warm-200 text-left text-warm-600">
                     <th className="py-2 pr-4">이름</th>
                     <th className="py-2 pr-4">전화번호</th>
-                    <th className="py-2 pr-4">이메일</th>
                     <th className="py-2 pr-4">회원권</th>
                     <th className="py-2 pr-4">출석</th>
                     <th className="py-2 pr-0 text-right">작업</th>
@@ -330,7 +218,6 @@ const CustomerManagement: React.FC = () => {
                     <tr key={customer.id} className="border-b border-warm-100">
                       <td className="py-3 pr-4 font-medium text-primary-800">{customer.name}</td>
                       <td className="py-3 pr-4">{customer.phone}</td>
-                      <td className="py-3 pr-4">{customer.email}</td>
                       <td className="py-3 pr-4">{customer.membership_count ?? 0}</td>
                       <td className="py-3 pr-4">{customer.total_attendance ?? 0}</td>
                       <td className="py-3 pr-0">
@@ -341,13 +228,6 @@ const CustomerManagement: React.FC = () => {
                           >
                             상세
                           </Link>
-                          <button
-                            type="button"
-                            onClick={() => startEdit(customer)}
-                            className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200"
-                          >
-                            수정
-                          </button>
                           <button
                             type="button"
                             onClick={() => handleDelete(customer)}

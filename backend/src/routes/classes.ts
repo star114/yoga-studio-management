@@ -35,7 +35,6 @@ router.get('/',
         SELECT
           c.*,
           CASE
-            WHEN c.is_excluded THEN 'excluded'
             WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
             WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
             WHEN c.is_open THEN 'open'
@@ -83,6 +82,48 @@ router.get('/',
   }
 );
 
+// 내 수업 신청 목록 조회 (고객 본인)
+router.get('/registrations/me',
+  authenticate,
+  async (req: AuthRequest, res) => {
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin account does not have personal registrations' });
+    }
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const result = await pool.query(
+        `SELECT
+           r.id AS registration_id,
+           r.class_id,
+           r.customer_id,
+           r.attendance_status,
+           r.registration_comment,
+           r.registered_at,
+           c.title,
+           c.class_date,
+           c.start_time,
+           c.end_time,
+           c.is_open
+         FROM yoga_class_registrations r
+         INNER JOIN yoga_classes c ON c.id = r.class_id
+         WHERE r.customer_id = $1
+         ORDER BY c.class_date ASC, c.start_time ASC`,
+        [customerId]
+      );
+
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Get my class registrations error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 // 수업 상세 조회 (관리자)
 router.get('/:id',
   authenticate,
@@ -97,7 +138,6 @@ router.get('/:id',
         `SELECT
            c.*,
            CASE
-             WHEN c.is_excluded THEN 'excluded'
              WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
              WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
              WHEN c.is_open THEN 'open'
@@ -119,6 +159,74 @@ router.get('/:id',
       res.json(result.rows[0]);
     } catch (error) {
       console.error('Get class detail error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 수업 상세 조회 (고객 본인)
+router.get('/:id/me',
+  authenticate,
+  param('id').isInt({ min: 1 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin must use admin class detail endpoint' });
+    }
+
+    const classId = Number(req.params.id);
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const result = await pool.query(
+        `SELECT
+           c.id,
+           c.title,
+           c.class_date,
+           c.start_time,
+           c.end_time,
+           c.max_capacity,
+           c.is_open,
+           CASE
+             WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
+             WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
+             WHEN c.is_open THEN 'open'
+             ELSE 'closed'
+           END AS class_status,
+           r.id AS registration_id,
+           r.registration_comment,
+           r.attendance_status,
+           a.id AS attendance_id,
+           a.instructor_comment AS instructor_comment
+         FROM yoga_classes c
+         LEFT JOIN yoga_class_registrations r
+           ON r.class_id = c.id
+          AND r.customer_id = $2
+         LEFT JOIN LATERAL (
+           SELECT id, instructor_comment
+           FROM yoga_attendances
+           WHERE class_id = c.id
+             AND customer_id = $2
+           ORDER BY attendance_date DESC, id DESC
+           LIMIT 1
+         ) a ON TRUE
+         WHERE c.id = $1
+           AND (r.id IS NOT NULL OR a.id IS NOT NULL)
+         LIMIT 1`,
+        [classId, customerId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Get my class detail error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -148,12 +256,23 @@ router.get('/:id/registrations',
            r.id,
            r.class_id,
            r.customer_id,
+           r.attendance_status,
            r.registered_at,
            r.registration_comment,
+           a.id AS attendance_id,
+           a.instructor_comment AS attendance_instructor_comment,
            c.name AS customer_name,
            c.phone AS customer_phone
          FROM yoga_class_registrations r
          INNER JOIN yoga_customers c ON r.customer_id = c.id
+         LEFT JOIN LATERAL (
+           SELECT id, instructor_comment
+           FROM yoga_attendances
+           WHERE class_id = r.class_id
+             AND customer_id = r.customer_id
+           ORDER BY attendance_date DESC, id DESC
+           LIMIT 1
+         ) a ON TRUE
          WHERE r.class_id = $1
          ORDER BY r.registered_at ASC`,
         [classId]
@@ -167,7 +286,50 @@ router.get('/:id/registrations',
   }
 );
 
-// 수업 신청자 코멘트 저장 (관리자)
+// 수업 수련생 코멘트 저장 (고객 본인)
+router.put('/:id/registrations/me/comment',
+  authenticate,
+  param('id').isInt({ min: 1 }),
+  body('registration_comment').optional({ values: 'falsy' }).isString().isLength({ max: 500 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin must use customer-specific comment endpoint' });
+    }
+
+    const comment = typeof req.body.registration_comment === 'string'
+      ? req.body.registration_comment.trim()
+      : null;
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const result = await pool.query(
+        `UPDATE yoga_class_registrations
+         SET registration_comment = $3
+         WHERE class_id = $1 AND customer_id = $2
+         RETURNING id, class_id, customer_id, registration_comment, registered_at`,
+        [classId, customerId, comment && comment.length > 0 ? comment : null]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Registration not found' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Update my registration comment error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 수업 수련생 코멘트 저장 (관리자)
 router.put('/:id/registrations/:customerId/comment',
   authenticate,
   requireAdmin,
@@ -203,6 +365,121 @@ router.put('/:id/registrations/:customerId/comment',
   }
 );
 
+// 수업 수련생 출석 상태 변경 (관리자)
+router.put('/:id/registrations/:customerId/status',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  param('customerId').isInt({ min: 1 }),
+  body('attendance_status').isIn(['reserved', 'attended', 'absent']),
+  validateRequest,
+  async (req, res) => {
+    const classId = Number(req.params.id);
+    const customerId = Number(req.params.customerId);
+    const attendanceStatus = String(req.body.attendance_status);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const registrationResult = await client.query(
+        `SELECT id, class_id, customer_id, attendance_status, registration_comment, registered_at
+         FROM yoga_class_registrations
+         WHERE class_id = $1 AND customer_id = $2
+         FOR UPDATE`,
+        [classId, customerId]
+      );
+
+      if (registrationResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Registration not found' });
+      }
+
+      const currentRegistration = registrationResult.rows[0];
+
+      if (currentRegistration.attendance_status === attendanceStatus) {
+        await client.query('COMMIT');
+        return res.json(currentRegistration);
+      }
+
+      if (attendanceStatus === 'attended') {
+        const attendanceCheckResult = await client.query(
+          `SELECT id
+           FROM yoga_attendances
+           WHERE class_id = $1 AND customer_id = $2
+           LIMIT 1`,
+          [classId, customerId]
+        );
+
+        if (attendanceCheckResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Attendance record not found; use check-in endpoint first' });
+        }
+      } else {
+        const attendanceResult = await client.query(
+          `SELECT id, membership_id
+           FROM yoga_attendances
+           WHERE class_id = $1 AND customer_id = $2
+           FOR UPDATE`,
+          [classId, customerId]
+        );
+
+        const attendanceRows = attendanceResult.rows as Array<{ id: number; membership_id: number | null }>;
+
+        if (attendanceRows.length > 0) {
+          const membershipUsage = new Map<number, number>();
+
+          attendanceRows.forEach((attendanceRow) => {
+            if (attendanceRow.membership_id === null) return;
+            const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
+            membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
+          });
+
+          for (const [membershipId, usedCount] of membershipUsage.entries()) {
+            await client.query(
+              `UPDATE yoga_memberships
+               SET remaining_sessions = CASE
+                     WHEN remaining_sessions IS NULL THEN NULL
+                     ELSE remaining_sessions + $2
+                   END,
+                   is_active = CASE
+                     WHEN remaining_sessions IS NULL THEN is_active
+                     WHEN (remaining_sessions + $2) > 0 THEN TRUE
+                     ELSE FALSE
+                   END
+               WHERE id = $1`,
+              [membershipId, usedCount]
+            );
+          }
+
+          const attendanceIds = attendanceRows.map((attendanceRow) => attendanceRow.id);
+          await client.query(
+            'DELETE FROM yoga_attendances WHERE id = ANY($1::int[])',
+            [attendanceIds]
+          );
+        }
+      }
+
+      const result = await client.query(
+        `UPDATE yoga_class_registrations
+         SET attendance_status = $3
+         WHERE class_id = $1 AND customer_id = $2
+         RETURNING id, class_id, customer_id, attendance_status, registration_comment, registered_at`,
+        [classId, customerId, attendanceStatus]
+      );
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Update registration attendance status error:', error);
+      res.status(500).json({ error: 'Server error' });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // 수업 신청 (관리자/고객)
 router.post('/:id/registrations',
   authenticate,
@@ -229,7 +506,7 @@ router.post('/:id/registrations',
       await client.query('BEGIN');
 
       const classResult = await client.query(
-        `SELECT id, is_open, max_capacity, is_excluded, class_date, start_time, end_time
+        `SELECT id, is_open, max_capacity, class_date, start_time, end_time
          FROM yoga_classes
          WHERE id = $1
          FOR UPDATE`,
@@ -242,11 +519,6 @@ router.post('/:id/registrations',
       }
 
       const yogaClass = classResult.rows[0];
-
-      if (yogaClass.is_excluded) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Class is excluded' });
-      }
 
       const now = new Date();
       const classEndAt = new Date(`${String(yogaClass.class_date).slice(0, 10)}T${String(yogaClass.end_time).slice(0, 8)}`);
@@ -371,7 +643,6 @@ router.post('/',
   async (req, res) => {
     const {
       title,
-      instructor_name,
       class_date,
       start_time,
       end_time,
@@ -387,12 +658,11 @@ router.post('/',
     try {
       const result = await pool.query(
         `INSERT INTO yoga_classes
-        (title, instructor_name, class_date, start_time, end_time, max_capacity, is_open, notes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        (title, class_date, start_time, end_time, max_capacity, is_open, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *`,
         [
           title,
-          instructor_name || null,
           class_date,
           start_time,
           end_time,
@@ -419,8 +689,6 @@ router.post('/recurring',
   body('recurrence_end_date').isDate(),
   body('weekdays').isArray({ min: 1 }),
   body('weekdays.*').isInt({ min: 0, max: 6 }),
-  body('excluded_dates').optional().isArray(),
-  body('excluded_dates.*').optional().isDate(),
   body('start_time').custom(isValidTime),
   body('end_time').custom(isValidTime),
   body('max_capacity').isInt({ min: 1 }),
@@ -428,30 +696,38 @@ router.post('/recurring',
   async (req, res) => {
     const {
       title,
-      instructor_name,
       recurrence_start_date,
       recurrence_end_date,
       weekdays,
-      excluded_dates,
       start_time,
       end_time,
       max_capacity,
       is_open,
       notes,
-    } = req.body;
+    } = req.body as {
+      title: string;
+      recurrence_start_date: string;
+      recurrence_end_date: string;
+      weekdays: number[];
+      start_time: string;
+      end_time: string;
+      max_capacity: number;
+      is_open?: boolean;
+      notes?: string;
+    };
 
     if (timeToMinutes(start_time) >= timeToMinutes(end_time)) {
       return res.status(400).json({ error: 'End time must be after start time' });
     }
 
-    const uniqueWeekdays = Array.from(new Set((weekdays as number[]).map((value) => Number(value))));
+    const uniqueWeekdays = Array.from(new Set((weekdays || []).map((value) => Number(value))));
     let classDates: string[] = [];
+
     try {
       classDates = getRecurringClassDates(
         recurrence_start_date,
         recurrence_end_date,
-        uniqueWeekdays,
-        Array.isArray(excluded_dates) ? excluded_dates : []
+        uniqueWeekdays
       );
     } catch (recurrenceError: unknown) {
       return res.status(400).json({
@@ -467,62 +743,26 @@ router.post('/recurring',
     try {
       await client.query('BEGIN');
 
-      const seriesResult = await client.query(
-        `INSERT INTO yoga_class_series
-         (title, instructor_name, start_time, end_time, max_capacity, is_open, notes, recurrence_start_date, recurrence_end_date, weekdays)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         RETURNING id`,
-        [
-          title,
-          instructor_name || null,
-          start_time,
-          end_time,
-          max_capacity,
-          is_open ?? true,
-          notes || null,
-          recurrence_start_date,
-          recurrence_end_date,
-          uniqueWeekdays,
-        ]
-      );
-
-      const seriesId = seriesResult.rows[0].id as number;
-      const values: Array<string | number | boolean | null> = [];
-      const rows: string[] = [];
-      let paramIndex = 1;
-
-      classDates.forEach((classDate) => {
-        rows.push(
-          `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, FALSE, NULL)`
+      for (const classDate of classDates) {
+        await client.query(
+          `INSERT INTO yoga_classes
+           (title, class_date, start_time, end_time, max_capacity, is_open, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            title,
+            classDate,
+            start_time,
+            end_time,
+            max_capacity,
+            is_open ?? true,
+            notes || null,
+          ]
         );
-
-        values.push(
-          title,
-          instructor_name || null,
-          classDate,
-          start_time,
-          end_time,
-          max_capacity,
-          is_open ?? true,
-          notes || null,
-          seriesId,
-        );
-
-        paramIndex += 9;
-      });
-
-      const insertResult = await client.query(
-        `INSERT INTO yoga_classes
-         (title, instructor_name, class_date, start_time, end_time, max_capacity, is_open, notes, recurring_series_id, is_excluded, excluded_reason)
-         VALUES ${rows.join(', ')}
-         RETURNING id`,
-        values
-      );
+      }
 
       await client.query('COMMIT');
       res.status(201).json({
-        series_id: seriesId,
-        created_count: insertResult.rows.length,
+        created_count: classDates.length,
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -530,85 +770,6 @@ router.post('/recurring',
       res.status(500).json({ error: 'Server error' });
     } finally {
       client.release();
-    }
-  }
-);
-
-// 반복 수업 중 특정 회차 제외 (관리자)
-router.post('/series/:seriesId/exclusions',
-  authenticate,
-  requireAdmin,
-  param('seriesId').isInt({ min: 1 }),
-  body('class_id').optional().isInt({ min: 1 }),
-  body('class_date').isDate(),
-  body('reason').optional().isString().isLength({ max: 200 }),
-  validateRequest,
-  async (req, res) => {
-    const seriesId = Number(req.params.seriesId);
-    const classId = req.body.class_id ? Number(req.body.class_id) : null;
-    const classDate = String(req.body.class_date).slice(0, 10);
-    const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
-
-    try {
-      const updateByClassId = classId !== null;
-      const result = updateByClassId
-        ? await pool.query(
-          `UPDATE yoga_classes
-           SET is_excluded = TRUE,
-               is_open = FALSE,
-               excluded_reason = CASE
-                 WHEN $3 = '' THEN excluded_reason
-                 ELSE $3
-               END
-           WHERE recurring_series_id = $1
-             AND id = $2
-             AND is_excluded = FALSE
-           RETURNING *`,
-          [seriesId, classId, reason]
-        )
-        : await pool.query(
-          `UPDATE yoga_classes
-           SET is_excluded = TRUE,
-               is_open = FALSE,
-               excluded_reason = CASE
-                 WHEN $3 = '' THEN excluded_reason
-                 ELSE $3
-               END
-           WHERE recurring_series_id = $1
-             AND class_date = $2
-             AND is_excluded = FALSE
-           RETURNING *`,
-          [seriesId, classDate, reason]
-        );
-
-      if (result.rows.length === 0) {
-        const checkResult = updateByClassId
-          ? await pool.query(
-            `SELECT id, is_excluded
-             FROM yoga_classes
-             WHERE recurring_series_id = $1
-               AND id = $2`,
-            [seriesId, classId]
-          )
-          : await pool.query(
-            `SELECT id, is_excluded
-             FROM yoga_classes
-             WHERE recurring_series_id = $1
-               AND class_date = $2`,
-            [seriesId, classDate]
-          );
-
-        if (checkResult.rows.length === 0) {
-          return res.status(404).json({ error: 'Recurring class occurrence not found' });
-        }
-
-        return res.status(400).json({ error: 'Class occurrence is already excluded' });
-      }
-
-      res.json(result.rows[0]);
-    } catch (error) {
-      console.error('Exclude recurring class occurrence error:', error);
-      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -621,7 +782,6 @@ router.put('/:id',
     const { id } = req.params;
     const {
       title,
-      instructor_name,
       class_date,
       start_time,
       end_time,
@@ -647,18 +807,16 @@ router.put('/:id',
       const result = await pool.query(
         `UPDATE yoga_classes
          SET title = COALESCE($1, title),
-             instructor_name = COALESCE($2, instructor_name),
-             class_date = COALESCE($3, class_date),
-             start_time = COALESCE($4, start_time),
-             end_time = COALESCE($5, end_time),
-             max_capacity = COALESCE($6, max_capacity),
-             is_open = COALESCE($7, is_open),
-             notes = COALESCE($8, notes)
-         WHERE id = $9
+             class_date = COALESCE($2, class_date),
+             start_time = COALESCE($3, start_time),
+             end_time = COALESCE($4, end_time),
+             max_capacity = COALESCE($5, max_capacity),
+             is_open = COALESCE($6, is_open),
+             notes = COALESCE($7, notes)
+         WHERE id = $8
          RETURNING *`,
         [
           title,
-          instructor_name,
           class_date,
           start_time,
           end_time,

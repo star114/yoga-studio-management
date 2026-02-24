@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { customerAPI, attendanceAPI, classAPI } from '../services/api';
+import { formatKoreanDate } from '../utils/dateFormat';
 import {
   addDays,
   addMonths,
@@ -40,12 +42,10 @@ interface DashboardClass {
   class_date: string;
   start_time: string;
   end_time: string;
-  instructor_name?: string | null;
   max_capacity?: number;
   current_enrollment?: number;
   is_open?: boolean;
-  is_excluded?: boolean;
-  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
 }
 
 type CalendarView = 'month' | 'week' | 'day';
@@ -56,6 +56,7 @@ const normalizeTime = (value: string) => value.slice(0, 5);
 const normalizeDate = (value: string) => value.slice(0, 10);
 
 const AdminDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalCustomers: 0,
     todayAttendance: 0,
@@ -108,12 +109,12 @@ const AdminDashboard: React.FC = () => {
 
   const calendarTitle = useMemo(() => {
     if (calendarView === 'day') {
-      return format(focusDate, 'yyyy년 M월 d일 (EEE)');
+      return formatKoreanDate(focusDate);
     }
     if (calendarView === 'week') {
       const weekStart = startOfWeek(focusDate, { weekStartsOn: 0 });
       const weekEnd = endOfWeek(focusDate, { weekStartsOn: 0 });
-      return `${format(weekStart, 'yyyy년 M월 d일')} - ${format(weekEnd, 'M월 d일')}`;
+      return `${formatKoreanDate(weekStart, false)} - ${formatKoreanDate(weekEnd, false)}`;
     }
     return format(focusDate, 'yyyy년 M월');
   }, [calendarView, focusDate]);
@@ -157,7 +158,7 @@ const AdminDashboard: React.FC = () => {
 
       setRecentCustomers(customersRes.data.slice(0, 5));
       setTodayAttendances(todayRes.data);
-      setClasses(classesRes.data.filter((item: DashboardClass) => !item.is_excluded));
+      setClasses(classesRes.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -167,15 +168,13 @@ const AdminDashboard: React.FC = () => {
 
   const renderClassChip = (item: DashboardClass) => {
     const status = item.class_status || 'open';
-    const closed = status === 'closed' || status === 'completed' || status === 'excluded';
+    const closed = status === 'closed' || status === 'completed';
     const statusLabel =
       status === 'completed'
         ? '완료'
         : status === 'in_progress'
           ? '진행중'
-          : status === 'excluded'
-            ? '제외'
-            : status === 'closed'
+          : status === 'closed'
               ? '닫힘'
               : '오픈';
     return (
@@ -252,38 +251,57 @@ const AdminDashboard: React.FC = () => {
             <p className="text-sm text-warm-600">현재 날짜는 강조 표시됩니다.</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-xl border border-warm-200 bg-white/75 p-1">
+          <div className="flex w-full flex-wrap items-center gap-1.5 sm:gap-2 lg:w-auto">
+            <div className="inline-flex rounded-lg sm:rounded-xl border border-warm-200 bg-white/75 p-0.5 sm:p-1">
               {(['month', 'week', 'day'] as CalendarView[]).map((view) => (
                 <button
                   key={view}
                   type="button"
-                  className={`px-3 py-1.5 text-sm rounded-lg ${calendarView === view ? 'bg-primary-600 text-white' : 'text-primary-800 hover:bg-warm-100'}`}
+                  className={`px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg ${calendarView === view ? 'bg-primary-600 text-white' : 'text-primary-800 hover:bg-warm-100'}`}
                   onClick={() => setCalendarView(view)}
                 >
                   {view === 'month' ? '월간' : view === 'week' ? '주간' : '일간'}
                 </button>
               ))}
             </div>
-            <button type="button" className="btn-secondary" onClick={() => setFocusDate(startOfDay(new Date()))}>오늘</button>
-            <button type="button" className="btn-secondary" onClick={movePrev}>이전</button>
-            <button type="button" className="btn-secondary" onClick={moveNext}>다음</button>
+            <div className="ml-auto inline-flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                onClick={() => setFocusDate(startOfDay(new Date()))}
+              >
+                오늘
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                onClick={movePrev}
+              >
+                이전
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                onClick={moveNext}
+              >
+                다음
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center">
           <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
-          <p className="text-xs text-warm-500">기준일: {format(focusDate, 'yyyy-MM-dd')}</p>
         </div>
 
         {calendarView === 'month' && (
           <div className="space-y-2">
-            <div className="grid grid-cols-7 gap-2 text-xs text-warm-600">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-[11px] sm:text-xs text-warm-600">
               {WEEKDAY_LABELS.map((label) => (
                 <div key={label} className="text-center py-1 font-medium">{label}</div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {visibleDates.map((date) => {
                 const dateKey = format(date, 'yyyy-MM-dd');
                 const dayClasses = classesByDate[dateKey] || [];
@@ -295,18 +313,24 @@ const AdminDashboard: React.FC = () => {
                   <button
                     key={dateKey}
                     type="button"
-                    onClick={() => setFocusDate(date)}
-                    className={`min-h-[108px] rounded-xl border p-2 text-left transition-colors ${today ? 'border-primary-500 bg-primary-50/80' : active ? 'border-primary-300 bg-primary-50/50' : 'border-warm-200 bg-white/70'} ${inMonth ? 'text-primary-800' : 'text-warm-400'}`}
+                    onClick={() => {
+                      setFocusDate(date);
+                      setCalendarView('day');
+                    }}
+                    className={`min-h-[58px] sm:min-h-[108px] rounded-lg sm:rounded-xl border p-1 sm:p-2 text-left transition-colors ${today ? 'border-primary-500 bg-primary-50/80' : active ? 'border-primary-300 bg-primary-50/50' : 'border-warm-200 bg-white/70'} ${inMonth ? 'text-primary-800' : 'text-warm-400'}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`text-sm font-semibold ${today ? 'text-primary-700' : ''}`}>{format(date, 'd')}</span>
-                      {today && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-600 text-white">오늘</span>}
+                      <span className={`text-xs sm:text-sm font-semibold ${today ? 'text-primary-700' : ''}`}>{format(date, 'd')}</span>
+                      {today && <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-full bg-primary-600 text-white">오늘</span>}
                     </div>
-                    <div className="mt-2 space-y-1">
+                    <div className="mt-2 space-y-1 hidden sm:block">
                       {dayClasses.slice(0, 2).map(renderClassChip)}
                       {dayClasses.length > 2 && (
                         <p className="text-[11px] text-warm-600">+{dayClasses.length - 2}개 더 있음</p>
                       )}
+                    </div>
+                    <div className="sm:hidden mt-1 text-[10px] text-warm-600 font-medium min-h-[10px]">
+                      {dayClasses.length > 0 ? `${dayClasses.length}개` : ''}
                     </div>
                   </button>
                 );
@@ -326,7 +350,10 @@ const AdminDashboard: React.FC = () => {
                 <button
                   key={dateKey}
                   type="button"
-                  onClick={() => setFocusDate(date)}
+                  onClick={() => {
+                    setFocusDate(date);
+                    setCalendarView('day');
+                  }}
                   className={`rounded-xl border p-3 text-left min-h-[160px] ${today ? 'border-primary-500 bg-primary-50/80' : 'border-warm-200 bg-white/70'}`}
                 >
                   <p className="text-xs text-warm-600">{WEEKDAY_LABELS[date.getDay()]}</p>
@@ -346,19 +373,25 @@ const AdminDashboard: React.FC = () => {
 
         {calendarView === 'day' && (
           <div className="rounded-xl border border-warm-200 bg-white/70 p-4">
-            <p className="text-sm text-warm-600 mb-2">{format(focusDate, 'yyyy년 M월 d일 (EEE)')}</p>
+            <p className="text-sm text-warm-600 mb-2">{formatKoreanDate(focusDate)}</p>
             {selectedDayClasses.length === 0 ? (
               <p className="text-warm-500">해당 날짜에 등록된 수업이 없습니다.</p>
             ) : (
               <div className="space-y-2">
                 {selectedDayClasses.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-warm-200 bg-warm-50 p-3">
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      window.location.href = `/classes/${item.id}`;
+                    }}
+                    className="w-full rounded-lg border border-warm-200 bg-warm-50 p-3 text-left hover:bg-warm-100 transition-colors"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-primary-800">{item.title}</p>
                         <p className="text-sm text-warm-600">
                           {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
-                          {item.instructor_name ? ` · ${item.instructor_name}` : ''}
                         </p>
                       </div>
                       <span className={`px-2.5 py-1 text-xs rounded-full ${item.is_open === false ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'}`}>
@@ -366,9 +399,7 @@ const AdminDashboard: React.FC = () => {
                           ? '완료'
                           : item.class_status === 'in_progress'
                             ? '진행중'
-                            : item.class_status === 'excluded'
-                              ? '제외'
-                              : item.is_open === false
+                            : item.is_open === false
                                 ? '마감'
                                 : '접수중'}
                       </span>
@@ -376,7 +407,7 @@ const AdminDashboard: React.FC = () => {
                     {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number' && (
                       <p className="mt-2 text-sm text-warm-700">신청: {item.current_enrollment}/{item.max_capacity}</p>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -421,7 +452,12 @@ const AdminDashboard: React.FC = () => {
               <p className="text-warm-500 text-center py-8">등록된 회원이 없습니다</p>
             ) : (
               recentCustomers.map((customer) => (
-                <div key={customer.id} className="flex items-center justify-between p-3 bg-warm-50 rounded-lg hover:bg-warm-100 transition-colors">
+                <button
+                  key={customer.id}
+                  type="button"
+                  onClick={() => navigate(`/customers/${customer.id}`)}
+                  className="w-full flex items-center justify-between p-3 bg-warm-50 rounded-lg hover:bg-warm-100 transition-colors text-left"
+                >
                   <div>
                     <p className="font-medium text-primary-800">{customer.name}</p>
                     <p className="text-sm text-warm-600">{customer.phone}</p>
@@ -430,7 +466,7 @@ const AdminDashboard: React.FC = () => {
                     <p>회원권 {customer.membership_count}개</p>
                     <p>출석 {customer.total_attendance}회</p>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

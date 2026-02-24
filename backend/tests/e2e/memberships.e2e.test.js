@@ -111,9 +111,9 @@ const createMembershipsHarness = () => {
 };
 
 const adminToken = () =>
-  jwt.sign({ id: 1, email: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 1, login_id: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
 const customerToken = () =>
-  jwt.sign({ id: 10, email: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 10, login_id: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
 
 test('types routes cover success/not-found/validation/error', async () => {
   process.env.JWT_SECRET = 'test-secret';
@@ -140,7 +140,7 @@ test('types routes cover success/not-found/validation/error', async () => {
     method: 'post',
     routePath: '/types',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: '', price: -1 },
+    body: { name: '' },
   });
   assert.equal(res.status, 400);
   assert.ok(Array.isArray(res.body.errors));
@@ -150,7 +150,7 @@ test('types routes cover success/not-found/validation/error', async () => {
     method: 'post',
     routePath: '/types',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: '월회원권', duration_days: 30, price: 100000 },
+    body: { name: '월회원권', total_sessions: 30 },
   });
   assert.equal(res.status, 201);
   assert.equal(res.body.id, 2);
@@ -169,7 +169,7 @@ test('types routes cover success/not-found/validation/error', async () => {
     routePath: '/types/:id',
     params: { id: '3' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { price: -9 },
+    body: { total_sessions: -9 },
   });
   assert.equal(res.status, 400);
 
@@ -259,7 +259,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 'x', membership_type_id: 1, start_date: 'bad-date' },
+    body: { customer_id: 'x', membership_type_id: 1 },
   });
   assert.equal(res.status, 400);
 
@@ -268,25 +268,25 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 1, membership_type_id: 99, start_date: '2026-01-01' },
+    body: { customer_id: 1, membership_type_id: 99 },
   });
   assert.equal(res.status, 404);
 
   h.queryQueue.push(
-    { rows: [{ id: 1, duration_days: 30, total_sessions: 10, price: 120000 }] },
+    { rows: [{ id: 1, total_sessions: 10 }] },
     { rows: [{ id: 101, customer_id: 1 }] }
   );
   res = await h.runRoute({
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 1, membership_type_id: 1, start_date: '2026-01-01' },
+    body: { customer_id: 1, membership_type_id: 1 },
   });
   assert.equal(res.status, 201);
   assert.equal(res.body.id, 101);
 
   h.queryQueue.push(
-    { rows: [{ id: 2, duration_days: null, total_sessions: null, price: null }] },
+    { rows: [{ id: 2, total_sessions: null }] },
     { rows: [{ id: 102, customer_id: 2 }] }
   );
   res = await h.runRoute({
@@ -296,8 +296,6 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: {
       customer_id: 2,
       membership_type_id: 2,
-      start_date: '2026-01-01',
-      purchase_price: 90000,
       notes: 'memo',
     },
   });
@@ -305,7 +303,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body.id, 102);
 
   h.queryQueue.push(
-    { rows: [{ id: 3, duration_days: null, total_sessions: null, price: null }] },
+    { rows: [{ id: 3, total_sessions: null }] },
     { rows: [{ id: 103, customer_id: 3 }] }
   );
   res = await h.runRoute({
@@ -315,7 +313,6 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: {
       customer_id: 3,
       membership_type_id: 3,
-      start_date: '2026-01-01',
     },
   });
   assert.equal(res.status, 201);
@@ -326,7 +323,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 1, membership_type_id: 1, start_date: '2026-01-01' },
+    body: { customer_id: 1, membership_type_id: 1 },
   });
   assert.equal(res.status, 500);
 
@@ -349,6 +346,29 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { notes: 'x2' },
   });
   assert.equal(res.status, 200);
+
+  h.queryQueue.push(
+    { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] },
+    { rows: [{ id: 202, remaining_sessions: 5, is_active: false }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '202' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 5, is_active: false },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.is_active, false);
+
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '202' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { is_active: 'false' },
+  });
+  assert.equal(res.status, 400);
 
   h.queryQueue.push(new Error('update membership fail'));
   res = await h.runRoute({

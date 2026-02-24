@@ -4,11 +4,15 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
+import CustomerMemberships from './pages/CustomerMemberships';
+import CustomerClassDetail from './pages/CustomerClassDetail';
 import CustomerManagement from './pages/CustomerManagement';
 import CustomerDetail from './pages/CustomerDetail';
+import CustomerAttendances from './pages/CustomerAttendances';
 import CustomerProfile from './pages/CustomerProfile';
 import MembershipTypeManagement from './pages/MembershipTypeManagement';
 import ClassManagement from './pages/ClassManagement';
+import ClassHistory from './pages/ClassHistory';
 import ClassDetail from './pages/ClassDetail';
 import Layout from './components/Layout';
 
@@ -67,7 +71,16 @@ const AppRoutes: React.FC = () => {
             <CustomerDetail />
           </ProtectedRoute>
         } />
-        <Route path="memberships" element={<Navigate to="/customers" replace />} />
+        <Route path="customers/:id/attendances" element={
+          <ProtectedRoute adminOnly>
+            <CustomerAttendances />
+          </ProtectedRoute>
+        } />
+        <Route path="memberships" element={
+          user?.role === 'admin'
+            ? <Navigate to="/customers" replace />
+            : <CustomerMemberships />
+        } />
         <Route path="profile" element={
           <ProtectedRoute>
             <CustomerProfile />
@@ -83,9 +96,14 @@ const AppRoutes: React.FC = () => {
             <ClassManagement />
           </ProtectedRoute>
         } />
-        <Route path="classes/:id" element={
+        <Route path="classes/history" element={
           <ProtectedRoute adminOnly>
-            <ClassDetail />
+            <ClassHistory />
+          </ProtectedRoute>
+        } />
+        <Route path="classes/:id" element={
+          <ProtectedRoute>
+            {user?.role === 'admin' ? <ClassDetail /> : <CustomerClassDetail />}
           </ProtectedRoute>
         } />
         {/* 추가 라우트들은 여기에 추가 */}

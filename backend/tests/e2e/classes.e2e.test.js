@@ -148,9 +148,9 @@ const createClassesHarness = (options = {}) => {
 };
 
 const adminToken = () =>
-  jwt.sign({ id: 1, email: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 1, login_id: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
 const customerToken = () =>
-  jwt.sign({ id: 10, email: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 10, login_id: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
 
 test('classes list/detail/registrations/comment/update/delete cover main branches', async () => {
   process.env.JWT_SECRET = 'test-secret';
@@ -437,33 +437,6 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 400);
 
-  const excludedClient = h.createDbClientMock();
-  excludedClient.queryQueue.push(
-    { rows: [], rowCount: 0 },
-    {
-      rows: [
-        {
-          id: 11,
-          is_open: true,
-          max_capacity: 10,
-          is_excluded: true,
-          class_date: '2999-01-01',
-          end_time: '12:00:00',
-        },
-      ],
-    },
-    { rows: [], rowCount: 0 }
-  );
-  h.connectQueue.push(excludedClient);
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/:id/registrations',
-    params: { id: '11' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 1 },
-  });
-  assert.equal(res.status, 400);
-
   const completedClient = h.createDbClientMock();
   completedClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -708,180 +681,67 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 500);
 
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/recurring',
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: {
-      title: '반복',
-      recurrence_start_date: '2026-01-01',
-      recurrence_end_date: '2026-01-10',
-      weekdays: [1],
-      start_time: '12:00',
-      end_time: '11:00',
-      max_capacity: 10,
-    },
-  });
-  assert.equal(res.status, 400);
+});
 
-  const hNonErrorRecurrence = createClassesHarness({
-    classScheduleOverride: {
-      __esModule: true,
-      getRecurringClassDates: () => {
-        throw 'bad-rule';
-      },
-      isValidTime: (v) => /^\d{2}:\d{2}(:\d{2})?$/.test(String(v)),
-      timeToMinutes: (v) => {
-        const [h, m] = String(v).split(':');
-        return Number(h) * 60 + Number(m);
-      },
-    },
-  });
-  res = await hNonErrorRecurrence.runRoute({
-    method: 'post',
-    routePath: '/recurring',
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: {
-      title: '반복',
-      recurrence_start_date: '2026-01-01',
-      recurrence_end_date: '2026-01-20',
-      weekdays: [1],
-      start_time: '10:00',
-      end_time: '11:00',
-      max_capacity: 10,
-    },
-  });
-  assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Invalid recurrence rule');
-
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/recurring',
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: {
-      title: '반복',
-      recurrence_start_date: '2026-01-10',
-      recurrence_end_date: '2026-01-01',
-      weekdays: [1],
-      start_time: '10:00',
-      end_time: '11:00',
-      max_capacity: 10,
-    },
-  });
-  assert.equal(res.status, 400);
-
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/recurring',
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: {
-      title: '반복',
-      recurrence_start_date: '2026-01-01',
-      recurrence_end_date: '2026-01-05',
-      weekdays: [6],
-      excluded_dates: ['2026-01-03'],
-      start_time: '10:00',
-      end_time: '11:00',
-      max_capacity: 10,
-    },
-  });
-  assert.equal(res.status, 400);
-
-  const recurringClient = h.createDbClientMock();
-  recurringClient.queryQueue.push(
+test('registration status change reconciles attendance row and membership usage', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness();
+  const client = h.createDbClientMock();
+  client.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 55 }] },
-    { rows: [{ id: 1 }, { id: 2 }] },
+    {
+      rows: [
+        {
+          id: 90,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'attended',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [{ id: 501, membership_id: 77 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 90,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'absent',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
     { rows: [], rowCount: 0 }
   );
-  h.connectQueue.push(recurringClient);
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/recurring',
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: {
-      title: '반복',
-      recurrence_start_date: '2026-01-01',
-      recurrence_end_date: '2026-01-20',
-      weekdays: [1, 3],
-      excluded_dates: [],
-      start_time: '10:00',
-      end_time: '11:00',
-      max_capacity: 10,
-    },
-  });
-  assert.equal(res.status, 201);
+  h.connectQueue.push(client);
 
-  const recurringErrClient = h.createDbClientMock();
-  recurringErrClient.queryQueue.push(
-    { rows: [], rowCount: 0 },
-    new Error('recurring fail'),
-    { rows: [], rowCount: 0 }
-  );
-  h.connectQueue.push(recurringErrClient);
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/recurring',
+  const res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: {
-      title: '반복',
-      recurrence_start_date: '2026-01-01',
-      recurrence_end_date: '2026-01-20',
-      weekdays: [1],
-      start_time: '10:00',
-      end_time: '11:00',
-      max_capacity: 10,
-    },
+    body: { attendance_status: 'absent' },
   });
-  assert.equal(res.status, 500);
 
-  h.queryQueue.push({ rows: [] }, { rows: [] });
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/series/:seriesId/exclusions',
-    params: { seriesId: '1' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: { class_id: 2, class_date: '2026-01-01' },
-  });
-  assert.equal(res.status, 404);
-
-  h.queryQueue.push({ rows: [] }, { rows: [{ id: 2, is_excluded: true }] });
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/series/:seriesId/exclusions',
-    params: { seriesId: '1' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: { class_id: 2, class_date: '2026-01-01' },
-  });
-  assert.equal(res.status, 400);
-
-  h.queryQueue.push({ rows: [{ id: 2, is_excluded: true }] });
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/series/:seriesId/exclusions',
-    params: { seriesId: '1' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: { class_date: '2026-01-02', reason: '휴강' },
-  });
   assert.equal(res.status, 200);
-
-  h.queryQueue.push({ rows: [] }, { rows: [{ id: 2, is_excluded: false }] });
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/series/:seriesId/exclusions',
-    params: { seriesId: '1' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: { class_date: '2026-01-04' },
-  });
-  assert.equal(res.status, 400);
-
-  h.queryQueue.push(new Error('exclude fail'));
-  res = await h.runRoute({
-    method: 'post',
-    routePath: '/series/:seriesId/exclusions',
-    params: { seriesId: '1' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: { class_date: '2026-01-03' },
-  });
-  assert.equal(res.status, 500);
+  assert.equal(res.body.attendance_status, 'absent');
+  assert.ok(
+    client.queryCalls.some(
+      ([sql]) =>
+        typeof sql === 'string'
+        && sql.includes('UPDATE yoga_memberships')
+    )
+  );
+  assert.ok(
+    client.queryCalls.some(
+      ([sql]) =>
+        typeof sql === 'string'
+        && sql.includes('DELETE FROM yoga_attendances')
+    )
+  );
 });

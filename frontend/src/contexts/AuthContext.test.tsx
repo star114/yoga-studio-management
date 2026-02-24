@@ -16,7 +16,7 @@ const Probe: React.FC = () => {
   return (
     <div>
       <span data-testid="loading">{isLoading ? 'yes' : 'no'}</span>
-      <span data-testid="email">{user?.email ?? ''}</span>
+      <span data-testid="email">{user?.login_id ?? ''}</span>
       <span data-testid="customer">{customerInfo?.name ?? ''}</span>
     </div>
   );
@@ -26,7 +26,7 @@ const ActionProbe: React.FC = () => {
   const { user, login, logout } = useAuth();
   return (
     <div>
-      <span data-testid="action-email">{user?.email ?? ''}</span>
+      <span data-testid="action-email">{user?.login_id ?? ''}</span>
       <button
         type="button"
         onClick={() => {
@@ -74,7 +74,7 @@ describe('AuthContext', () => {
     localStorage.setItem('token', 'token');
     vi.mocked(authAPI.getCurrentUser).mockResolvedValueOnce({
       data: {
-        user: { id: 1, email: 'user@yoga.com', role: 'customer' },
+        user: { id: 1, login_id: 'user@yoga.com', role: 'customer' },
         customerInfo: { id: 7, name: '고객', phone: '010-0000-0000' },
       },
     } as never);
@@ -112,7 +112,7 @@ describe('AuthContext', () => {
     vi.mocked(authAPI.login).mockResolvedValueOnce({
       data: {
         token: 'new-token',
-        user: { id: 2, email: 'member@yoga.com', role: 'customer' },
+        user: { id: 2, login_id: 'member@yoga.com', role: 'customer' },
         customerInfo: { id: 9, name: '회원', phone: '010-1111-2222' },
       },
     } as never);

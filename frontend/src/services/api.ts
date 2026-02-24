@@ -58,6 +58,9 @@ export const customerAPI = {
   
   getById: (id: number) => 
     api.get(`/customers/${id}`),
+
+  getAttendances: (id: number, params?: QueryParams) =>
+    api.get(`/customers/${id}/attendances`, { params }),
   
   create: (data: unknown) => 
     api.post('/customers', data),
@@ -125,30 +128,35 @@ export const classAPI = {
   getById: (classId: number) =>
     api.get(`/classes/${classId}`),
 
+  getMyClassDetail: (classId: number) =>
+    api.get(`/classes/${classId}/me`),
+
   getRegistrations: (classId: number) =>
     api.get(`/classes/${classId}/registrations`),
+
+  getMyRegistrations: () =>
+    api.get('/classes/registrations/me'),
 
   create: (data: unknown) =>
     api.post('/classes', data),
 
-  update: (id: number, data: unknown) =>
-    api.put(`/classes/${id}`, data),
-
   createRecurring: (data: unknown) =>
     api.post('/classes/recurring', data),
 
-  excludeRecurringOccurrence: (seriesId: number, classDate: string, classId?: number, reason?: string) =>
-    api.post(`/classes/series/${seriesId}/exclusions`, {
-      class_id: classId,
-      class_date: classDate,
-      reason,
-    }),
+  update: (id: number, data: unknown) =>
+    api.put(`/classes/${id}`, data),
 
   register: (classId: number, data: ClassRegistrationPayload = {}) =>
     api.post(`/classes/${classId}/registrations`, data),
 
   updateRegistrationComment: (classId: number, customerId: number, registration_comment: string) =>
     api.put(`/classes/${classId}/registrations/${customerId}/comment`, { registration_comment }),
+
+  updateMyRegistrationComment: (classId: number, registration_comment: string) =>
+    api.put(`/classes/${classId}/registrations/me/comment`, { registration_comment }),
+
+  updateRegistrationStatus: (classId: number, customerId: number, attendance_status: 'reserved' | 'attended' | 'absent') =>
+    api.put(`/classes/${classId}/registrations/${customerId}/status`, { attendance_status }),
 
   cancelRegistration: (classId: number, customerId: number) =>
     api.delete(`/classes/${classId}/registrations/${customerId}`),

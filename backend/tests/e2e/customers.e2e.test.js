@@ -152,9 +152,9 @@ const createCustomersHarness = () => {
 };
 
 const adminToken = () =>
-  jwt.sign({ id: 1, email: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 1, login_id: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
 const customerToken = () =>
-  jwt.sign({ id: 10, email: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
+  jwt.sign({ id: 10, login_id: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
 
 test('GET / returns customers for admin and handles server error', async () => {
   process.env.JWT_SECRET = 'test-secret';
@@ -249,10 +249,10 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'N', phone: '', email: '' },
+    body: { name: 'N', phone: '' },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, '이메일 또는 전화번호 중 하나는 필수입니다.');
+  assert.ok(Array.isArray(res.body.errors));
 
   const dupPhoneClient = h.createDbClientMock();
   dupPhoneClient.queryQueue.push(
@@ -305,11 +305,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     headers: { authorization: `Bearer ${adminToken()}` },
     body: {
       name: 'N3',
-      email: 'N3@EXAMPLE.COM',
       phone: '01022223333',
-      birth_date: '1990-01-01',
-      gender: 'F',
-      address: 'Seoul',
       notes: 'memo',
     },
   });
@@ -319,6 +315,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
   const okClient2 = h.createDbClientMock();
   okClient2.queryQueue.push(
     { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [], rowCount: 0 }, // phone check
     { rows: [{ id: 34 }] }, // insert user
     { rows: [{ id: 51, user_id: 34, name: 'N3-2' }] }, // insert customer
     { rows: [], rowCount: 0 } // COMMIT
@@ -329,7 +326,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'N3-2', email: 'n32@example.com' },
+    body: { name: 'N3-2', phone: '01077778888' },
   });
   assert.equal(res.status, 201);
   assert.equal(res.body.name, 'N3-2');
@@ -337,6 +334,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
   const errClient = h.createDbClientMock();
   errClient.queryQueue.push(
     { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [], rowCount: 0 }, // phone check
     new Error('unexpected'), // user insert flow fail
     { rows: [], rowCount: 0 } // ROLLBACK
   );
@@ -345,7 +343,7 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'N4', email: 'n4@example.com' },
+    body: { name: 'N4', phone: '01066667777' },
   });
   assert.equal(res.status, 500);
 });
@@ -354,7 +352,13 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   process.env.JWT_SECRET = 'test-secret';
   const h = createCustomersHarness();
 
-  h.queryQueue.push({ rows: [] });
+  const notFoundUpdateClient = h.createDbClientMock();
+  notFoundUpdateClient.queryQueue.push(
+    { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [] }, // customer update
+    { rows: [], rowCount: 0 } // ROLLBACK
+  );
+  h.connectQueue.push(notFoundUpdateClient);
   let res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -364,18 +368,33 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 11, name: 'X2' }] });
+  const syncLoginClient = h.createDbClientMock();
+  syncLoginClient.queryQueue.push(
+    { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [{ id: 11, name: 'X2', phone: '01012345678' }] }, // customer update
+    { rows: [], rowCount: 1 }, // login_id sync
+    { rows: [], rowCount: 0 } // COMMIT
+  );
+  h.connectQueue.push(syncLoginClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
     params: { id: '11' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'X2' },
+    body: { name: 'X2', phone: '01012345678' },
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.name, 'X2');
+  assert.match(String(syncLoginClient.queryCalls[2][0]), /UPDATE yoga_users u/);
+  assert.equal(syncLoginClient.queryCalls[2][1][0], '01012345678');
 
-  h.queryQueue.push(new Error('update fail'));
+  const updateErrClient = h.createDbClientMock();
+  updateErrClient.queryQueue.push(
+    { rows: [], rowCount: 0 }, // BEGIN
+    new Error('update fail'),
+    { rows: [], rowCount: 0 } // ROLLBACK
+  );
+  h.connectQueue.push(updateErrClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -384,6 +403,18 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
     body: { name: 'X3' },
   });
   assert.equal(res.status, 500);
+
+  const invalidPhoneClient = h.createDbClientMock();
+  h.connectQueue.push(invalidPhoneClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { phone: '   ' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(invalidPhoneClient.queryCalls.length, 0);
 
   h.queryQueue.push({ rows: [] });
   t.mock.method(bcrypt, 'hash', async () => 'r-hash');

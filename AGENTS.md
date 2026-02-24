@@ -1,108 +1,89 @@
-# Multi-Agent Operating Guide
+# AGENTS.md
 
-This repository uses an orchestrator + specialist agents model.
+요가원 회원관리 시스템 저장소 전용 작업 가이드입니다.
 
-## Goals
-- Keep work parallelizable and reviewable.
-- Make handoffs explicit.
-- Gate merges with objective checks.
+## 1) 목표
+- 변경을 작고 검증 가능하게 유지한다.
+- 기능별 커밋으로 추적 가능성을 높인다.
+- PR 게이트(특히 커버리지 100%)를 깨지 않도록 한다.
 
-## Agent Roles
+## 2) 저장소 구조
+- `backend/`: Express + TypeScript API
+- `frontend/`: React + Vite + TypeScript UI
+- `database/schema.sql`: 신규 DB 기준 스키마
+- `backend/migrations/`: 마이그레이션 파일(현재 비어있을 수 있음)
 
-### 1) Planner
-- Breaks request into scoped tickets.
-- Defines dependencies and execution order.
-- Produces Definition of Done (DoD) per ticket.
+## 3) 기본 원칙
+- 기능 변경 시 API/DB/UI 영향 범위를 먼저 확인한다.
+- 기존 사용자 플로우(관리자/고객)와 데이터 정합성을 최우선으로 본다.
+- 임시 우회보다 테스트 가능한 정식 수정으로 처리한다.
+- 무관한 파일 포맷팅/리네이밍은 섞지 않는다.
 
-Output template:
-- `Scope`
-- `Out of scope`
-- `Tasks`
-- `Risks`
-- `DoD`
+## 4) 역할과 산출물
+### Planner
+- 작업을 기능 단위 티켓으로 분해한다.
+- 산출물: `범위`, `비범위`, `작업 순서`, `리스크`, `완료조건`
 
-### 2) Implementer
-- Implements a single scoped ticket.
-- Keeps changes minimal and isolated.
-- Includes migration/rollback notes when relevant.
+### Implementer
+- 한 번에 한 기능 티켓만 구현한다.
+- 산출물: `수정 파일`, `동작 변화`, `호환성/데이터 영향`, `로컬 검증 결과`
 
-Output template:
-- `Files changed`
-- `Behavior changes`
-- `Tech notes`
-- `Local verification`
+### Reviewer
+- 버그/회귀/데이터 불일치/권한 이슈 중심으로 리뷰한다.
+- 산출물: `치명도 순 Findings`, `필수 수정 요청`, `잔여 리스크`
 
-### 3) Reviewer
-- Reviews for correctness, regressions, and security.
-- Verifies assumptions and edge cases.
-- Requests fixes with actionable comments.
+### Tester
+- 변경 영역 중심으로 lint/test/build를 실행한다.
+- 산출물: `실행 명령`, `성공/실패`, `재현 방법`, `재검증 결과`
 
-Output template:
-- `Findings (severity ordered)`
-- `Requested fixes`
-- `Residual risks`
+### Release
+- 기능별 커밋 묶음과 PR 본문을 정리한다.
+- 산출물: `커밋 목록`, `PR 요약`, `운영 영향`, `롤백 포인트`
 
-### 4) Tester
-- Runs lint/type/test/build checks.
-- Executes targeted scenario tests for changed areas.
-- Reports reproducible failures with exact commands.
+## 5) 필수 워크플로
+1. Planner: 기능 분해 및 완료조건 정의
+2. Implementer: 기능 1개 구현
+3. Reviewer: 피드백 반영/승인
+4. Tester: 게이트 검증
+5. Release: 기능별 커밋/PR 정리
 
-Output template:
-- `Commands run`
-- `Pass/fail summary`
-- `Failing cases`
-- `Retest result`
+프로덕션 영향 변경은 단계 생략 금지.
 
-### 5) Release
-- Prepares commit grouping, PR body, and release notes.
-- Confirms CI and merge gates.
-- Handles tag/release/deploy steps.
+## 6) 검증 명령 (프로젝트 기준)
+### Backend
+```bash
+cd backend
+npm run lint
+npm run build
+npm run test:unit
+npm run test:e2e
+npm run test:coverage
+```
 
-Output template:
-- `Commit plan`
-- `PR summary`
-- `Release impact`
-- `Rollback plan`
+### Frontend
+```bash
+cd frontend
+npm run lint
+npm run test
+npm run build
+npm run test:coverage:all-src
+```
 
-## Workflow (Required)
-1. Planner defines tickets and DoD.
-2. Implementer executes one ticket at a time.
-3. Reviewer signs off or returns fixes.
-4. Tester verifies all checks.
-5. Release prepares PR and merge.
+## 7) 품질 게이트
+- Backend unit coverage: lines/functions/branches/statements 100%
+- Frontend all-src coverage: lines/functions/branches/statements 100%
+- CI의 lint/test/build 전부 통과
 
-No step may be skipped for production-impacting changes.
+## 8) 커밋/브랜치 규칙
+- 브랜치: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`
+- 커밋 접두사: `feat:`, `fix:`, `test:`, `chore:`
+- 커밋 단위: 반드시 기능 단위(한 커밋에 여러 기능 혼합 금지)
 
-## Handoff Rules
-- Every handoff must include:
-  - what changed
-  - what remains
-  - known risks
-  - exact verification status
-- Avoid hidden context in chat only; write key points in PR.
+## 9) PR Requirements
+- .github/pull_request_template.md must be used as template.
 
-## Branch and Commit Conventions
-- Branch naming:
-  - `feat/<topic>`
-  - `fix/<topic>`
-  - `chore/<topic>`
-- Commit prefixes:
-  - `plan:`
-  - `feat:`
-  - `fix:`
-  - `test:`
-  - `chore:`
-  - `review:`
-
-## Merge Gates
-- CI checks must pass.
-- PR checklist must be completed.
-- At least one review pass recorded.
-- High-risk changes need rollback notes.
-
-## Suggested Work Split for This Repo
-- Backend API/database: Implementer A
-- Frontend UI/UX: Implementer B
-- CI/CD + release: Implementer C
-- Shared Reviewer and Tester across all streams
-
+## 9) 금지 사항
+- 요청 없는 대규모 리팩터링
+- 게이트 우회를 위한 커버리지 범위 축소
+- 실패 테스트를 skip 처리만으로 통과시키기
+- 관련 없는 파일 변경을 커밋에 포함하기

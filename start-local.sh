@@ -34,7 +34,7 @@ DB_USER="${DB_USER:-yoga_admin}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 DB_PORT="${DB_PORT:-5432}"
 JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-change-me}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@yoga.com}"
+ADMIN_ID="${ADMIN_ID:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
 
 if [ -n "${DATABASE_URL:-}" ]; then
@@ -95,7 +95,7 @@ echo "[4/6] Starting backend dev server..."
   cd "$BACKEND_DIR" && \
     DATABASE_URL="$LOCAL_DATABASE_URL" \
     JWT_SECRET="$JWT_SECRET" \
-    ADMIN_EMAIL="$ADMIN_EMAIL" \
+    ADMIN_ID="$ADMIN_ID" \
     ADMIN_PASSWORD="$ADMIN_PASSWORD" \
     CORS_ORIGIN="http://localhost:3000" \
     PORT=3001 \

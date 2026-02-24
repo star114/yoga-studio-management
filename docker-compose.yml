@@ -33,7 +33,7 @@ services:
       - PORT=3001
       - DATABASE_URL=postgresql://${DB_USER:-yoga_admin}:${DB_PASSWORD}@db:5432/${DB_NAME:-yoga_studio}
       - JWT_SECRET=${JWT_SECRET}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@yoga.com}
+      - ADMIN_ID=${ADMIN_ID:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
       - CORS_ORIGIN=http://localhost:3000
     depends_on:

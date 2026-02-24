@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { customerAPI, membershipAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatKoreanDate } from '../utils/dateFormat';
 
 interface Customer {
   id: number;
   name: string;
   phone: string;
-  email: string;
 }
 
 interface MembershipType {
@@ -17,23 +17,19 @@ interface MembershipType {
 interface Membership {
   id: number;
   membership_type_name: string;
-  start_date: string;
-  end_date?: string | null;
   remaining_sessions?: number | null;
-  purchase_price?: string | number | null;
   is_active: boolean;
   notes?: string | null;
+  start_date?: string | null;
+  expected_end_date?: string | null;
 }
 
 interface NewMembershipForm {
   membership_type_id: string;
-  start_date: string;
-  purchase_price: string;
   notes: string;
 }
 
 interface EditMembershipForm {
-  end_date: string;
   remaining_sessions: string;
   is_active: boolean;
   notes: string;
@@ -41,16 +37,7 @@ interface EditMembershipForm {
 
 const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
-  start_date: new Date().toISOString().slice(0, 10),
-  purchase_price: '',
   notes: '',
-};
-
-const formatAmount = (value?: string | number | null): string => {
-  if (value === null || value === undefined || value === '') return '-';
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return '-';
-  return Math.round(amount).toLocaleString('ko-KR');
 };
 
 const MembershipManagement: React.FC = () => {
@@ -61,7 +48,6 @@ const MembershipManagement: React.FC = () => {
   const [newMembershipForm, setNewMembershipForm] = useState<NewMembershipForm>(INITIAL_NEW_MEMBERSHIP_FORM);
   const [editingMembershipId, setEditingMembershipId] = useState<number | null>(null);
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
-    end_date: '',
     remaining_sessions: '',
     is_active: true,
     notes: '',
@@ -139,15 +125,10 @@ const MembershipManagement: React.FC = () => {
       await membershipAPI.create({
         customer_id: selectedCustomerId,
         membership_type_id: Number(newMembershipForm.membership_type_id),
-        start_date: newMembershipForm.start_date,
-        purchase_price: newMembershipForm.purchase_price ? Number(newMembershipForm.purchase_price) : null,
         notes: newMembershipForm.notes || null,
       });
 
-      setNewMembershipForm({
-        ...INITIAL_NEW_MEMBERSHIP_FORM,
-        start_date: new Date().toISOString().slice(0, 10),
-      });
+      setNewMembershipForm(INITIAL_NEW_MEMBERSHIP_FORM);
       await loadMemberships(selectedCustomerId);
       showSuccess('회원권을 지급했습니다.');
     } catch (submitError: unknown) {
@@ -161,7 +142,6 @@ const MembershipManagement: React.FC = () => {
   const startEditMembership = (membership: Membership) => {
     setEditingMembershipId(membership.id);
     setEditMembershipForm({
-      end_date: membership.end_date ? membership.end_date.slice(0, 10) : '',
       remaining_sessions:
         membership.remaining_sessions === null || membership.remaining_sessions === undefined
           ? ''
@@ -175,7 +155,6 @@ const MembershipManagement: React.FC = () => {
     setError('');
     try {
       await membershipAPI.update(membershipId, {
-        end_date: editMembershipForm.end_date || null,
         remaining_sessions: editMembershipForm.remaining_sessions === '' ? null : Number(editMembershipForm.remaining_sessions),
         is_active: editMembershipForm.is_active,
         notes: editMembershipForm.notes || null,
@@ -246,7 +225,7 @@ const MembershipManagement: React.FC = () => {
               </option>
             ))}
           </select>
-          {selectedCustomer && <p className="text-sm text-warm-600">로그인 계정: {selectedCustomer.email}</p>}
+          {selectedCustomer && <p className="text-sm text-warm-600">로그인 아이디: {selectedCustomer.phone}</p>}
         </div>
       </section>
 
@@ -268,30 +247,6 @@ const MembershipManagement: React.FC = () => {
                   <option key={type.id} value={type.id}>{type.name}</option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="start-date">시작일</label>
-              <input
-                id="start-date"
-                type="date"
-                className="input-field"
-                value={newMembershipForm.start_date}
-                onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, start_date: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="purchase-price">결제 금액</label>
-              <input
-                id="purchase-price"
-                type="number"
-                className="input-field"
-                placeholder="비워두면 기본값"
-                min={0}
-                step={1}
-                value={newMembershipForm.purchase_price}
-                onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, purchase_price: e.target.value }))}
-              />
             </div>
             <div>
               <label className="label" htmlFor="membership-notes">메모</label>
@@ -323,27 +278,15 @@ const MembershipManagement: React.FC = () => {
                   {editingMembershipId === membership.id ? (
                     <div className="space-y-3">
                       <div className="font-medium text-primary-800">{membership.membership_type_name}</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="label" htmlFor={`edit-end-date-${membership.id}`}>종료일</label>
-                          <input
-                            id={`edit-end-date-${membership.id}`}
-                            type="date"
-                            className="input-field"
-                            value={editMembershipForm.end_date}
-                            onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, end_date: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="label" htmlFor={`edit-remaining-${membership.id}`}>잔여 횟수</label>
-                          <input
-                            id={`edit-remaining-${membership.id}`}
-                            type="number"
-                            className="input-field"
-                            value={editMembershipForm.remaining_sessions}
-                            onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
-                          />
-                        </div>
+                      <div>
+                        <label className="label" htmlFor={`edit-remaining-${membership.id}`}>잔여 횟수</label>
+                        <input
+                          id={`edit-remaining-${membership.id}`}
+                          type="number"
+                          className="input-field"
+                          value={editMembershipForm.remaining_sessions}
+                          onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
+                        />
                       </div>
                       <div>
                         <label className="label" htmlFor={`edit-notes-${membership.id}`}>메모</label>
@@ -372,17 +315,17 @@ const MembershipManagement: React.FC = () => {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-semibold text-primary-800">{membership.membership_type_name}</p>
-                          <p className="text-sm text-warm-600">
-                            시작일 {membership.start_date.slice(0, 10)}
-                            {membership.end_date ? ` / 종료일 ${membership.end_date.slice(0, 10)}` : ''}
-                          </p>
                         </div>
                         <span className={`px-2.5 py-1 text-xs rounded-full ${membership.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
+                      <p className="text-sm text-warm-700">잔여 횟수: {membership.remaining_sessions ?? '무제한'}</p>
                       <p className="text-sm text-warm-700">
-                        잔여 횟수: {membership.remaining_sessions ?? '무제한'} / 결제금액: {formatAmount(membership.purchase_price)}
+                        시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
+                      </p>
+                      <p className="text-sm text-warm-700">
+                        예상 종료일: {membership.expected_end_date ? formatKoreanDate(membership.expected_end_date, false) : '-'}
                       </p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
                       <div className="flex gap-2">

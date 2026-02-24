@@ -11,7 +11,7 @@ test.afterEach(() => {
 });
 
 test('ensureAdminUser skips when admin env is missing', async (t) => {
-  delete process.env.ADMIN_EMAIL;
+  delete process.env.ADMIN_ID;
   delete process.env.ADMIN_PASSWORD;
 
   const warnMock = t.mock.method(console, 'warn', () => undefined);
@@ -26,7 +26,7 @@ test('ensureAdminUser skips when admin env is missing', async (t) => {
 });
 
 test('ensureAdminUser hashes password and upserts admin account', async (t) => {
-  process.env.ADMIN_EMAIL = 'admin@example.com';
+  process.env.ADMIN_ID = 'admin';
   process.env.ADMIN_PASSWORD = 'secret';
 
   const logMock = t.mock.method(console, 'log', () => undefined);
@@ -41,8 +41,8 @@ test('ensureAdminUser hashes password and upserts admin account', async (t) => {
   assert.equal(queryMock.mock.calls.length, 1);
   const queryArgs = queryMock.mock.calls[0].arguments as unknown as unknown[];
   assert.match(String(queryArgs[0]), /INSERT INTO yoga_users/);
-  assert.deepEqual(queryArgs[1], ['admin@example.com', 'hashed-secret']);
+  assert.deepEqual(queryArgs[1], ['admin', 'hashed-secret']);
 
   assert.equal(logMock.mock.calls.length, 1);
-  assert.match(String(logMock.mock.calls[0].arguments[0]), /Admin account ensured: admin@example.com/);
+  assert.match(String(logMock.mock.calls[0].arguments[0]), /Admin account ensured: admin/);
 });

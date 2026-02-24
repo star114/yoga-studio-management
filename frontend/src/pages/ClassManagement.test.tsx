@@ -2,23 +2,19 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import ClassManagement from './ClassManagement';
+import ClassManagement, { buildRecurringDates } from './ClassManagement';
 
 const {
   getAllMock,
   createMock,
   createRecurringMock,
-  updateMock,
   deleteMock,
-  excludeRecurringOccurrenceMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getAllMock: vi.fn(),
   createMock: vi.fn(),
   createRecurringMock: vi.fn(),
-  updateMock: vi.fn(),
   deleteMock: vi.fn(),
-  excludeRecurringOccurrenceMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
 }));
 
@@ -27,9 +23,7 @@ vi.mock('../services/api', () => ({
     getAll: getAllMock,
     create: createMock,
     createRecurring: createRecurringMock,
-    update: updateMock,
     delete: deleteMock,
-    excludeRecurringOccurrence: excludeRecurringOccurrenceMock,
   },
 }));
 
@@ -111,7 +105,6 @@ describe('ClassManagement page', () => {
           {
             id: 1,
             title: '아침 요가',
-            instructor_name: '강사',
             class_date: '2026-02-22',
             start_time: '09:00:00',
             end_time: '10:00:00',
@@ -128,17 +121,17 @@ describe('ClassManagement page', () => {
     await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '  아침 요가  ' } });
-    fireEvent.change(screen.getByLabelText('강사명'), { target: { value: '  강사  ' } });
     fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-22' } });
     fireEvent.change(screen.getByLabelText('시작 시간'), { target: { value: '09:00' } });
     fireEvent.change(screen.getByLabelText('종료 시간'), { target: { value: '10:00' } });
     fireEvent.change(screen.getByLabelText('제한 인원'), { target: { value: '12' } });
+    fireEvent.click(screen.getByLabelText('오픈 상태'));
+    fireEvent.click(screen.getByLabelText('오픈 상태'));
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '  note  ' } });
     fireEvent.click(screen.getByRole('button', { name: '수업 추가' }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalledWith({
       title: '아침 요가',
-      instructor_name: '강사',
       class_date: '2026-02-22',
       start_time: '09:00',
       end_time: '10:00',
@@ -151,11 +144,8 @@ describe('ClassManagement page', () => {
   });
 
   it('creates recurring classes and validates recurring form', async () => {
-    createRecurringMock
-      .mockResolvedValueOnce({ data: { created_count: 3 } })
-      .mockResolvedValueOnce({ data: {} });
+    createRecurringMock.mockResolvedValue({ data: { created_count: 2 } });
     getAllMock
-      .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ data: [] });
 
@@ -185,27 +175,76 @@ describe('ClassManagement page', () => {
     await waitFor(() => expect(screen.getByText('반복 요일을 1개 이상 선택하세요.')).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText('월'));
+    fireEvent.click(screen.getByLabelText('화'));
     fireEvent.submit(screen.getByRole('button', { name: '수업 추가' }).closest('form') as HTMLFormElement);
 
-    await waitFor(() => expect(createRecurringMock).toHaveBeenCalled());
-    const calledPayload = createRecurringMock.mock.calls[0][0];
-    expect(calledPayload.weekdays.length).toBeGreaterThanOrEqual(1);
-    await waitFor(() => expect(screen.getByText('반복 수업이 3건 생성되었습니다.')).toBeTruthy());
+    await waitFor(() => expect(createRecurringMock).toHaveBeenCalledTimes(1));
+    expect(createRecurringMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: '반복 요가',
+      recurrence_start_date: '2026-02-23',
+      recurrence_end_date: '2026-02-24',
+      weekdays: [1, 2],
+    }));
+    await waitFor(() => expect(screen.getByText('반복 수업이 2건 생성되었습니다.')).toBeTruthy());
+
     fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
     fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '반복 요가2' } });
-    fireEvent.click(screen.getByLabelText('월'));
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-24' } });
+    fireEvent.change(screen.getByLabelText('반복 종료 날짜'), { target: { value: '2026-02-24' } });
+    ['일', '월', '화', '수', '목', '금', '토'].forEach((label) => {
+      const input = screen.getByLabelText(label) as HTMLInputElement;
+      if (input.checked) {
+        fireEvent.click(input);
+      }
+    });
+    fireEvent.click(screen.getByLabelText('수'));
     fireEvent.submit(screen.getByRole('button', { name: '수업 추가' }).closest('form') as HTMLFormElement);
-    await waitFor(() => expect(screen.getByText('반복 수업이 0건 생성되었습니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('선택한 조건에 맞는 반복 수업 날짜가 없습니다.')).toBeTruthy());
 
-    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
-    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
-    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
-    await waitFor(() => expect(screen.getByLabelText('반복 종료 날짜')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-28' } });
-    expect((screen.getByLabelText('반복 종료 날짜') as HTMLInputElement).value).toBe('2026-02-28');
   });
 
-  it('shows parsed error when create/update fails', async () => {
+  it('uses zero as recurring created count fallback when API omits created_count', async () => {
+    createRecurringMock.mockResolvedValueOnce({});
+    getAllMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '반복 요가' } });
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-23' } });
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    fireEvent.change(screen.getByLabelText('반복 종료 날짜'), { target: { value: '2026-02-24' } });
+    fireEvent.click(screen.getByRole('button', { name: '수업 추가' }));
+
+    await waitFor(() => expect(createRecurringMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('반복 수업이 0건 생성되었습니다.')).toBeTruthy());
+  });
+
+  it('updates recurring end date when start date moves forward and clears weekdays when recurring is off', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-25' } });
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    fireEvent.change(screen.getByLabelText('반복 종료 날짜'), { target: { value: '2026-02-26' } });
+    fireEvent.click(screen.getByLabelText('화'));
+
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-03-01' } });
+    expect((screen.getByLabelText('반복 종료 날짜') as HTMLInputElement).value).toBe('2026-03-01');
+
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    expect((screen.getByLabelText('화') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('returns empty recurring dates for invalid ranges', () => {
+    expect(buildRecurringDates('invalid', '2026-02-01', [1])).toEqual([]);
+    expect(buildRecurringDates('2026-03-02', '2026-03-01', [1])).toEqual([]);
+  });
+
+  it('shows parsed error when create fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     createMock.mockRejectedValueOnce(new Error('create failed'));
 
@@ -217,85 +256,9 @@ describe('ClassManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
 
-    updateMock.mockRejectedValueOnce(new Error('update failed'));
-    getAllMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 2,
-          title: '수정대상',
-          instructor_name: null,
-          class_date: '2026-02-24',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          max_capacity: 10,
-          is_open: true,
-          class_status: 'open',
-        },
-      ],
-    });
-
-    cleanup();
-    renderPage();
-    await waitFor(() => expect(screen.getByText('수정대상')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.click(screen.getByRole('button', { name: '수업 저장' }));
-
-    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(parseApiErrorMock).toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
-  });
-
-  it('edits class and supports cancel/reset', async () => {
-    updateMock.mockResolvedValueOnce(undefined);
-    getAllMock
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 3,
-            title: '수정수업',
-            instructor_name: '기존강사',
-            class_date: '2026-02-24',
-            start_time: '09:00:00',
-            end_time: '10:00:00',
-            max_capacity: 10,
-            is_open: true,
-            class_status: 'open',
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 3,
-            title: '수정완료',
-            instructor_name: '기존강사',
-            class_date: '2026-02-24',
-            start_time: '09:00:00',
-            end_time: '10:00:00',
-            max_capacity: 10,
-            is_open: false,
-            class_status: 'open',
-          },
-        ],
-      });
-
-    renderPage();
-    await waitFor(() => expect(screen.getByText('수정수업')).toBeTruthy());
-
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.click(screen.getByRole('button', { name: '취소' }));
-    expect(screen.getByRole('heading', { name: '수업 추가' })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '수정완료' } });
-    fireEvent.click(screen.getByLabelText('오픈 상태'));
-    fireEvent.click(screen.getByRole('button', { name: '수업 저장' }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalledWith(3, expect.objectContaining({
-      title: '수정완료',
-      is_open: false,
-    })));
   });
 
   it('filters list by search/open-only and shows status badges', async () => {
@@ -304,7 +267,6 @@ describe('ClassManagement page', () => {
         {
           id: 1,
           title: '오픈수업',
-          instructor_name: '강사A',
           class_date: '2026-02-24',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -316,7 +278,6 @@ describe('ClassManagement page', () => {
         {
           id: 2,
           title: '완료수업',
-          instructor_name: '강사B',
           class_date: '2026-02-25',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -327,7 +288,6 @@ describe('ClassManagement page', () => {
         {
           id: 3,
           title: '진행수업',
-          instructor_name: '강사C',
           class_date: '2026-02-26',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -338,7 +298,6 @@ describe('ClassManagement page', () => {
         {
           id: 4,
           title: '닫힘수업',
-          instructor_name: '강사D',
           class_date: '2026-02-27',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -348,19 +307,7 @@ describe('ClassManagement page', () => {
         },
         {
           id: 5,
-          title: '제외수업',
-          instructor_name: '강사E',
-          class_date: '2026-02-27',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          max_capacity: 10,
-          is_open: false,
-          class_status: 'excluded',
-        },
-        {
-          id: 6,
           title: '기본수업',
-          instructor_name: null,
           class_date: '2026-02-28',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -377,16 +324,15 @@ describe('ClassManagement page', () => {
     expect(screen.getByText('완료')).toBeTruthy();
     expect(screen.getByText('진행중')).toBeTruthy();
     expect(screen.getByText('닫힘')).toBeTruthy();
-    expect(screen.getByText('제외')).toBeTruthy();
     expect(screen.getByText('기본수업')).toBeTruthy();
     expect(screen.getByText('0자리')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '수정' }).some((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+    expect(screen.queryByRole('button', { name: '수정' })).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText('수업명/강사명 검색'), { target: { value: '강사b' } });
+    fireEvent.change(screen.getByPlaceholderText('수업명 검색'), { target: { value: '완료수업' } });
     expect(screen.getByText('완료수업')).toBeTruthy();
     expect(screen.queryByText('오픈수업')).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText('수업명/강사명 검색'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('수업명 검색'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '오픈만 보기' }));
     expect(screen.queryByText('완료수업')).toBeNull();
     expect(screen.getByText('오픈수업')).toBeTruthy();
@@ -403,7 +349,6 @@ describe('ClassManagement page', () => {
           {
             id: 9,
             title: '삭제수업',
-            instructor_name: null,
             class_date: '2026-02-28',
             start_time: '09:00:00',
             end_time: '10:00:00',
@@ -421,8 +366,6 @@ describe('ClassManagement page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByText('삭제수업')).toBeTruthy());
-
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     expect(deleteMock).not.toHaveBeenCalled();
 
@@ -440,7 +383,6 @@ describe('ClassManagement page', () => {
         {
           id: 10,
           title: '삭제실패',
-          instructor_name: null,
           class_date: '2026-03-01',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -465,113 +407,4 @@ describe('ClassManagement page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('excludes recurring occurrence with cancel/success/failure', async () => {
-    excludeRecurringOccurrenceMock.mockResolvedValueOnce(undefined);
-    getAllMock
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 20,
-            title: '반복수업',
-            instructor_name: '강사',
-            class_date: '2026-03-02',
-            start_time: '09:00:00',
-            end_time: '10:00:00',
-            max_capacity: 10,
-            is_open: true,
-            class_status: 'open',
-            recurring_series_id: 100,
-            is_excluded: false,
-          },
-          {
-            id: 21,
-            title: '완료수업',
-            instructor_name: '강사',
-            class_date: '2026-03-03',
-            start_time: '09:00:00',
-            end_time: '10:00:00',
-            max_capacity: 10,
-            is_open: true,
-            class_status: 'completed',
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ data: [] });
-
-    const confirmSpy = vi.spyOn(window, 'confirm')
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(true);
-    const promptSpy = vi.spyOn(window, 'prompt')
-      .mockReturnValueOnce('  사유  ')
-      .mockReturnValueOnce('');
-
-    renderPage();
-    await waitFor(() => expect(screen.getByText('반복수업')).toBeTruthy());
-
-    const excludeBtn = screen.getByRole('button', { name: '회차 제외' });
-    fireEvent.click(excludeBtn);
-    expect(excludeRecurringOccurrenceMock).not.toHaveBeenCalled();
-
-    fireEvent.click(excludeBtn);
-    await waitFor(() => expect(excludeRecurringOccurrenceMock).toHaveBeenCalledWith(100, '2026-03-02', 20, '사유'));
-    await waitFor(() => expect(screen.getByText('2026-03-02 회차가 제외되었습니다.')).toBeTruthy());
-
-    excludeRecurringOccurrenceMock.mockResolvedValueOnce(undefined);
-    getAllMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 23,
-          title: '반복공백사유',
-          instructor_name: '강사',
-          class_date: '2026-03-05',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          max_capacity: 10,
-          is_open: true,
-          class_status: 'open',
-          recurring_series_id: 103,
-          is_excluded: false,
-        },
-      ],
-    });
-    cleanup();
-    renderPage();
-    await waitFor(() => expect(screen.getByText('반복공백사유')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '회차 제외' }));
-    await waitFor(() => expect(excludeRecurringOccurrenceMock).toHaveBeenCalledWith(103, '2026-03-05', 23, undefined));
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    excludeRecurringOccurrenceMock.mockRejectedValueOnce(new Error('exclude failed'));
-    getAllMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 22,
-          title: '반복실패',
-          instructor_name: '강사',
-          class_date: '2026-03-04',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          max_capacity: 10,
-          is_open: true,
-          class_status: 'open',
-          recurring_series_id: 101,
-          is_excluded: false,
-        },
-      ],
-    });
-    cleanup();
-    renderPage();
-    await waitFor(() => expect(screen.getByText('반복실패')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '회차 제외' }));
-
-    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
-    expect(parseApiErrorMock).toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
-
-    promptSpy.mockRestore();
-    confirmSpy.mockRestore();
-    consoleSpy.mockRestore();
-  });
 });

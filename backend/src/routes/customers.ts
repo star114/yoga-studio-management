@@ -12,15 +12,13 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
     const result = await pool.query(`
       SELECT 
         c.*,
-        CASE WHEN POSITION('@' IN u.email) > 0 THEN u.email ELSE '' END AS email,
-        u.email AS login_id,
+        c.phone AS login_id,
         COUNT(DISTINCT m.id) as membership_count,
         COUNT(DISTINCT a.id) as total_attendance
       FROM yoga_customers c
-      LEFT JOIN yoga_users u ON c.user_id = u.id
       LEFT JOIN yoga_memberships m ON c.id = m.customer_id
       LEFT JOIN yoga_attendances a ON c.id = a.customer_id
-      GROUP BY c.id, u.email
+      GROUP BY c.id
       ORDER BY c.created_at DESC
     `);
 
@@ -50,10 +48,8 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
     const customerResult = await pool.query(`
       SELECT
         c.*,
-        CASE WHEN POSITION('@' IN u.email) > 0 THEN u.email ELSE '' END AS email,
-        u.email AS login_id
+        c.phone AS login_id
       FROM yoga_customers c
-      LEFT JOIN yoga_users u ON c.user_id = u.id
       WHERE c.id = $1
     `, [id]);
 
@@ -72,9 +68,18 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
     // 최근 출석 기록
     const attendancesResult = await pool.query(`
-      SELECT a.*, u.email as instructor_email
+      SELECT
+        a.*,
+        u.login_id as instructor_email,
+        cls.id as class_id,
+        cls.title as class_title,
+        cls.class_date,
+        cls.start_time as class_start_time,
+        cls.end_time as class_end_time,
+        COALESCE(a.class_type, cls.title) as class_type
       FROM yoga_attendances a
       LEFT JOIN yoga_users u ON a.instructor_id = u.id
+      LEFT JOIN yoga_classes cls ON cls.id = a.class_id
       WHERE a.customer_id = $1
       ORDER BY a.attendance_date DESC
       LIMIT 20
@@ -91,33 +96,109 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// 특정 고객 전체 출석 조회
+router.get('/:id/attendances', authenticate, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const rawMonths = typeof req.query.months === 'string' ? Number(req.query.months) : null;
+  const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
+  const rawPageSize = typeof req.query.page_size === 'string' ? Number(req.query.page_size) : 20;
+  const months = rawMonths === 3 || rawMonths === 6 ? rawMonths : null;
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
+  const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
+    ? Math.min(Math.floor(rawPageSize), 100)
+    : 20;
+  const offset = (page - 1) * pageSize;
+
+  // 일반 사용자는 자기 정보만 조회 가능
+  if (req.user!.role !== 'admin') {
+    const checkResult = await pool.query(
+      'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
+      [id, req.user!.id]
+    );
+    if (checkResult.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  }
+
+  try {
+    const whereClauses = ['a.customer_id = $1'];
+    const queryParams: Array<number | string> = [id];
+
+    if (months) {
+      whereClauses.push(`a.attendance_date >= (CURRENT_DATE - ($2::text || ' months')::interval)`);
+      queryParams.push(months);
+    }
+
+    const whereSql = whereClauses.join(' AND ');
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM yoga_attendances a
+       WHERE ${whereSql}`,
+      queryParams
+    );
+    const total = countResult.rows[0]?.total ?? 0;
+
+    const limitParamIndex = queryParams.length + 1;
+    const offsetParamIndex = queryParams.length + 2;
+    const result = await pool.query(
+      `SELECT
+         a.*,
+         u.login_id as instructor_email,
+         cls.id as class_id,
+         cls.title as class_title,
+         cls.class_date,
+         cls.start_time as class_start_time,
+         cls.end_time as class_end_time,
+         COALESCE(a.class_type, cls.title) as class_type
+       FROM yoga_attendances a
+       LEFT JOIN yoga_users u ON a.instructor_id = u.id
+       LEFT JOIN yoga_classes cls ON cls.id = a.class_id
+       WHERE ${whereSql}
+       ORDER BY a.attendance_date DESC
+       LIMIT $${limitParamIndex}
+       OFFSET $${offsetParamIndex}`,
+      [...queryParams, pageSize, offset]
+    );
+
+    res.json({
+      items: result.rows,
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+      filter: {
+        months,
+      },
+    });
+  } catch (error) {
+    console.error('Get customer attendances error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // 고객 생성 (관리자)
 router.post('/',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
-  body('phone').optional({ values: 'falsy' }).trim().isLength({ min: 1 }).withMessage('전화번호 형식이 올바르지 않습니다.'),
-  body('email').optional({ values: 'falsy' }).trim().isEmail().withMessage('이메일 형식이 올바르지 않습니다.'),
+  body('phone').trim().notEmpty().withMessage('전화번호는 필수입니다.'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone, email, birth_date, gender, address, notes } = req.body as {
+    const { name, phone, notes } = req.body as {
       name: string;
-      phone?: string;
-      email?: string;
-      birth_date?: string;
-      gender?: string;
-      address?: string;
+      phone: string;
       notes?: string;
     };
     const trimmedPhone = (phone || '').trim();
-    const trimmedEmail = (email || '').trim().toLowerCase();
 
-    if (!trimmedPhone && !trimmedEmail) {
-      return res.status(400).json({ error: '이메일 또는 전화번호 중 하나는 필수입니다.' });
+    if (!trimmedPhone) {
+      return res.status(400).json({ error: '전화번호는 필수입니다.' });
     }
 
     const client = await pool.connect();
@@ -141,9 +222,9 @@ router.post('/',
 
       // 사용자 계정 생성
       const passwordHash = await bcrypt.hash('12345', 10);
-      const loginId = trimmedEmail || trimmedPhone;
+      const loginId = trimmedPhone;
       const userResult = await client.query(
-        'INSERT INTO yoga_users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
+        'INSERT INTO yoga_users (login_id, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
         [loginId, passwordHash, 'customer']
       );
 
@@ -151,9 +232,9 @@ router.post('/',
 
       // 고객 정보 생성
       const customerResult = await client.query(
-        `INSERT INTO yoga_customers (user_id, name, phone, birth_date, gender, address, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [userId, name, trimmedPhone, birth_date || null, gender || null, address || null, notes || null]
+        `INSERT INTO yoga_customers (user_id, name, phone, notes)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [userId, name, trimmedPhone, notes || null]
       );
 
       await client.query('COMMIT');
@@ -178,30 +259,55 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { name, phone, birth_date, gender, address, notes } = req.body;
+    const { name, phone, notes } = req.body;
+    const hasPhoneField = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone');
+    const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
 
+    if (hasPhoneField && !trimmedPhone) {
+      return res.status(400).json({ error: '전화번호는 필수입니다.' });
+    }
+
+    const client = await pool.connect();
     try {
-      const result = await pool.query(
+      await client.query('BEGIN');
+
+      const result = await client.query(
         `UPDATE yoga_customers 
          SET name = COALESCE($1, name),
              phone = COALESCE($2, phone),
-             birth_date = COALESCE($3, birth_date),
-             gender = COALESCE($4, gender),
-             address = COALESCE($5, address),
-             notes = COALESCE($6, notes)
-         WHERE id = $7
+             notes = COALESCE($3, notes)
+         WHERE id = $4
          RETURNING *`,
-        [name, phone, birth_date, gender, address, notes, id]
+        [name, hasPhoneField ? trimmedPhone : null, notes, id]
       );
 
       if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Customer not found' });
       }
 
+      if (hasPhoneField) {
+        await client.query(
+          `UPDATE yoga_users u
+           SET login_id = $1
+           FROM yoga_customers c
+           WHERE c.id = $2
+             AND u.id = c.user_id`,
+          [trimmedPhone, id]
+        );
+      }
+
+      await client.query('COMMIT');
       res.json(result.rows[0]);
-    } catch (error) {
+    } catch (error: any) {
+      await client.query('ROLLBACK');
       console.error('Update customer error:', error);
+      if (error.code === '23505') {
+        return res.status(400).json({ error: 'Login ID already exists' });
+      }
       res.status(500).json({ error: 'Server error' });
+    } finally {
+      client.release();
     }
   }
 );

@@ -24,16 +24,16 @@ router.post('/types',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
-  body('price').optional({ nullable: true }).isInt({ min: 0 }),
+  body('total_sessions').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
-    const { name, description, duration_days, total_sessions, price } = req.body;
+    const { name, description, total_sessions } = req.body;
 
     try {
       const result = await pool.query(
-        `INSERT INTO yoga_membership_types (name, description, duration_days, total_sessions, price)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [name, description || null, duration_days || null, total_sessions || null, price ?? null]
+        `INSERT INTO yoga_membership_types (name, description, total_sessions)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [name, description || null, total_sessions || null]
       );
 
       res.status(201).json(result.rows[0]);
@@ -48,29 +48,25 @@ router.post('/types',
 router.put('/types/:id',
   authenticate,
   requireAdmin,
-  body('price').optional({ nullable: true }).isInt({ min: 0 }),
+  body('total_sessions').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
     const { id } = req.params;
-    const { name, description, duration_days, total_sessions, price, is_active } = req.body;
+    const { name, description, total_sessions, is_active } = req.body;
 
     try {
       const result = await pool.query(
         `UPDATE yoga_membership_types
          SET name = COALESCE($1, name),
              description = COALESCE($2, description),
-             duration_days = COALESCE($3, duration_days),
-             total_sessions = COALESCE($4, total_sessions),
-             price = COALESCE($5, price),
-             is_active = COALESCE($6, is_active)
-         WHERE id = $7
+             total_sessions = COALESCE($3, total_sessions),
+             is_active = COALESCE($4, is_active)
+         WHERE id = $5
          RETURNING *`,
         [
           name,
           description,
-          duration_days,
           total_sessions,
-          price,
           is_active,
           id,
         ]
@@ -118,9 +114,54 @@ router.get('/customer/:customerId', authenticate, async (req, res) => {
 
   try {
     const result = await pool.query(`
-      SELECT m.*, mt.name as membership_type_name, mt.description
+      SELECT
+        m.*,
+        mt.name as membership_type_name,
+        mt.description,
+        usage.start_date,
+        projection.expected_end_date
       FROM yoga_memberships m
       LEFT JOIN yoga_membership_types mt ON m.membership_type_id = mt.id
+      LEFT JOIN LATERAL (
+        SELECT MIN(events.class_date) AS start_date
+        FROM (
+          SELECT COALESCE(cls.class_date, a.attendance_date::date) AS class_date
+          FROM yoga_attendances a
+          LEFT JOIN yoga_classes cls ON cls.id = a.class_id
+          WHERE a.membership_id = m.id
+
+          UNION ALL
+
+          SELECT cls.class_date
+          FROM yoga_class_registrations r
+          INNER JOIN yoga_classes cls ON cls.id = r.class_id
+          WHERE r.customer_id = m.customer_id
+            AND r.attendance_status = 'reserved'
+            AND mt.name IS NOT NULL
+            AND cls.title = mt.name
+        ) events
+      ) usage ON true
+      LEFT JOIN LATERAL (
+        SELECT projected.class_date AS expected_end_date
+        FROM (
+          SELECT
+            cls.class_date,
+            ROW_NUMBER() OVER (
+              ORDER BY cls.class_date ASC, cls.start_time ASC, cls.id ASC
+            ) AS row_num
+          FROM yoga_class_registrations r
+          INNER JOIN yoga_classes cls ON cls.id = r.class_id
+          WHERE r.customer_id = m.customer_id
+            AND r.attendance_status = 'reserved'
+            AND mt.name IS NOT NULL
+            AND cls.title = mt.name
+            AND cls.class_date >= CURRENT_DATE
+        ) projected
+        WHERE m.remaining_sessions IS NOT NULL
+          AND m.remaining_sessions > 0
+          AND projected.row_num = m.remaining_sessions
+        LIMIT 1
+      ) projection ON true
       WHERE m.customer_id = $1
       ORDER BY m.created_at DESC
     `, [customerId]);
@@ -138,11 +179,9 @@ router.post('/',
   requireAdmin,
   body('customer_id').isInt(),
   body('membership_type_id').isInt(),
-  body('start_date').isDate(),
-  body('purchase_price').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
-    const { customer_id, membership_type_id, start_date, purchase_price, notes } = req.body;
+    const { customer_id, membership_type_id, notes } = req.body;
 
     try {
       // 회원권 종류 정보 조회
@@ -156,26 +195,19 @@ router.post('/',
       }
 
       const membershipType = typeResult.rows[0];
-
-      // 종료일 계산
-      let endDate = null;
-      if (membershipType.duration_days) {
-        const start = new Date(start_date);
-        endDate = new Date(start);
-        endDate.setDate(endDate.getDate() + membershipType.duration_days);
-      }
+      const initialRemainingSessions = membershipType.total_sessions ?? null;
+      const initialIsActive =
+        initialRemainingSessions === null ? true : Number(initialRemainingSessions) > 0;
 
       const result = await pool.query(
         `INSERT INTO yoga_memberships 
-         (customer_id, membership_type_id, start_date, end_date, remaining_sessions, purchase_price, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+         (customer_id, membership_type_id, remaining_sessions, is_active, notes)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
         [
           customer_id,
           membership_type_id,
-          start_date,
-          endDate,
-          membershipType.total_sessions || null,
-          purchase_price ?? membershipType.price ?? null,
+          initialRemainingSessions,
+          initialIsActive,
           notes || null
         ]
       );
@@ -194,25 +226,62 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { end_date, remaining_sessions, is_active, notes } = req.body;
+    const { remaining_sessions, is_active, notes } = req.body;
+    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(req.body || {}, 'remaining_sessions');
+    const hasIsActive = Object.prototype.hasOwnProperty.call(req.body || {}, 'is_active');
+    const hasNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'notes');
+
+    if (hasIsActive && typeof is_active !== 'boolean') {
+      return res.status(400).json({ error: 'is_active must be boolean' });
+    }
 
     try {
-      const result = await pool.query(
-        `UPDATE yoga_memberships 
-         SET end_date = COALESCE($1, end_date),
-             remaining_sessions = COALESCE($2, remaining_sessions),
-             is_active = COALESCE($3, is_active),
-             notes = COALESCE($4, notes)
-         WHERE id = $5
-         RETURNING *`,
-        [end_date, remaining_sessions, is_active, notes, id]
-      );
+      let membershipRow: any = null;
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Membership not found' });
+      if (hasRemainingSessions || hasNotes) {
+        const updateResult = await pool.query(
+          `UPDATE yoga_memberships 
+           SET remaining_sessions = CASE
+                 WHEN $1 THEN $2
+                 ELSE remaining_sessions
+               END,
+               notes = CASE
+                 WHEN $3 THEN COALESCE($4, notes)
+                 ELSE notes
+               END
+           WHERE id = $5
+           RETURNING *`,
+          [hasRemainingSessions, remaining_sessions, hasNotes, notes, id]
+        );
+
+        if (updateResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Membership not found' });
+        }
+        membershipRow = updateResult.rows[0];
+      } else {
+        const existingResult = await pool.query(
+          'SELECT * FROM yoga_memberships WHERE id = $1',
+          [id]
+        );
+
+        if (existingResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Membership not found' });
+        }
+        membershipRow = existingResult.rows[0];
       }
 
-      res.json(result.rows[0]);
+      if (hasIsActive) {
+        const activeResult = await pool.query(
+          `UPDATE yoga_memberships
+           SET is_active = $1
+           WHERE id = $2
+           RETURNING *`,
+          [is_active, id]
+        );
+        membershipRow = activeResult.rows[0];
+      }
+
+      res.json(membershipRow);
     } catch (error) {
       console.error('Update membership error:', error);
       res.status(500).json({ error: 'Server error' });

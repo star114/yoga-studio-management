@@ -2,16 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { customerAPI, membershipAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatKoreanDate, formatKoreanDateTime } from '../utils/dateFormat';
 
 interface Customer {
   id: number;
   user_id?: number;
   name: string;
   phone: string;
-  email: string;
-  birth_date?: string | null;
-  gender?: string | null;
-  address?: string | null;
   notes?: string | null;
 }
 
@@ -23,23 +20,35 @@ interface MembershipType {
 interface Membership {
   id: number;
   membership_type_name: string;
-  start_date: string;
-  end_date?: string | null;
   remaining_sessions?: number | null;
-  purchase_price?: string | number | null;
   is_active: boolean;
   notes?: string | null;
+  start_date?: string | null;
+  expected_end_date?: string | null;
+}
+
+interface Attendance {
+  id: number;
+  attendance_date: string;
+  class_title?: string | null;
+  class_type?: string | null;
+  class_date?: string | null;
+  class_start_time?: string | null;
+  instructor_comment?: string | null;
+}
+
+interface EditCustomerForm {
+  name: string;
+  phone: string;
+  notes: string;
 }
 
 interface NewMembershipForm {
   membership_type_id: string;
-  start_date: string;
-  purchase_price: string;
   notes: string;
 }
 
 interface EditMembershipForm {
-  end_date: string;
   remaining_sessions: string;
   is_active: boolean;
   notes: string;
@@ -47,16 +56,7 @@ interface EditMembershipForm {
 
 const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
-  start_date: new Date().toISOString().slice(0, 10),
-  purchase_price: '',
   notes: '',
-};
-
-const formatAmount = (value?: string | number | null): string => {
-  if (value === null || value === undefined || value === '') return '-';
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return '-';
-  return Math.round(amount).toLocaleString('ko-KR');
 };
 
 const CustomerDetail: React.FC = () => {
@@ -66,10 +66,17 @@ const CustomerDetail: React.FC = () => {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [membershipTypes, setMembershipTypes] = useState<MembershipType[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [recentAttendances, setRecentAttendances] = useState<Attendance[]>([]);
   const [newMembershipForm, setNewMembershipForm] = useState<NewMembershipForm>(INITIAL_NEW_MEMBERSHIP_FORM);
   const [editingMembershipId, setEditingMembershipId] = useState<number | null>(null);
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+  const [editCustomerForm, setEditCustomerForm] = useState<EditCustomerForm>({
+    name: '',
+    phone: '',
+    notes: '',
+  });
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
-    end_date: '',
     remaining_sessions: '',
     is_active: true,
     notes: '',
@@ -82,6 +89,7 @@ const CustomerDetail: React.FC = () => {
   const [notice, setNotice] = useState('');
 
   const hasValidCustomerId = useMemo(() => Number.isInteger(customerId) && customerId > 0, [customerId]);
+  const latestAttendance = useMemo(() => recentAttendances[0] || null, [recentAttendances]);
 
   useEffect(() => {
     if (!hasValidCustomerId) {
@@ -101,6 +109,14 @@ const CustomerDetail: React.FC = () => {
         ]);
 
         setCustomer(customerRes.data.customer);
+        if (customerRes.data.customer) {
+          setEditCustomerForm({
+            name: customerRes.data.customer.name,
+            phone: customerRes.data.customer.phone,
+            notes: customerRes.data.customer.notes || '',
+          });
+        }
+        setRecentAttendances(customerRes.data.recentAttendances || []);
         setMembershipTypes(membershipTypesRes.data);
         setMemberships(membershipsRes.data);
       } catch (loadError) {
@@ -122,11 +138,73 @@ const CustomerDetail: React.FC = () => {
   const loadCustomer = async () => {
     const response = await customerAPI.getById(customerId);
     setCustomer(response.data.customer);
+    setRecentAttendances(response.data.recentAttendances || []);
+    const nextCustomer = response.data.customer as Customer | null;
+    if (nextCustomer) {
+      setEditCustomerForm({
+        name: nextCustomer.name,
+        phone: nextCustomer.phone,
+        notes: nextCustomer.notes || '',
+      });
+    }
   };
 
   const loadMemberships = async () => {
     const response = await membershipAPI.getByCustomer(customerId);
     setMemberships(response.data);
+  };
+
+  const startEditCustomer = () => {
+    setEditCustomerForm({
+      name: customer.name,
+      phone: customer.phone,
+      notes: customer.notes || '',
+    });
+    setIsEditingCustomer(true);
+    setError('');
+  };
+
+  const cancelEditCustomer = () => {
+    setEditCustomerForm({
+      name: customer.name,
+      phone: customer.phone,
+      notes: customer.notes || '',
+    });
+    setIsEditingCustomer(false);
+  };
+
+  const handleSaveCustomer = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const trimmedPhone = editCustomerForm.phone.trim();
+    if (!trimmedPhone) {
+      setError('전화번호는 필수입니다.');
+      return;
+    }
+
+    setError('');
+    setIsSavingCustomer(true);
+    try {
+      await customerAPI.update(customerId, {
+        name: editCustomerForm.name,
+        phone: trimmedPhone,
+        notes: editCustomerForm.notes.trim() || null,
+      });
+
+      setCustomer({
+        ...customer,
+        name: editCustomerForm.name,
+        phone: trimmedPhone,
+        notes: editCustomerForm.notes.trim() || null,
+      });
+      setIsEditingCustomer(false);
+      showNotice('고객 정보를 수정했습니다.');
+    } catch (saveError: unknown) {
+      console.error('Failed to update customer:', saveError);
+      setError(parseApiError(saveError));
+    } finally {
+      setIsSavingCustomer(false);
+    }
   };
 
   const handleCreateMembership = async (event: React.FormEvent) => {
@@ -139,15 +217,10 @@ const CustomerDetail: React.FC = () => {
       await membershipAPI.create({
         customer_id: customerId,
         membership_type_id: Number(newMembershipForm.membership_type_id),
-        start_date: newMembershipForm.start_date,
-        purchase_price: newMembershipForm.purchase_price ? Number(newMembershipForm.purchase_price) : null,
         notes: newMembershipForm.notes || null,
       });
 
-      setNewMembershipForm({
-        ...INITIAL_NEW_MEMBERSHIP_FORM,
-        start_date: new Date().toISOString().slice(0, 10),
-      });
+      setNewMembershipForm(INITIAL_NEW_MEMBERSHIP_FORM);
 
       await Promise.all([loadMemberships(), loadCustomer()]);
       showNotice('회원권을 지급했습니다.');
@@ -162,7 +235,6 @@ const CustomerDetail: React.FC = () => {
   const startEditMembership = (membership: Membership) => {
     setEditingMembershipId(membership.id);
     setEditMembershipForm({
-      end_date: membership.end_date ? membership.end_date.slice(0, 10) : '',
       remaining_sessions:
         membership.remaining_sessions === null || membership.remaining_sessions === undefined
           ? ''
@@ -177,7 +249,6 @@ const CustomerDetail: React.FC = () => {
 
     try {
       await membershipAPI.update(membershipId, {
-        end_date: editMembershipForm.end_date || null,
         remaining_sessions: editMembershipForm.remaining_sessions === '' ? null : Number(editMembershipForm.remaining_sessions),
         is_active: editMembershipForm.is_active,
         notes: editMembershipForm.notes || null,
@@ -209,7 +280,7 @@ const CustomerDetail: React.FC = () => {
 
   const handleResetPassword = async () => {
     setError('');
-    const ok = window.confirm(`${customer.name} 고객의 비밀번호를 기본값(12345)으로 초기화할까요?`);
+    const ok = window.confirm('고객 로그인 비밀번호를 기본값 12345로 초기화합니다.');
     if (!ok) return;
 
     setIsResettingPassword(true);
@@ -256,37 +327,109 @@ const CustomerDetail: React.FC = () => {
       </div>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">기본 정보</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
-          <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
-          <p><span className="text-warm-600">이메일:</span> <span className="text-primary-800">{customer.email}</span></p>
-          <p><span className="text-warm-600">생년월일:</span> <span className="text-primary-800">{customer.birth_date ? customer.birth_date.slice(0, 10) : '-'}</span></p>
-          <p><span className="text-warm-600">성별:</span> <span className="text-primary-800">{customer.gender || '-'}</span></p>
-          <p><span className="text-warm-600">주소:</span> <span className="text-primary-800">{customer.address || '-'}</span></p>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="text-xl font-display font-semibold text-primary-800">기본 정보</h2>
+          <div className="flex items-center gap-2">
+            {!isEditingCustomer && (
+              <button type="button" className="btn-secondary" onClick={startEditCustomer}>
+                기본 정보 수정
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isResettingPassword}
+              onClick={() => void handleResetPassword()}
+            >
+              {isResettingPassword ? '초기화 중...' : '비밀번호 초기화'}
+            </button>
+          </div>
         </div>
-        {customer.notes && (
-          <div className="mt-3 text-sm text-warm-700">
-            <span className="text-warm-600">메모:</span> {customer.notes}
+
+        {isEditingCustomer ? (
+          <form className="space-y-4" onSubmit={handleSaveCustomer}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label" htmlFor="customer-detail-name">고객 이름</label>
+                <input
+                  id="customer-detail-name"
+                  className="input-field"
+                  value={editCustomerForm.name}
+                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, name: e.target.value }))}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="customer-detail-phone">고객 전화번호</label>
+                <input
+                  id="customer-detail-phone"
+                  className="input-field"
+                  value={editCustomerForm.phone}
+                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="customer-detail-notes">고객 메모</label>
+              <textarea
+                id="customer-detail-notes"
+                className="input-field min-h-[84px]"
+                value={editCustomerForm.notes}
+                onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" disabled={isSavingCustomer} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSavingCustomer ? '저장 중...' : '고객 정보 저장'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={cancelEditCustomer}>
+                취소
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
+              <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
+            </div>
+            {customer.notes && (
+              <div className="mt-3 text-sm text-warm-700">
+                <span className="text-warm-600">메모:</span> {customer.notes}
+              </div>
+            )}
           </div>
         )}
       </section>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">계정 관리</h2>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <p className="text-sm text-warm-700">
-            고객 로그인 비밀번호를 기본값 <span className="font-semibold text-primary-800">12345</span>로 초기화합니다.
-          </p>
-          <button
-            type="button"
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isResettingPassword}
-            onClick={() => void handleResetPassword()}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업 및 코멘트</h2>
+          <Link
+            to={`/customers/${customerId}/attendances`}
+            className="btn-secondary text-sm"
           >
-            {isResettingPassword ? '초기화 중...' : '비밀번호 초기화'}
-          </button>
+            전체 보기
+          </Link>
         </div>
+        {!latestAttendance ? (
+          <p className="text-warm-600 py-3">출석 기록이 없습니다.</p>
+        ) : (
+          <div className="rounded-lg border border-warm-200 bg-warm-50 p-4">
+            <p className="text-primary-800 font-medium">
+              {latestAttendance.class_title || latestAttendance.class_type || '수업 정보 없음'}
+            </p>
+            <p className="text-sm text-warm-700 mt-1">
+              {latestAttendance.class_date && latestAttendance.class_start_time
+                ? `수업일시: ${formatKoreanDateTime(latestAttendance.class_date, latestAttendance.class_start_time)}`
+                : '-'}
+            </p>
+            <p className="text-sm text-warm-700 mt-2">
+              강사 코멘트: {latestAttendance.instructor_comment?.trim() || '-'}
+            </p>
+          </div>
+        )}
       </section>
 
       {error && (
@@ -314,30 +457,6 @@ const CustomerDetail: React.FC = () => {
                   <option key={type.id} value={type.id}>{type.name}</option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="start-date">시작일</label>
-              <input
-                id="start-date"
-                type="date"
-                className="input-field"
-                value={newMembershipForm.start_date}
-                onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, start_date: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="purchase-price">결제 금액</label>
-              <input
-                id="purchase-price"
-                type="number"
-                className="input-field"
-                min={0}
-                step={1}
-                placeholder="비워두면 기본값"
-                value={newMembershipForm.purchase_price}
-                onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, purchase_price: e.target.value }))}
-              />
             </div>
             <div>
               <label className="label" htmlFor="membership-notes">메모</label>
@@ -369,27 +488,15 @@ const CustomerDetail: React.FC = () => {
                   {editingMembershipId === membership.id ? (
                     <div className="space-y-3">
                       <div className="font-medium text-primary-800">{membership.membership_type_name}</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="label" htmlFor={`edit-end-date-${membership.id}`}>종료일</label>
-                          <input
-                            id={`edit-end-date-${membership.id}`}
-                            type="date"
-                            className="input-field"
-                            value={editMembershipForm.end_date}
-                            onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, end_date: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="label" htmlFor={`edit-remaining-${membership.id}`}>잔여 횟수</label>
-                          <input
-                            id={`edit-remaining-${membership.id}`}
-                            type="number"
-                            className="input-field"
-                            value={editMembershipForm.remaining_sessions}
-                            onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
-                          />
-                        </div>
+                      <div>
+                        <label className="label" htmlFor={`edit-remaining-${membership.id}`}>잔여 횟수</label>
+                        <input
+                          id={`edit-remaining-${membership.id}`}
+                          type="number"
+                          className="input-field"
+                          value={editMembershipForm.remaining_sessions}
+                          onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
+                        />
                       </div>
                       <div>
                         <label className="label" htmlFor={`edit-notes-${membership.id}`}>메모</label>
@@ -418,17 +525,17 @@ const CustomerDetail: React.FC = () => {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-semibold text-primary-800">{membership.membership_type_name}</p>
-                          <p className="text-sm text-warm-600">
-                            시작일 {membership.start_date.slice(0, 10)}
-                            {membership.end_date ? ` / 종료일 ${membership.end_date.slice(0, 10)}` : ''}
-                          </p>
                         </div>
                         <span className={`px-2.5 py-1 text-xs rounded-full ${membership.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
+                      <p className="text-sm text-warm-700">잔여 횟수: {membership.remaining_sessions ?? '무제한'}</p>
                       <p className="text-sm text-warm-700">
-                        잔여 횟수: {membership.remaining_sessions ?? '무제한'} / 결제금액: {formatAmount(membership.purchase_price)}
+                        시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
+                      </p>
+                      <p className="text-sm text-warm-700">
+                        예상 종료일: {membership.expected_end_date ? formatKoreanDate(membership.expected_end_date, false) : '-'}
                       </p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
                       <div className="flex gap-2">

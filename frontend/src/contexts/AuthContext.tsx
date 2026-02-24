@@ -3,7 +3,7 @@ import { authAPI } from '../services/api';
 
 interface User {
   id: number;
-  email: string;
+  login_id: string;
   role: 'admin' | 'customer';
 }
 

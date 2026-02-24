@@ -41,8 +41,8 @@ vi.mock('../utils/apiError', () => ({
 const seedInitSuccess = () => {
   customerGetAllMock.mockResolvedValue({
     data: [
-      { id: 1, name: '홍길동', phone: '010-1111-2222', email: 'hong@test.com' },
-      { id: 2, name: '김영희', phone: '010-3333-4444', email: 'kim@test.com' },
+      { id: 1, name: '홍길동', phone: '010-1111-2222' },
+      { id: 2, name: '김영희', phone: '010-3333-4444' },
     ],
   });
   membershipGetTypesMock.mockResolvedValue({ data: [{ id: 5, name: '10회권' }] });
@@ -77,7 +77,7 @@ describe('MembershipManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
     expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1);
-    expect(screen.getByText('로그인 계정: hong@test.com')).toBeTruthy();
+    expect(screen.getByText('로그인 아이디: 010-1111-2222')).toBeTruthy();
   });
 
   it('creates membership successfully', async () => {
@@ -89,10 +89,7 @@ describe('MembershipManagement page', () => {
           {
             id: 21,
             membership_type_name: '10회권',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: null,
-            purchase_price: '100000',
             is_active: true,
             notes: null,
           },
@@ -103,21 +100,16 @@ describe('MembershipManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('회원권 관리'), { target: { value: '5' } });
-    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-01' } });
-    fireEvent.change(screen.getByLabelText('결제 금액'), { target: { value: '100000' } });
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '특가' } });
     fireEvent.click(screen.getByRole('button', { name: '회원권 지급' }));
 
     await waitFor(() => expect(membershipCreateMock).toHaveBeenCalledWith({
       customer_id: 1,
       membership_type_id: 5,
-      start_date: '2026-03-01',
-      purchase_price: 100000,
       notes: '특가',
     }));
 
     await waitFor(() => expect(screen.getByText('회원권을 지급했습니다.')).toBeTruthy());
-    expect(screen.getByText(/결제금액: 100,000/)).toBeTruthy();
   });
 
   it('shows parsed error when create fails', async () => {
@@ -161,10 +153,7 @@ describe('MembershipManagement page', () => {
           {
             id: 31,
             membership_type_name: '프리패스',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: null,
-            purchase_price: 'invalid',
             is_active: true,
             notes: null,
           },
@@ -175,10 +164,7 @@ describe('MembershipManagement page', () => {
           {
             id: 31,
             membership_type_name: '프리패스',
-            start_date: '2026-01-01',
-            end_date: '2026-02-01',
             remaining_sessions: 3,
-            purchase_price: null,
             is_active: false,
             notes: '변경됨',
           },
@@ -188,17 +174,14 @@ describe('MembershipManagement page', () => {
     render(<MembershipManagement />);
 
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
-    expect(screen.getByText(/결제금액: -/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-02-01' } });
     fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '3' } });
     fireEvent.change(document.getElementById('edit-notes-31') as HTMLTextAreaElement, { target: { value: '변경됨' } });
     fireEvent.click(screen.getByLabelText('활성 상태'));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(membershipUpdateMock).toHaveBeenCalledWith(31, {
-      end_date: '2026-02-01',
       remaining_sessions: 3,
       is_active: false,
       notes: '변경됨',
@@ -212,6 +195,27 @@ describe('MembershipManagement page', () => {
     expect(screen.queryByRole('button', { name: '저장' })).toBeNull();
   });
 
+  it('renders start/expected end date values when provided', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 71,
+          membership_type_name: '날짜표시권',
+          remaining_sessions: 4,
+          is_active: true,
+          start_date: '2026-02-01',
+          expected_end_date: '2026-03-01',
+          notes: null,
+        },
+      ],
+    });
+
+    render(<MembershipManagement />);
+    await waitFor(() => expect(screen.getByText('날짜표시권')).toBeTruthy());
+    expect(screen.getByText('시작일: 2026년 2월 1일')).toBeTruthy();
+    expect(screen.getByText('예상 종료일: 2026년 3월 1일')).toBeTruthy();
+  });
+
   it('shows parsed error when update fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     membershipUpdateMock.mockRejectedValueOnce(new Error('update failed'));
@@ -220,10 +224,7 @@ describe('MembershipManagement page', () => {
         {
           id: 32,
           membership_type_name: '회수권',
-          start_date: '2026-01-01',
-          end_date: null,
           remaining_sessions: 2,
-          purchase_price: 10000,
           is_active: true,
           notes: '',
         },
@@ -250,10 +251,7 @@ describe('MembershipManagement page', () => {
           {
             id: 41,
             membership_type_name: '삭제대상',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: 1,
-            purchase_price: 5000,
             is_active: true,
             notes: null,
           },
@@ -287,10 +285,7 @@ describe('MembershipManagement page', () => {
         {
           id: 51,
           membership_type_name: '실패삭제',
-          start_date: '2026-01-01',
-          end_date: null,
           remaining_sessions: 1,
-          purchase_price: 5000,
           is_active: true,
           notes: null,
         },
@@ -343,10 +338,7 @@ describe('MembershipManagement page', () => {
           {
             id: 61,
             membership_type_name: '정기권',
-            start_date: '2026-01-01',
-            end_date: '2026-02-01',
             remaining_sessions: 2,
-            purchase_price: 10000,
             is_active: true,
             notes: null,
           },
@@ -357,10 +349,7 @@ describe('MembershipManagement page', () => {
           {
             id: 61,
             membership_type_name: '정기권',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: null,
-            purchase_price: 10000,
             is_active: true,
             notes: null,
           },
@@ -375,7 +364,6 @@ describe('MembershipManagement page', () => {
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(membershipUpdateMock).toHaveBeenCalledWith(61, {
-      end_date: '2026-02-01',
       remaining_sessions: null,
       is_active: true,
       notes: null,
@@ -389,7 +377,7 @@ describe('MembershipManagement page', () => {
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText('고객 선택'), { target: { value: '' } });
-    expect(screen.queryByText(/로그인 계정:/)).toBeNull();
+    expect(screen.queryByText(/로그인 아이디:/)).toBeNull();
   });
 
 });

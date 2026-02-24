@@ -9,7 +9,7 @@ const router = express.Router();
 
 // 로그인
 router.post('/login',
-  body('identifier').trim().notEmpty().withMessage('이메일 또는 전화번호를 입력해주세요.'),
+  body('identifier').trim().notEmpty().withMessage('아이디를 입력해주세요.'),
   body('password').notEmpty(),
   async (req, res) => {
     const errors = validationResult(req);
@@ -19,45 +19,24 @@ router.post('/login',
 
     const { identifier, password } = req.body as { identifier: string; password: string };
     const loginId = identifier.trim();
-    const normalizedPhoneIdentifier = loginId.replace(/\D/g, '');
 
     try {
-      // 1) Prefer exact email match.
-      const emailResult = await pool.query(
-        'SELECT * FROM yoga_users WHERE email = $1 LIMIT 1',
+      const userResult = await pool.query(
+        `SELECT
+           id,
+           login_id,
+           role,
+           password_hash
+         FROM yoga_users
+         WHERE login_id = $1
+         LIMIT 1`,
         [loginId]
       );
 
-      let user = emailResult.rows[0];
-
-      // 2) Fallback to phone match only when normalized identifier exists.
-      if (!user) {
-        if (!normalizedPhoneIdentifier) {
-          return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        const phoneResult = await pool.query(
-          `
-            SELECT u.*
-            FROM yoga_users u
-            INNER JOIN yoga_customers c ON c.user_id = u.id
-            WHERE regexp_replace(COALESCE(c.phone, ''), '[^0-9]', '', 'g') = $1
-            ORDER BY u.id ASC
-            LIMIT 2
-          `,
-          [normalizedPhoneIdentifier]
-        );
-
-        if (phoneResult.rows.length === 0) {
-          return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        if (phoneResult.rows.length > 1) {
-          return res.status(400).json({ error: 'Ambiguous phone identifier' });
-        }
-
-        user = phoneResult.rows[0];
+      if (userResult.rows.length === 0) {
+        return res.status(401).json({ error: 'Invalid credentials' });
       }
+      const user = userResult.rows[0];
 
       const validPassword = await bcrypt.compare(password, user.password_hash);
 
@@ -66,7 +45,7 @@ router.post('/login',
       }
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, login_id: user.login_id, role: user.role },
         process.env.JWT_SECRET!,
         { expiresIn: '7d' }
       );
@@ -85,7 +64,7 @@ router.post('/login',
         token,
         user: {
           id: user.id,
-          email: user.email,
+          login_id: user.login_id,
           role: user.role
         },
         customerInfo
@@ -101,7 +80,7 @@ router.post('/login',
 router.get('/me', authenticate, async (req: AuthRequest, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, role FROM yoga_users WHERE id = $1',
+      'SELECT id, login_id, role FROM yoga_users WHERE id = $1',
       [req.user!.id]
     );
 
