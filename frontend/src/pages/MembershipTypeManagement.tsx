@@ -6,33 +6,20 @@ interface MembershipType {
   id: number;
   name: string;
   description?: string | null;
-  duration_days?: number | null;
   total_sessions?: number | null;
-  price?: string | number | null;
   is_active: boolean;
 }
 
 interface TypeForm {
   name: string;
   description: string;
-  duration_days: string;
   total_sessions: string;
-  price: string;
 }
 
 const INITIAL_TYPE_FORM: TypeForm = {
   name: '',
   description: '',
-  duration_days: '',
   total_sessions: '',
-  price: '',
-};
-
-const formatAmount = (value?: string | number | null): string => {
-  if (value === null || value === undefined || value === '') return '-';
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return '-';
-  return Math.round(amount).toLocaleString('ko-KR');
 };
 
 const MembershipTypeManagement: React.FC = () => {
@@ -77,9 +64,7 @@ const MembershipTypeManagement: React.FC = () => {
     setForm({
       name: type.name,
       description: type.description || '',
-      duration_days: type.duration_days === null || type.duration_days === undefined ? '' : String(type.duration_days),
       total_sessions: type.total_sessions === null || type.total_sessions === undefined ? '' : String(type.total_sessions),
-      price: type.price === null || type.price === undefined ? '' : String(Math.round(Number(type.price))),
     });
   };
 
@@ -92,9 +77,7 @@ const MembershipTypeManagement: React.FC = () => {
       const payload = {
         name: form.name,
         description: form.description || null,
-        duration_days: form.duration_days ? Number(form.duration_days) : null,
         total_sessions: form.total_sessions ? Number(form.total_sessions) : null,
-        price: form.price ? Number(form.price) : null,
       };
 
       if (editingTypeId) {
@@ -159,16 +142,6 @@ const MembershipTypeManagement: React.FC = () => {
               />
             </div>
             <div>
-              <label className="label" htmlFor="type-duration">기간(일)</label>
-              <input
-                id="type-duration"
-                type="number"
-                className="input-field"
-                value={form.duration_days}
-                onChange={(e) => setForm((prev) => ({ ...prev, duration_days: e.target.value }))}
-              />
-            </div>
-            <div>
               <label className="label" htmlFor="type-sessions">총 횟수</label>
               <input
                 id="type-sessions"
@@ -176,18 +149,6 @@ const MembershipTypeManagement: React.FC = () => {
                 className="input-field"
                 value={form.total_sessions}
                 onChange={(e) => setForm((prev) => ({ ...prev, total_sessions: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="type-price">가격</label>
-              <input
-                id="type-price"
-                type="number"
-                className="input-field"
-                min={0}
-                step={1}
-                value={form.price}
-                onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
               />
             </div>
             <div>
@@ -226,7 +187,7 @@ const MembershipTypeManagement: React.FC = () => {
                     <div>
                       <p className="font-semibold text-primary-800">{type.name}</p>
                       <p className="text-sm text-warm-600">
-                        기간: {type.duration_days ?? '-'}일 / 횟수: {type.total_sessions ?? '무제한'} / 가격: {formatAmount(type.price)}
+                        횟수: {type.total_sessions ?? '무제한'}
                       </p>
                       {type.description && <p className="text-sm text-warm-700 mt-1">{type.description}</p>}
                     </div>

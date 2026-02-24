@@ -89,8 +89,6 @@ describe('MembershipManagement page', () => {
           {
             id: 21,
             membership_type_name: '10회권',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: null,
             is_active: true,
             notes: null,
@@ -102,14 +100,12 @@ describe('MembershipManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('회원권 관리'), { target: { value: '5' } });
-    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-01' } });
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '특가' } });
     fireEvent.click(screen.getByRole('button', { name: '회원권 지급' }));
 
     await waitFor(() => expect(membershipCreateMock).toHaveBeenCalledWith({
       customer_id: 1,
       membership_type_id: 5,
-      start_date: '2026-03-01',
       notes: '특가',
     }));
 
@@ -157,8 +153,6 @@ describe('MembershipManagement page', () => {
           {
             id: 31,
             membership_type_name: '프리패스',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: null,
             is_active: true,
             notes: null,
@@ -170,8 +164,6 @@ describe('MembershipManagement page', () => {
           {
             id: 31,
             membership_type_name: '프리패스',
-            start_date: '2026-01-01',
-            end_date: '2026-02-01',
             remaining_sessions: 3,
             is_active: false,
             notes: '변경됨',
@@ -184,14 +176,12 @@ describe('MembershipManagement page', () => {
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-02-01' } });
     fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '3' } });
     fireEvent.change(document.getElementById('edit-notes-31') as HTMLTextAreaElement, { target: { value: '변경됨' } });
     fireEvent.click(screen.getByLabelText('활성 상태'));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(membershipUpdateMock).toHaveBeenCalledWith(31, {
-      end_date: '2026-02-01',
       remaining_sessions: 3,
       is_active: false,
       notes: '변경됨',
@@ -213,8 +203,6 @@ describe('MembershipManagement page', () => {
         {
           id: 32,
           membership_type_name: '회수권',
-          start_date: '2026-01-01',
-          end_date: null,
           remaining_sessions: 2,
           is_active: true,
           notes: '',
@@ -242,8 +230,6 @@ describe('MembershipManagement page', () => {
           {
             id: 41,
             membership_type_name: '삭제대상',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: 1,
             is_active: true,
             notes: null,
@@ -278,8 +264,6 @@ describe('MembershipManagement page', () => {
         {
           id: 51,
           membership_type_name: '실패삭제',
-          start_date: '2026-01-01',
-          end_date: null,
           remaining_sessions: 1,
           is_active: true,
           notes: null,
@@ -333,8 +317,6 @@ describe('MembershipManagement page', () => {
           {
             id: 61,
             membership_type_name: '정기권',
-            start_date: '2026-01-01',
-            end_date: '2026-02-01',
             remaining_sessions: 2,
             is_active: true,
             notes: null,
@@ -346,8 +328,6 @@ describe('MembershipManagement page', () => {
           {
             id: 61,
             membership_type_name: '정기권',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: null,
             is_active: true,
             notes: null,
@@ -363,7 +343,6 @@ describe('MembershipManagement page', () => {
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(membershipUpdateMock).toHaveBeenCalledWith(61, {
-      end_date: '2026-02-01',
       remaining_sessions: null,
       is_active: true,
       notes: null,

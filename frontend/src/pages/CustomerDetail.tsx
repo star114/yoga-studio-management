@@ -20,8 +20,6 @@ interface MembershipType {
 interface Membership {
   id: number;
   membership_type_name: string;
-  start_date: string;
-  end_date?: string | null;
   remaining_sessions?: number | null;
   is_active: boolean;
   notes?: string | null;
@@ -45,12 +43,10 @@ interface EditCustomerForm {
 
 interface NewMembershipForm {
   membership_type_id: string;
-  start_date: string;
   notes: string;
 }
 
 interface EditMembershipForm {
-  end_date: string;
   remaining_sessions: string;
   is_active: boolean;
   notes: string;
@@ -58,7 +54,6 @@ interface EditMembershipForm {
 
 const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
-  start_date: new Date().toISOString().slice(0, 10),
   notes: '',
 };
 
@@ -80,7 +75,6 @@ const CustomerDetail: React.FC = () => {
     notes: '',
   });
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
-    end_date: '',
     remaining_sessions: '',
     is_active: true,
     notes: '',
@@ -226,14 +220,10 @@ const CustomerDetail: React.FC = () => {
       await membershipAPI.create({
         customer_id: customerId,
         membership_type_id: Number(newMembershipForm.membership_type_id),
-        start_date: newMembershipForm.start_date,
         notes: newMembershipForm.notes || null,
       });
 
-      setNewMembershipForm({
-        ...INITIAL_NEW_MEMBERSHIP_FORM,
-        start_date: new Date().toISOString().slice(0, 10),
-      });
+      setNewMembershipForm(INITIAL_NEW_MEMBERSHIP_FORM);
 
       await Promise.all([loadMemberships(), loadCustomer()]);
       showNotice('회원권을 지급했습니다.');
@@ -248,7 +238,6 @@ const CustomerDetail: React.FC = () => {
   const startEditMembership = (membership: Membership) => {
     setEditingMembershipId(membership.id);
     setEditMembershipForm({
-      end_date: membership.end_date ? membership.end_date.slice(0, 10) : '',
       remaining_sessions:
         membership.remaining_sessions === null || membership.remaining_sessions === undefined
           ? ''
@@ -263,7 +252,6 @@ const CustomerDetail: React.FC = () => {
 
     try {
       await membershipAPI.update(membershipId, {
-        end_date: editMembershipForm.end_date || null,
         remaining_sessions: editMembershipForm.remaining_sessions === '' ? null : Number(editMembershipForm.remaining_sessions),
         is_active: editMembershipForm.is_active,
         notes: editMembershipForm.notes || null,
@@ -475,17 +463,6 @@ const CustomerDetail: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="label" htmlFor="start-date">시작일</label>
-              <input
-                id="start-date"
-                type="date"
-                className="input-field"
-                value={newMembershipForm.start_date}
-                onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, start_date: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
               <label className="label" htmlFor="membership-notes">메모</label>
               <textarea
                 id="membership-notes"
@@ -515,27 +492,15 @@ const CustomerDetail: React.FC = () => {
                   {editingMembershipId === membership.id ? (
                     <div className="space-y-3">
                       <div className="font-medium text-primary-800">{membership.membership_type_name}</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="label" htmlFor={`edit-end-date-${membership.id}`}>종료일</label>
-                          <input
-                            id={`edit-end-date-${membership.id}`}
-                            type="date"
-                            className="input-field"
-                            value={editMembershipForm.end_date}
-                            onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, end_date: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="label" htmlFor={`edit-remaining-${membership.id}`}>잔여 횟수</label>
-                          <input
-                            id={`edit-remaining-${membership.id}`}
-                            type="number"
-                            className="input-field"
-                            value={editMembershipForm.remaining_sessions}
-                            onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
-                          />
-                        </div>
+                      <div>
+                        <label className="label" htmlFor={`edit-remaining-${membership.id}`}>잔여 횟수</label>
+                        <input
+                          id={`edit-remaining-${membership.id}`}
+                          type="number"
+                          className="input-field"
+                          value={editMembershipForm.remaining_sessions}
+                          onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
+                        />
                       </div>
                       <div>
                         <label className="label" htmlFor={`edit-notes-${membership.id}`}>메모</label>
@@ -564,10 +529,6 @@ const CustomerDetail: React.FC = () => {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-semibold text-primary-800">{membership.membership_type_name}</p>
-                          <p className="text-sm text-warm-600">
-                            시작일 {formatKoreanDate(membership.start_date)}
-                            {membership.end_date ? ` / 종료일 ${formatKoreanDate(membership.end_date)}` : ''}
-                          </p>
                         </div>
                         <span className={`px-2.5 py-1 text-xs rounded-full ${membership.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
                           {membership.is_active ? '활성' : '비활성'}

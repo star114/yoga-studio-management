@@ -252,14 +252,12 @@ describe('CustomerDetail page', () => {
 
     await waitFor(() => expect(screen.getByText('회원권 발급')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('회원권 관리'), { target: { value: '5' } });
-    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-02' } });
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '프로모션' } });
     fireEvent.click(screen.getByRole('button', { name: '회원권 지급' }));
 
     await waitFor(() => expect(createMembershipMock).toHaveBeenCalledWith({
       customer_id: 1,
       membership_type_id: 5,
-      start_date: '2026-03-02',
       notes: '프로모션',
     }));
 
@@ -292,8 +290,6 @@ describe('CustomerDetail page', () => {
           {
             id: 8,
             membership_type_name: '프리패스',
-            start_date: '2026-01-01',
-            end_date: '2026-03-01',
             remaining_sessions: 5,
             is_active: true,
             notes: null,
@@ -305,8 +301,6 @@ describe('CustomerDetail page', () => {
           {
             id: 8,
             membership_type_name: '프리패스',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: null,
             is_active: false,
             notes: '변경됨',
@@ -319,14 +313,12 @@ describe('CustomerDetail page', () => {
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '' } });
     fireEvent.change(document.getElementById('edit-notes-8') as HTMLTextAreaElement, { target: { value: '변경됨' } });
     fireEvent.click(screen.getByLabelText('활성 상태'));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(updateMembershipMock).toHaveBeenCalledWith(8, {
-      end_date: null,
       remaining_sessions: null,
       is_active: false,
       notes: '변경됨',
@@ -347,8 +339,6 @@ describe('CustomerDetail page', () => {
         {
           id: 15,
           membership_type_name: '10회권',
-          start_date: '2026-01-01',
-          end_date: null,
           remaining_sessions: 2,
           is_active: true,
           notes: '',
@@ -376,8 +366,6 @@ describe('CustomerDetail page', () => {
           {
             id: 20,
             membership_type_name: '삭제대상',
-            start_date: '2026-01-01',
-            end_date: null,
             remaining_sessions: 1,
             is_active: true,
             notes: null,
@@ -411,8 +399,6 @@ describe('CustomerDetail page', () => {
         {
           id: 30,
           membership_type_name: '실패삭제',
-          start_date: '2026-01-01',
-          end_date: null,
           remaining_sessions: 1,
           is_active: true,
           notes: null,

@@ -44,7 +44,7 @@ describe('CustomerMemberships page', () => {
 
   it('renders empty state when no active memberships', async () => {
     membershipGetByCustomerMock.mockResolvedValueOnce({
-      data: [{ id: 2, membership_type_name: '10회권', start_date: '2026-01-01', is_active: false }],
+      data: [{ id: 2, membership_type_name: '10회권', is_active: false }],
     });
 
     render(<CustomerMemberships />);
@@ -59,8 +59,6 @@ describe('CustomerMemberships page', () => {
         {
           id: 1,
           membership_type_name: '프리패스',
-          start_date: '2026-01-01',
-          end_date: '2026-12-31',
           remaining_sessions: 5,
           is_active: true,
         },

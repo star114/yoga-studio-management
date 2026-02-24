@@ -134,16 +134,6 @@ router.post('/',
         }
       }
 
-      // 기간제 회원권인 경우 기간 확인
-      if (activeMembership.end_date) {
-        const today = new Date();
-        const endDate = new Date(activeMembership.end_date);
-        if (today > endDate) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Membership expired' });
-        }
-      }
-
       let resolvedClassId: number | null = null;
       let resolvedClassType = typeof class_type === 'string' ? class_type.trim() : '';
 

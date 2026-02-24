@@ -24,16 +24,16 @@ router.post('/types',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
-  body('price').optional({ nullable: true }).isInt({ min: 0 }),
+  body('total_sessions').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
-    const { name, description, duration_days, total_sessions, price } = req.body;
+    const { name, description, total_sessions } = req.body;
 
     try {
       const result = await pool.query(
-        `INSERT INTO yoga_membership_types (name, description, duration_days, total_sessions, price)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [name, description || null, duration_days || null, total_sessions || null, price ?? null]
+        `INSERT INTO yoga_membership_types (name, description, total_sessions)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [name, description || null, total_sessions || null]
       );
 
       res.status(201).json(result.rows[0]);
@@ -48,29 +48,25 @@ router.post('/types',
 router.put('/types/:id',
   authenticate,
   requireAdmin,
-  body('price').optional({ nullable: true }).isInt({ min: 0 }),
+  body('total_sessions').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
     const { id } = req.params;
-    const { name, description, duration_days, total_sessions, price, is_active } = req.body;
+    const { name, description, total_sessions, is_active } = req.body;
 
     try {
       const result = await pool.query(
         `UPDATE yoga_membership_types
          SET name = COALESCE($1, name),
              description = COALESCE($2, description),
-             duration_days = COALESCE($3, duration_days),
-             total_sessions = COALESCE($4, total_sessions),
-             price = COALESCE($5, price),
-             is_active = COALESCE($6, is_active)
-         WHERE id = $7
+             total_sessions = COALESCE($3, total_sessions),
+             is_active = COALESCE($4, is_active)
+         WHERE id = $5
          RETURNING *`,
         [
           name,
           description,
-          duration_days,
           total_sessions,
-          price,
           is_active,
           id,
         ]
@@ -138,10 +134,9 @@ router.post('/',
   requireAdmin,
   body('customer_id').isInt(),
   body('membership_type_id').isInt(),
-  body('start_date').isDate(),
   validateRequest,
   async (req, res) => {
-    const { customer_id, membership_type_id, start_date, notes } = req.body;
+    const { customer_id, membership_type_id, notes } = req.body;
 
     try {
       // 회원권 종류 정보 조회
@@ -156,23 +151,13 @@ router.post('/',
 
       const membershipType = typeResult.rows[0];
 
-      // 종료일 계산
-      let endDate = null;
-      if (membershipType.duration_days) {
-        const start = new Date(start_date);
-        endDate = new Date(start);
-        endDate.setDate(endDate.getDate() + membershipType.duration_days);
-      }
-
       const result = await pool.query(
         `INSERT INTO yoga_memberships 
-         (customer_id, membership_type_id, start_date, end_date, remaining_sessions, notes)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+         (customer_id, membership_type_id, remaining_sessions, notes)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
         [
           customer_id,
           membership_type_id,
-          start_date,
-          endDate,
           membershipType.total_sessions || null,
           notes || null
         ]
@@ -192,18 +177,17 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { end_date, remaining_sessions, is_active, notes } = req.body;
+    const { remaining_sessions, is_active, notes } = req.body;
 
     try {
       const result = await pool.query(
         `UPDATE yoga_memberships 
-         SET end_date = COALESCE($1, end_date),
-             remaining_sessions = COALESCE($2, remaining_sessions),
-             is_active = COALESCE($3, is_active),
-             notes = COALESCE($4, notes)
-         WHERE id = $5
+         SET remaining_sessions = COALESCE($1, remaining_sessions),
+             is_active = COALESCE($2, is_active),
+             notes = COALESCE($3, notes)
+         WHERE id = $4
          RETURNING *`,
-        [end_date, remaining_sessions, is_active, notes, id]
+        [remaining_sessions, is_active, notes, id]
       );
 
       if (result.rows.length === 0) {

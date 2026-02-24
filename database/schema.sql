@@ -26,9 +26,7 @@ CREATE TABLE IF NOT EXISTS yoga_membership_types (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    duration_days INTEGER,  -- 기간제의 경우 일수
     total_sessions INTEGER,  -- 횟수제의 경우 총 횟수
-    price INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -38,8 +36,6 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES yoga_customers(id) ON DELETE CASCADE,
     membership_type_id INTEGER REFERENCES yoga_membership_types(id),
-    start_date DATE NOT NULL,
-    end_date DATE,
     remaining_sessions INTEGER,  -- 잔여 횟수
     is_active BOOLEAN DEFAULT TRUE,
     notes TEXT,

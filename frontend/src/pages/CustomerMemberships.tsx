@@ -1,13 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { membershipAPI } from '../services/api';
-import { formatKoreanDate } from '../utils/dateFormat';
 
 interface CustomerMembership {
   id: number;
   membership_type_name: string;
-  start_date: string;
-  end_date?: string | null;
   remaining_sessions?: number | null;
   is_active: boolean;
 }
@@ -71,9 +68,6 @@ const CustomerMemberships: React.FC = () => {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-primary-800 text-lg">{membership.membership_type_name}</h3>
-                    <p className="text-sm text-warm-600 mt-1">
-                      {formatKoreanDate(membership.start_date)} 시작
-                    </p>
                   </div>
                   <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-medium">활성</span>
                 </div>
@@ -83,12 +77,6 @@ const CustomerMemberships: React.FC = () => {
                     <div className="bg-white p-3 rounded-lg">
                       <p className="text-sm text-warm-600 mb-1">잔여 횟수</p>
                       <p className="text-2xl font-bold text-primary-800">{membership.remaining_sessions}회</p>
-                    </div>
-                  )}
-                  {membership.end_date && (
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-sm text-warm-600 mb-1">종료일</p>
-                      <p className="text-sm font-semibold text-primary-800">{formatKoreanDate(membership.end_date)}</p>
                     </div>
                   )}
                 </div>
