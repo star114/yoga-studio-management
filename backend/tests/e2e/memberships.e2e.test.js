@@ -347,6 +347,29 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 200);
 
+  h.queryQueue.push(
+    { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] },
+    { rows: [{ id: 202, remaining_sessions: 5, is_active: false }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '202' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 5, is_active: false },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.is_active, false);
+
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '202' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { is_active: 'false' },
+  });
+  assert.equal(res.status, 400);
+
   h.queryQueue.push(new Error('update membership fail'));
   res = await h.runRoute({
     method: 'put',

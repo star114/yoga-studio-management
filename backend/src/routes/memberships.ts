@@ -227,27 +227,61 @@ router.put('/:id',
   async (req, res) => {
     const { id } = req.params;
     const { remaining_sessions, is_active, notes } = req.body;
+    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(req.body || {}, 'remaining_sessions');
+    const hasIsActive = Object.prototype.hasOwnProperty.call(req.body || {}, 'is_active');
+    const hasNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'notes');
+
+    if (hasIsActive && typeof is_active !== 'boolean') {
+      return res.status(400).json({ error: 'is_active must be boolean' });
+    }
 
     try {
-      const result = await pool.query(
-        `UPDATE yoga_memberships 
-         SET remaining_sessions = COALESCE($1, remaining_sessions),
-             is_active = CASE
-               WHEN COALESCE($1, remaining_sessions) IS NOT NULL
-                 THEN COALESCE($1, remaining_sessions) > 0
-               ELSE COALESCE($2, is_active)
-             END,
-             notes = COALESCE($3, notes)
-         WHERE id = $4
-         RETURNING *`,
-        [remaining_sessions, is_active, notes, id]
-      );
+      let membershipRow: any = null;
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Membership not found' });
+      if (hasRemainingSessions || hasNotes) {
+        const updateResult = await pool.query(
+          `UPDATE yoga_memberships 
+           SET remaining_sessions = CASE
+                 WHEN $1 THEN $2
+                 ELSE remaining_sessions
+               END,
+               notes = CASE
+                 WHEN $3 THEN COALESCE($4, notes)
+                 ELSE notes
+               END
+           WHERE id = $5
+           RETURNING *`,
+          [hasRemainingSessions, remaining_sessions, hasNotes, notes, id]
+        );
+
+        if (updateResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Membership not found' });
+        }
+        membershipRow = updateResult.rows[0];
+      } else {
+        const existingResult = await pool.query(
+          'SELECT * FROM yoga_memberships WHERE id = $1',
+          [id]
+        );
+
+        if (existingResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Membership not found' });
+        }
+        membershipRow = existingResult.rows[0];
       }
 
-      res.json(result.rows[0]);
+      if (hasIsActive) {
+        const activeResult = await pool.query(
+          `UPDATE yoga_memberships
+           SET is_active = $1
+           WHERE id = $2
+           RETURNING *`,
+          [is_active, id]
+        );
+        membershipRow = activeResult.rows[0];
+      }
+
+      res.json(membershipRow);
     } catch (error) {
       console.error('Update membership error:', error);
       res.status(500).json({ error: 'Server error' });
