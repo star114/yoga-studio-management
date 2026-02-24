@@ -94,6 +94,7 @@ const seedLoad = (overrides?: Record<string, unknown>) => {
         registration_comment: '기존 코멘트',
         attendance_id: 9001,
         attendance_instructor_comment: '기존 강사 코멘트',
+        attendance_customer_comment: '좋은 수업이었어요',
         customer_name: '홍길동',
         customer_phone: '010-1111-2222',
       },
@@ -154,6 +155,7 @@ describe('ClassDetail page', () => {
     await waitFor(() => expect(screen.getByText('수업 상세')).toBeTruthy());
     expect(screen.getByText('상태: 오픈')).toBeTruthy();
     expect(screen.getByText('홍길동')).toBeTruthy();
+    expect(screen.getByText('좋은 수업이었어요')).toBeTruthy();
     expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
   });
 
@@ -519,7 +521,7 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('수련생 코멘트')).toBeTruthy());
-    expect(screen.getByText('-')).toBeTruthy();
+    expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(2);
   });
 
   it('saves instructor comment via attendance update and blocks when attendance is missing', async () => {

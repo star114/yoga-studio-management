@@ -218,7 +218,18 @@ test('classes list/detail/registrations/comment/update/delete cover main branche
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 1, title: 'A' }] }, { rows: [{ id: 9, customer_id: 3 }] });
+  h.queryQueue.push(
+    { rows: [{ id: 1, title: 'A' }] },
+    {
+      rows: [
+        {
+          id: 9,
+          customer_id: 3,
+          attendance_customer_comment: 'good focus',
+        },
+      ],
+    }
+  );
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/registrations',
@@ -227,6 +238,7 @@ test('classes list/detail/registrations/comment/update/delete cover main branche
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].attendance_customer_comment, 'good focus');
 
   h.queryQueue.push(new Error('regs fail'));
   res = await h.runRoute({
@@ -744,4 +756,142 @@ test('registration status change reconciles attendance row and membership usage'
         && sql.includes('DELETE FROM yoga_attendances')
     )
   );
+});
+
+test('customer endpoints include and update attendance customer comment', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness();
+
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/me',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/me',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/me',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 11, title: '빈야사', customer_comment: '좋아요' }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/me',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.customer_comment, '좋아요');
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, new Error('my detail fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/me',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/attendance-comment',
+    params: { id: '11' },
+    body: { customer_comment: '메모' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/attendance-comment',
+    params: { id: '11' },
+    body: { customer_comment: '메모' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/attendance-comment',
+    params: { id: '11' },
+    body: { customer_comment: '메모' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 100, customer_comment: '메모 저장' }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/attendance-comment',
+    params: { id: '11' },
+    body: { customer_comment: '  메모 저장  ' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.customer_comment, '메모 저장');
+  assert.ok(
+    h.queryCalls.some(
+      ([sql, params]) =>
+        typeof sql === 'string'
+        && sql.includes('SET customer_comment = $3')
+        && Array.isArray(params)
+        && params[2] === '메모 저장'
+    )
+  );
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 101, customer_comment: null }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/attendance-comment',
+    params: { id: '11' },
+    body: { customer_comment: '   ' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.customer_comment, null);
+  assert.ok(
+    h.queryCalls.some(
+      ([sql, params]) =>
+        typeof sql === 'string'
+        && sql.includes('SET customer_comment = $3')
+        && Array.isArray(params)
+        && params[2] === null
+    )
+  );
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, new Error('attendance comment fail'));
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/attendance-comment',
+    params: { id: '11' },
+    body: { customer_comment: '메모' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
 });

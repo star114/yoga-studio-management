@@ -16,3 +16,10 @@ test('attendance class_id does not conflict with ON DELETE SET NULL', () => {
     /class_id\s+INTEGER\s+NOT NULL\s+REFERENCES\s+yoga_classes\(id\)\s+ON DELETE SET NULL/i
   );
 });
+
+test('attendance schema includes customer_comment column', () => {
+  const schemaPath = path.resolve(__dirname, '../../../database/schema.sql');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+
+  assert.match(schema, /customer_comment\s+TEXT/i);
+});

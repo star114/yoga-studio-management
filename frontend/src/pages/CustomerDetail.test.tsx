@@ -230,6 +230,7 @@ describe('CustomerDetail page', () => {
             class_date: '2026-02-20',
             class_start_time: '09:00:00',
             instructor_comment: '호흡이 좋습니다.',
+            customer_comment: '집중이 잘 됐어요.',
           },
           {
             id: 102,
@@ -247,6 +248,7 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('아쉬탕가')).toBeTruthy();
     expect(screen.queryByText('빈야사')).toBeNull();
     expect(screen.getByText('강사 코멘트: 호흡이 좋습니다.')).toBeTruthy();
+    expect(screen.getByText('고객 출석 코멘트: 집중이 잘 됐어요.')).toBeTruthy();
     expect(screen.getByRole('link', { name: '전체 보기' })).toBeTruthy();
   });
 
@@ -266,6 +268,7 @@ describe('CustomerDetail page', () => {
             class_date: null,
             class_start_time: null,
             instructor_comment: null,
+            customer_comment: null,
           },
         ],
       },
@@ -274,6 +277,7 @@ describe('CustomerDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
     expect(screen.getByText('-')).toBeTruthy();
+    expect(screen.getByText('고객 출석 코멘트: -')).toBeTruthy();
   });
 
   it('renders fallback latest attendance title when class title/type are both missing', async () => {
