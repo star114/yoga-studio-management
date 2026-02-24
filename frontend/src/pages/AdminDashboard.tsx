@@ -42,7 +42,6 @@ interface DashboardClass {
   class_date: string;
   start_time: string;
   end_time: string;
-  instructor_name?: string | null;
   max_capacity?: number;
   current_enrollment?: number;
   is_open?: boolean;
@@ -396,7 +395,6 @@ const AdminDashboard: React.FC = () => {
                         <p className="font-semibold text-primary-800">{item.title}</p>
                         <p className="text-sm text-warm-600">
                           {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
-                          {item.instructor_name ? ` · ${item.instructor_name}` : ''}
                         </p>
                       </div>
                       <span className={`px-2.5 py-1 text-xs rounded-full ${item.is_open === false ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'}`}>

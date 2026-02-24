@@ -7,7 +7,6 @@ import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 interface YogaClassDetail {
   id: number;
   title: string;
-  instructor_name?: string | null;
   class_date: string;
   start_time: string;
   end_time: string;

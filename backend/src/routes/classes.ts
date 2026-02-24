@@ -106,7 +106,6 @@ router.get('/registrations/me',
            r.registration_comment,
            r.registered_at,
            c.title,
-           c.instructor_name,
            c.class_date,
            c.start_time,
            c.end_time,
@@ -190,7 +189,6 @@ router.get('/:id/me',
         `SELECT
            c.id,
            c.title,
-           c.instructor_name,
            c.class_date,
            c.start_time,
            c.end_time,
@@ -574,7 +572,6 @@ router.post('/',
   async (req, res) => {
     const {
       title,
-      instructor_name,
       class_date,
       start_time,
       end_time,
@@ -590,12 +587,11 @@ router.post('/',
     try {
       const result = await pool.query(
         `INSERT INTO yoga_classes
-        (title, instructor_name, class_date, start_time, end_time, max_capacity, is_open, notes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        (title, class_date, start_time, end_time, max_capacity, is_open, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *`,
         [
           title,
-          instructor_name || null,
           class_date,
           start_time,
           end_time,
@@ -631,7 +627,6 @@ router.post('/recurring',
   async (req, res) => {
     const {
       title,
-      instructor_name,
       recurrence_start_date,
       recurrence_end_date,
       weekdays,
@@ -672,12 +667,11 @@ router.post('/recurring',
 
       const seriesResult = await client.query(
         `INSERT INTO yoga_class_series
-         (title, instructor_name, start_time, end_time, max_capacity, is_open, notes, recurrence_start_date, recurrence_end_date, weekdays)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (title, start_time, end_time, max_capacity, is_open, notes, recurrence_start_date, recurrence_end_date, weekdays)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id`,
         [
           title,
-          instructor_name || null,
           start_time,
           end_time,
           max_capacity,
@@ -696,12 +690,11 @@ router.post('/recurring',
 
       classDates.forEach((classDate) => {
         rows.push(
-          `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, FALSE, NULL)`
+          `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, FALSE, NULL)`
         );
 
         values.push(
           title,
-          instructor_name || null,
           classDate,
           start_time,
           end_time,
@@ -711,12 +704,12 @@ router.post('/recurring',
           seriesId,
         );
 
-        paramIndex += 9;
+        paramIndex += 8;
       });
 
       const insertResult = await client.query(
         `INSERT INTO yoga_classes
-         (title, instructor_name, class_date, start_time, end_time, max_capacity, is_open, notes, recurring_series_id, is_excluded, excluded_reason)
+         (title, class_date, start_time, end_time, max_capacity, is_open, notes, recurring_series_id, is_excluded, excluded_reason)
          VALUES ${rows.join(', ')}
          RETURNING id`,
         values
@@ -824,7 +817,6 @@ router.put('/:id',
     const { id } = req.params;
     const {
       title,
-      instructor_name,
       class_date,
       start_time,
       end_time,
@@ -850,18 +842,16 @@ router.put('/:id',
       const result = await pool.query(
         `UPDATE yoga_classes
          SET title = COALESCE($1, title),
-             instructor_name = COALESCE($2, instructor_name),
-             class_date = COALESCE($3, class_date),
-             start_time = COALESCE($4, start_time),
-             end_time = COALESCE($5, end_time),
-             max_capacity = COALESCE($6, max_capacity),
-             is_open = COALESCE($7, is_open),
-             notes = COALESCE($8, notes)
-         WHERE id = $9
+             class_date = COALESCE($2, class_date),
+             start_time = COALESCE($3, start_time),
+             end_time = COALESCE($4, end_time),
+             max_capacity = COALESCE($5, max_capacity),
+             is_open = COALESCE($6, is_open),
+             notes = COALESCE($7, notes)
+         WHERE id = $8
          RETURNING *`,
         [
           title,
-          instructor_name,
           class_date,
           start_time,
           end_time,

@@ -59,7 +59,6 @@ CREATE TABLE IF NOT EXISTS yoga_attendances (
 CREATE TABLE IF NOT EXISTS yoga_classes (
     id SERIAL PRIMARY KEY,
     title VARCHAR(100) NOT NULL,
-    instructor_name VARCHAR(100),
     class_date DATE NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
@@ -74,7 +73,6 @@ CREATE TABLE IF NOT EXISTS yoga_classes (
 CREATE TABLE IF NOT EXISTS yoga_class_series (
     id SERIAL PRIMARY KEY,
     title VARCHAR(100) NOT NULL,
-    instructor_name VARCHAR(100),
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     max_capacity INTEGER NOT NULL CHECK (max_capacity > 0),
@@ -90,6 +88,12 @@ ALTER TABLE yoga_classes
     ADD COLUMN IF NOT EXISTS recurring_series_id INTEGER REFERENCES yoga_class_series(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS excluded_reason TEXT;
+
+ALTER TABLE yoga_classes
+    DROP COLUMN IF EXISTS instructor_name;
+
+ALTER TABLE yoga_class_series
+    DROP COLUMN IF EXISTS instructor_name;
 
 ALTER TABLE yoga_attendances
     ADD COLUMN IF NOT EXISTS class_id INTEGER REFERENCES yoga_classes(id) ON DELETE SET NULL;

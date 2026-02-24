@@ -40,7 +40,6 @@ interface MyRegistrationClass {
   attendance_status: 'reserved' | 'attended' | 'absent';
   registration_comment?: string | null;
   title: string;
-  instructor_name?: string | null;
   class_date: string;
   start_time: string;
   end_time: string;
@@ -55,7 +54,6 @@ interface CustomerCalendarEntry {
   class_date: string;
   start_time?: string | null;
   end_time?: string | null;
-  instructor_name?: string | null;
   source: 'registration' | 'attendance';
   attendance_status?: 'reserved' | 'attended' | 'absent';
 }
@@ -163,7 +161,6 @@ const CustomerDashboard: React.FC = () => {
         class_date: normalizeDate(item.class_date),
         start_time: item.start_time,
         end_time: item.end_time,
-        instructor_name: item.instructor_name,
         source: 'registration',
         attendance_status: item.attendance_status,
       }));
@@ -177,7 +174,6 @@ const CustomerDashboard: React.FC = () => {
           class_date: item.class_date ? normalizeDate(item.class_date) : fallbackDate,
           start_time: item.class_start_time || null,
           end_time: item.class_end_time || null,
-          instructor_name: null,
           source: 'attendance',
         };
       });
@@ -634,7 +630,6 @@ const CustomerDashboard: React.FC = () => {
                         <p className="text-sm text-warm-600">
                           {normalizeTime(item.start_time)}
                           {item.end_time ? ` - ${normalizeTime(item.end_time)}` : ''}
-                          {item.instructor_name ? ` · ${item.instructor_name}` : ''}
                         </p>
                       </div>
                       <span className={`px-2.5 py-1 text-xs rounded-full ${item.source === 'registration' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>

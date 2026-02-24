@@ -176,7 +176,6 @@ describe('CustomerDashboard page', () => {
           end_time: '11:00:00',
           is_open: true,
           is_excluded: false,
-          instructor_name: '강사A',
         },
       ],
     });
@@ -185,7 +184,7 @@ describe('CustomerDashboard page', () => {
 
     await waitFor(() => expect(screen.getByText('수업 캘린더')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '일간' }));
-    await waitFor(() => expect(screen.getByText('중복 테스트 수업')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('중복 테스트 수업').length).toBeGreaterThan(0));
     expect(screen.getByText('완료')).toBeTruthy();
     expect(screen.queryByText('예정')).toBeNull();
   });

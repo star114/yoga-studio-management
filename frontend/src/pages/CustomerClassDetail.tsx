@@ -8,7 +8,6 @@ import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 interface CustomerClassDetailData {
   id: number;
   title: string;
-  instructor_name?: string | null;
   class_date: string;
   start_time: string;
   end_time: string;
@@ -94,7 +93,6 @@ const CustomerClassDetail: React.FC = () => {
 
       <section className="card space-y-3">
         <h2 className="text-xl font-display font-semibold text-primary-800">나의 수업 정보</h2>
-        <p className="text-warm-700">강사: {detail.instructor_name || '-'}</p>
         <p className="text-warm-700">출석 여부: <span className="font-semibold text-primary-800">{attendanceLabel}</span></p>
       </section>
 
