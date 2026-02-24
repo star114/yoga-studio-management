@@ -32,6 +32,7 @@ export const startClassAutoCloseWorker = () => {
          SET attendance_status = 'attended'
          FROM yoga_classes c
          WHERE r.class_id = c.id
+           AND c.is_open = TRUE
            AND r.attendance_status = 'reserved'
            AND (c.class_date::timestamp + c.start_time + INTERVAL '15 minutes') <= CURRENT_TIMESTAMP
          RETURNING r.id`
