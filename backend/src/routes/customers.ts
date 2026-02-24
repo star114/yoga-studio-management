@@ -260,26 +260,54 @@ router.put('/:id',
   async (req, res) => {
     const { id } = req.params;
     const { name, phone, notes } = req.body;
+    const hasPhoneField = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone');
+    const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
 
+    if (hasPhoneField && !trimmedPhone) {
+      return res.status(400).json({ error: '전화번호는 필수입니다.' });
+    }
+
+    const client = await pool.connect();
     try {
-      const result = await pool.query(
+      await client.query('BEGIN');
+
+      const result = await client.query(
         `UPDATE yoga_customers 
          SET name = COALESCE($1, name),
              phone = COALESCE($2, phone),
              notes = COALESCE($3, notes)
          WHERE id = $4
          RETURNING *`,
-        [name, phone, notes, id]
+        [name, hasPhoneField ? trimmedPhone : null, notes, id]
       );
 
       if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Customer not found' });
       }
 
+      if (hasPhoneField) {
+        await client.query(
+          `UPDATE yoga_users u
+           SET login_id = $1
+           FROM yoga_customers c
+           WHERE c.id = $2
+             AND u.id = c.user_id`,
+          [trimmedPhone, id]
+        );
+      }
+
+      await client.query('COMMIT');
       res.json(result.rows[0]);
-    } catch (error) {
+    } catch (error: any) {
+      await client.query('ROLLBACK');
       console.error('Update customer error:', error);
+      if (error.code === '23505') {
+        return res.status(400).json({ error: 'Login ID already exists' });
+      }
       res.status(500).json({ error: 'Server error' });
+    } finally {
+      client.release();
     }
   }
 );

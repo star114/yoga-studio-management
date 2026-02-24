@@ -352,7 +352,13 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   process.env.JWT_SECRET = 'test-secret';
   const h = createCustomersHarness();
 
-  h.queryQueue.push({ rows: [] });
+  const notFoundUpdateClient = h.createDbClientMock();
+  notFoundUpdateClient.queryQueue.push(
+    { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [] }, // customer update
+    { rows: [], rowCount: 0 } // ROLLBACK
+  );
+  h.connectQueue.push(notFoundUpdateClient);
   let res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -362,18 +368,33 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 11, name: 'X2' }] });
+  const syncLoginClient = h.createDbClientMock();
+  syncLoginClient.queryQueue.push(
+    { rows: [], rowCount: 0 }, // BEGIN
+    { rows: [{ id: 11, name: 'X2', phone: '01012345678' }] }, // customer update
+    { rows: [], rowCount: 1 }, // login_id sync
+    { rows: [], rowCount: 0 } // COMMIT
+  );
+  h.connectQueue.push(syncLoginClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
     params: { id: '11' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'X2' },
+    body: { name: 'X2', phone: '01012345678' },
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.name, 'X2');
+  assert.match(String(syncLoginClient.queryCalls[2][0]), /UPDATE yoga_users u/);
+  assert.equal(syncLoginClient.queryCalls[2][1][0], '01012345678');
 
-  h.queryQueue.push(new Error('update fail'));
+  const updateErrClient = h.createDbClientMock();
+  updateErrClient.queryQueue.push(
+    { rows: [], rowCount: 0 }, // BEGIN
+    new Error('update fail'),
+    { rows: [], rowCount: 0 } // ROLLBACK
+  );
+  h.connectQueue.push(updateErrClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -382,6 +403,18 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
     body: { name: 'X3' },
   });
   assert.equal(res.status, 500);
+
+  const invalidPhoneClient = h.createDbClientMock();
+  h.connectQueue.push(invalidPhoneClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { phone: '   ' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(invalidPhoneClient.queryCalls.length, 0);
 
   h.queryQueue.push({ rows: [] });
   t.mock.method(bcrypt, 'hash', async () => 'r-hash');
