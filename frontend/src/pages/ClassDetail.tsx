@@ -256,7 +256,7 @@ const ClassDetail: React.FC = () => {
     currentStatus: 'reserved' | 'attended' | 'absent',
     attendanceStatus: 'reserved' | 'attended' | 'absent'
   ) => {
-    if (currentStatus === 'reserved' && attendanceStatus === 'attended') {
+    if (currentStatus !== 'attended' && attendanceStatus === 'attended') {
       await handleCheckIn(customerId);
       return;
     }

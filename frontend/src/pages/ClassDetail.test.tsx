@@ -400,6 +400,41 @@ describe('ClassDetail page', () => {
     promptSpy.mockRestore();
   });
 
+  it('runs check-in flow when changing status from absent to attended', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce('  결석정정 출석  ');
+    attendanceCheckInMock.mockResolvedValueOnce(undefined);
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          class_id: 1,
+          customer_id: 101,
+          attendance_status: 'absent',
+          registered_at: '2026-03-01T01:00:00.000Z',
+          registration_comment: '기존 코멘트',
+          attendance_id: 9001,
+          attendance_instructor_comment: '기존 강사 코멘트',
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('출석 상태')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('출석 상태'), { target: { value: 'attended' } });
+
+    await waitFor(() => expect(attendanceCheckInMock).toHaveBeenCalledWith({
+      customer_id: 101,
+      class_id: 1,
+      instructor_comment: '결석정정 출석',
+    }));
+    expect(classUpdateRegistrationStatusMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('출석 체크를 완료했습니다.')).toBeTruthy());
+    promptSpy.mockRestore();
+  });
+
   it('aborts check-in when prompt is cancelled', async () => {
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce(null);
 
