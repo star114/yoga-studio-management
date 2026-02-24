@@ -286,14 +286,13 @@ const CustomerDashboard: React.FC = () => {
   };
 
   const persistComment = async (rawComment: string) => {
-    if (!nextUpcomingClass) return;
     const mergedComment = rawComment.trim();
 
     setIsSavingComment(true);
 
     try {
       await classAPI.updateMyRegistrationComment(nextUpcomingClass.class_id, mergedComment);
-      setNextUpcomingClass((prev) => (prev ? { ...prev, registration_comment: mergedComment || null } : prev));
+      setNextUpcomingClass({ ...nextUpcomingClass, registration_comment: mergedComment || null });
     } catch (error) {
       console.error('Failed to save registration comment:', error);
     } finally {

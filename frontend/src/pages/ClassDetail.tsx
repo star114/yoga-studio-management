@@ -233,11 +233,6 @@ const ClassDetail: React.FC = () => {
   };
 
   const handleSaveInstructorComment = async (registration: ClassRegistration) => {
-    if (!registration.attendance_id) {
-      setError('출석 체크 후 강사 코멘트를 저장할 수 있습니다.');
-      return;
-    }
-
     try {
       setError('');
       setNotice('');
@@ -282,14 +277,10 @@ const ClassDetail: React.FC = () => {
   };
 
   const handleClassEditChange = (key: keyof ClassEditForm, value: string | boolean) => {
-    setClassEditForm((prev) => {
-      if (!prev) return prev;
-      return { ...prev, [key]: value } as ClassEditForm;
-    });
+    setClassEditForm((prev) => ({ ...prev, [key]: value } as ClassEditForm));
   };
 
   const resetClassEditForm = () => {
-    if (!classDetail) return;
     setClassEditForm({
       title: classDetail.title,
       class_date: String(classDetail.class_date).slice(0, 10),
@@ -304,7 +295,6 @@ const ClassDetail: React.FC = () => {
 
   const handleSaveClassInfo = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!classEditForm) return;
 
     const title = classEditForm.title.trim();
     if (!title) {

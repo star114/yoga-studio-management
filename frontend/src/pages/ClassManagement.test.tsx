@@ -2,7 +2,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import ClassManagement from './ClassManagement';
+import ClassManagement, { buildRecurringDates } from './ClassManagement';
 
 const {
   getAllMock,
@@ -122,6 +122,8 @@ describe('ClassManagement page', () => {
     fireEvent.change(screen.getByLabelText('시작 시간'), { target: { value: '09:00' } });
     fireEvent.change(screen.getByLabelText('종료 시간'), { target: { value: '10:00' } });
     fireEvent.change(screen.getByLabelText('제한 인원'), { target: { value: '12' } });
+    fireEvent.click(screen.getByLabelText('오픈 상태'));
+    fireEvent.click(screen.getByLabelText('오픈 상태'));
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '  note  ' } });
     fireEvent.click(screen.getByRole('button', { name: '수업 추가' }));
 
@@ -198,6 +200,28 @@ describe('ClassManagement page', () => {
     fireEvent.submit(screen.getByRole('button', { name: '수업 추가' }).closest('form') as HTMLFormElement);
     await waitFor(() => expect(screen.getByText('선택한 조건에 맞는 반복 수업 날짜가 없습니다.')).toBeTruthy());
 
+  });
+
+  it('updates recurring end date when start date moves forward and clears weekdays when recurring is off', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-25' } });
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    fireEvent.change(screen.getByLabelText('반복 종료 날짜'), { target: { value: '2026-02-26' } });
+    fireEvent.click(screen.getByLabelText('화'));
+
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-03-01' } });
+    expect((screen.getByLabelText('반복 종료 날짜') as HTMLInputElement).value).toBe('2026-03-01');
+
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    expect((screen.getByLabelText('화') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('returns empty recurring dates for invalid ranges', () => {
+    expect(buildRecurringDates('invalid', '2026-02-01', [1])).toEqual([]);
+    expect(buildRecurringDates('2026-03-02', '2026-03-01', [1])).toEqual([]);
   });
 
   it('shows parsed error when create fails', async () => {

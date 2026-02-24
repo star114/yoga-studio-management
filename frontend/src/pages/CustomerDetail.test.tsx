@@ -136,6 +136,29 @@ describe('CustomerDetail page', () => {
     expect(screen.queryByText('주소:')).toBeNull();
   });
 
+  it('handles missing recentAttendances and null notes in edit/cancel forms', async () => {
+    getByIdMock.mockResolvedValueOnce({
+      data: {
+        customer: {
+          id: 1,
+          name: '메모없음',
+          phone: '010-1212-3434',
+          notes: null,
+        },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('메모없음')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '기본 정보 수정' }));
+    expect((screen.getByLabelText('고객 메모') as HTMLTextAreaElement).value).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '기본 정보 수정' }));
+    expect((screen.getByLabelText('고객 메모') as HTMLTextAreaElement).value).toBe('');
+  });
+
   it('renders detail info and empty memberships state', async () => {
     renderPage();
 
@@ -169,6 +192,26 @@ describe('CustomerDetail page', () => {
     fireEvent.change(screen.getByLabelText('고객 이름'), { target: { value: '변경전취소' } });
     fireEvent.click(screen.getByRole('button', { name: '취소' }));
     expect(screen.queryByRole('button', { name: '고객 정보 저장' })).toBeNull();
+  });
+
+  it('validates required phone in customer edit and shows update error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    updateCustomerMock.mockRejectedValueOnce(new Error('update failed'));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '기본 정보 수정' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '기본 정보 수정' }));
+
+    fireEvent.change(screen.getByLabelText('고객 전화번호'), { target: { value: '   ' } });
+    fireEvent.submit(screen.getByRole('button', { name: '고객 정보 저장' }).closest('form') as HTMLFormElement);
+    await waitFor(() => expect(screen.getByText('전화번호는 필수입니다.')).toBeTruthy());
+    expect(updateCustomerMock).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('고객 전화번호'), { target: { value: '010-3333-4444' } });
+    fireEvent.submit(screen.getByRole('button', { name: '고객 정보 저장' }).closest('form') as HTMLFormElement);
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 
   it('renders only latest attended class and instructor comment', async () => {
@@ -205,6 +248,58 @@ describe('CustomerDetail page', () => {
     expect(screen.queryByText('빈야사')).toBeNull();
     expect(screen.getByText('강사 코멘트: 호흡이 좋습니다.')).toBeTruthy();
     expect(screen.getByRole('link', { name: '전체 보기' })).toBeTruthy();
+  });
+
+  it('renders fallback latest attendance datetime when class datetime is missing', async () => {
+    getByIdMock.mockResolvedValueOnce({
+      data: {
+        customer: {
+          id: 1,
+          name: '홍길동',
+          phone: '010-1111-2222',
+        },
+        recentAttendances: [
+          {
+            id: 201,
+            attendance_date: '2026-02-20T10:00:00.000Z',
+            class_title: '아쉬탕가',
+            class_date: null,
+            class_start_time: null,
+            instructor_comment: null,
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    expect(screen.getByText('-')).toBeTruthy();
+  });
+
+  it('renders fallback latest attendance title when class title/type are both missing', async () => {
+    getByIdMock.mockResolvedValueOnce({
+      data: {
+        customer: {
+          id: 1,
+          name: '홍길동',
+          phone: '010-1111-2222',
+        },
+        recentAttendances: [
+          {
+            id: 202,
+            attendance_date: '2026-02-20T10:00:00.000Z',
+            class_title: null,
+            class_type: null,
+            class_date: null,
+            class_start_time: null,
+            instructor_comment: null,
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('수업 정보 없음')).toBeTruthy());
   });
 
   it('resets password with cancel and success paths', async () => {
@@ -264,6 +359,56 @@ describe('CustomerDetail page', () => {
     expect(getByIdMock).toHaveBeenCalledTimes(2);
     expect(getByCustomerMock).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.getByText('회원권을 지급했습니다.')).toBeTruthy());
+  });
+
+  it('handles create-membership refresh when recent attendances/notes are missing', async () => {
+    getByIdMock
+      .mockResolvedValueOnce({
+        data: {
+          customer: {
+            id: 1,
+            name: '홍길동',
+            phone: '010-1111-2222',
+            notes: '초기 메모',
+          },
+          recentAttendances: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          customer: {
+            id: 1,
+            name: '홍길동',
+            phone: '010-1111-2222',
+            notes: null,
+          },
+        },
+      });
+    createMembershipMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('회원권 발급')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('회원권 관리'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: '회원권 지급' }));
+
+    await waitFor(() => expect(createMembershipMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('회원권을 지급했습니다.')).toBeTruthy());
+  });
+
+  it('saves customer edit with empty notes as null', async () => {
+    updateCustomerMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '기본 정보 수정' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '기본 정보 수정' }));
+    fireEvent.change(screen.getByLabelText('고객 메모'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: '고객 정보 저장' }));
+
+    await waitFor(() => expect(updateCustomerMock).toHaveBeenCalledWith(1, {
+      name: '홍길동',
+      phone: '010-1111-2222',
+      notes: null,
+    }));
   });
 
   it('shows parsed error when create membership fails', async () => {
@@ -329,6 +474,48 @@ describe('CustomerDetail page', () => {
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.click(screen.getByRole('button', { name: '취소' }));
     expect(screen.queryByRole('button', { name: '저장' })).toBeNull();
+  });
+
+  it('renders membership start/end dates when provided', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 10,
+          membership_type_name: '날짜있음권',
+          remaining_sessions: 3,
+          is_active: true,
+          start_date: '2026-02-01',
+          expected_end_date: '2026-03-05',
+          notes: null,
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('날짜있음권')).toBeTruthy());
+    expect(screen.getByText('시작일: 2026년 2월 1일')).toBeTruthy();
+    expect(screen.getByText('예상 종료일: 2026년 3월 5일')).toBeTruthy();
+  });
+
+  it('renders membership date fallback as dash when dates are missing', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 9,
+          membership_type_name: '날짜없음권',
+          remaining_sessions: 1,
+          is_active: true,
+          start_date: null,
+          expected_end_date: null,
+          notes: null,
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('날짜없음권')).toBeTruthy());
+    expect(screen.getByText('시작일: -')).toBeTruthy();
+    expect(screen.getByText('예상 종료일: -')).toBeTruthy();
   });
 
   it('shows parsed error when update membership fails', async () => {

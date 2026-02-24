@@ -40,17 +40,6 @@ const scopeConfigMap = {
     include: ['src/**/*.{ts,tsx}'],
     exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
-  'ci': {
-    include: [
-      'src/utils/**/*.ts',
-      'src/services/**/*.ts',
-      'src/contexts/**/*.tsx',
-      'src/App.tsx',
-      'src/components/**/*.tsx',
-      'src/index.tsx',
-    ],
-    exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-  },
 };
 
 const selectedScope = scopeConfigMap[coverageScope] || scopeConfigMap['api-error'];

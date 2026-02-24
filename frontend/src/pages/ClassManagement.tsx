@@ -49,7 +49,7 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: '토' },
 ];
 
-const buildRecurringDates = (startDate: string, endDate: string, weekdays: number[]): string[] => {
+export const buildRecurringDates = (startDate: string, endDate: string, weekdays: number[]): string[] => {
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {

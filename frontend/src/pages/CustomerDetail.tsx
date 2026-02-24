@@ -155,7 +155,6 @@ const CustomerDetail: React.FC = () => {
   };
 
   const startEditCustomer = () => {
-    if (!customer) return;
     setEditCustomerForm({
       name: customer.name,
       phone: customer.phone,
@@ -166,7 +165,6 @@ const CustomerDetail: React.FC = () => {
   };
 
   const cancelEditCustomer = () => {
-    if (!customer) return;
     setEditCustomerForm({
       name: customer.name,
       phone: customer.phone,
@@ -177,7 +175,6 @@ const CustomerDetail: React.FC = () => {
 
   const handleSaveCustomer = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!customer) return;
 
     const trimmedPhone = editCustomerForm.phone.trim();
     if (!trimmedPhone) {
@@ -194,14 +191,12 @@ const CustomerDetail: React.FC = () => {
         notes: editCustomerForm.notes.trim() || null,
       });
 
-      setCustomer((prev) => (prev
-        ? {
-            ...prev,
-            name: editCustomerForm.name,
-            phone: trimmedPhone,
-            notes: editCustomerForm.notes.trim() || null,
-          }
-        : prev));
+      setCustomer({
+        ...customer,
+        name: editCustomerForm.name,
+        phone: trimmedPhone,
+        notes: editCustomerForm.notes.trim() || null,
+      });
       setIsEditingCustomer(false);
       showNotice('고객 정보를 수정했습니다.');
     } catch (saveError: unknown) {

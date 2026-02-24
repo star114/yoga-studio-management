@@ -66,9 +66,10 @@ describe('CustomerManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('표시할 고객이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '신규회원' } });
-    fireEvent.click(screen.getByRole('button', { name: '고객 생성' }));
+    fireEvent.submit(screen.getByRole('button', { name: '고객 생성' }).closest('form') as HTMLFormElement);
 
     await waitFor(() => expect(createMock).not.toHaveBeenCalled());
+    expect(screen.getByText('전화번호는 필수입니다.')).toBeTruthy();
     expect(createMock).not.toHaveBeenCalled();
   });
 

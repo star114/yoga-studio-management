@@ -158,6 +158,7 @@ describe('AdminDashboard page', () => {
     expect(screen.getByText('빈야사')).toBeTruthy();
     expect(screen.getByText('회원권 2개')).toBeTruthy();
     expect(screen.getByText(/\+\d+개 더 있음/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /김영희/ }));
 
   });
 
@@ -171,6 +172,8 @@ describe('AdminDashboard page', () => {
     fireEvent.click(screen.getByText('오전요가').closest('button') as HTMLButtonElement);
     fireEvent.click(screen.getByRole('button', { name: '주간' }));
     await waitFor(() => expect(screen.getAllByText('수업 없음').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
     expect(screen.getAllByText('닫힘').length).toBeGreaterThan(0);
     expect(screen.getByText('16:00 - 17:00')).toBeTruthy();
     fireEvent.click(screen.getAllByText('수업 없음')[0].closest('button') as HTMLButtonElement);
@@ -188,6 +191,24 @@ describe('AdminDashboard page', () => {
     fireEvent.click(screen.getByRole('button', { name: '이전' }));
 
     fireEvent.click(screen.getByRole('button', { name: '오늘' }));
+  });
+
+  it('navigates to class detail when clicking day entry', async () => {
+    const originalLocation = window.location;
+    // @ts-expect-error test override
+    delete window.location;
+    // @ts-expect-error test override
+    window.location = { href: '' };
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('수업 캘린더')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '일간' }));
+    await waitFor(() => expect(screen.getByText('오전요가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /오전요가/ }));
+
+    expect(window.location.href).toContain('/classes/1');
+    window.location = originalLocation;
   });
 
   it('shows empty states for day view, attendance, and customers', async () => {

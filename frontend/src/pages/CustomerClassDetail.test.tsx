@@ -12,7 +12,7 @@ const { classGetMyClassDetailMock, parseApiErrorMock } = vi.hoisted(() => ({
 let authState: {
   user: { id: number; login_id: string; role: 'admin' | 'customer' } | null;
 } = {
-  user: { id: 1, login_id: 'customer@yoga.com', role: 'customer' },
+  user: { id: 1, login_id: 'customer', role: 'customer' },
 };
 
 let routeId = '1';
@@ -48,7 +48,7 @@ const renderPage = () => render(
 describe('CustomerClassDetail page', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    authState = { user: { id: 1, login_id: 'customer@yoga.com', role: 'customer' } };
+    authState = { user: { id: 1, login_id: 'customer', role: 'customer' } };
     routeId = '1';
     classGetMyClassDetailMock.mockResolvedValue({
       data: {
@@ -69,8 +69,16 @@ describe('CustomerClassDetail page', () => {
   });
 
   it('redirects non-customer user', () => {
-    authState = { user: { id: 9, login_id: 'admin@yoga.com', role: 'admin' } };
+    authState = { user: { id: 9, login_id: 'admin', role: 'admin' } };
     renderPage();
+    expect(classGetMyClassDetailMock).not.toHaveBeenCalled();
+  });
+
+  it('shows invalid route error for bad class id', async () => {
+    routeId = 'abc';
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('유효하지 않은 수업 경로입니다.')).toBeTruthy());
     expect(classGetMyClassDetailMock).not.toHaveBeenCalled();
   });
 
@@ -82,7 +90,26 @@ describe('CustomerClassDetail page', () => {
     expect(screen.getByText('호흡 안정적')).toBeTruthy();
   });
 
-  it('shows fallback when comments are empty', async () => {
+  it('renders absent status and fallback comments', async () => {
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '빈야사',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'absent',
+        registration_comment: null,
+        instructor_comment: null,
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('결석')).toBeTruthy());
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
+
+  it('renders reserved status label', async () => {
     classGetMyClassDetailMock.mockResolvedValueOnce({
       data: {
         id: 1,
@@ -95,14 +122,37 @@ describe('CustomerClassDetail page', () => {
         instructor_comment: null,
       },
     });
+
     renderPage();
     await waitFor(() => expect(screen.getByText('예약')).toBeTruthy());
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
 
   it('shows API error fallback', async () => {
     classGetMyClassDetailMock.mockRejectedValueOnce(new Error('failed'));
     renderPage();
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+  });
+
+  it('shows default not-found message when API returns empty detail', async () => {
+    classGetMyClassDetailMock.mockResolvedValueOnce({ data: null });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
+  });
+
+  it('keeps detail and shows error banner when a later reload fails', async () => {
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('수업 상세')).toBeTruthy());
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockRejectedValueOnce(new Error('reload failed'));
+
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(screen.getByText('나의 수업 정보')).toBeTruthy();
   });
 });

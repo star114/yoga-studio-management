@@ -53,16 +53,16 @@ describe('CustomerMemberships page', () => {
     expect(screen.getByText('활성화된 회원권이 없습니다')).toBeTruthy();
   });
 
-  it('renders active membership info', async () => {
+  it('renders active membership info including unlimited sessions', async () => {
     membershipGetByCustomerMock.mockResolvedValueOnce({
       data: [
         {
           id: 1,
           membership_type_name: '프리패스',
-          remaining_sessions: 5,
+          remaining_sessions: null,
           is_active: true,
           start_date: '2026-02-01',
-          expected_end_date: '2026-03-15',
+          expected_end_date: null,
         },
       ],
     });
@@ -70,8 +70,60 @@ describe('CustomerMemberships page', () => {
     render(<CustomerMemberships />);
 
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
-    expect(screen.getByText('5회')).toBeTruthy();
+    expect(screen.getByText('무제한')).toBeTruthy();
     expect(screen.getByText('2026년 2월 1일')).toBeTruthy();
-    expect(screen.getByText('2026년 3월 15일')).toBeTruthy();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
+
+  it('renders expected end date when provided', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          membership_type_name: '10회권',
+          remaining_sessions: 3,
+          is_active: true,
+          start_date: '2026-02-01',
+          expected_end_date: '2026-04-01',
+        },
+      ],
+    });
+
+    render(<CustomerMemberships />);
+
+    await waitFor(() => expect(screen.getByText('10회권')).toBeTruthy());
+    expect(screen.getByText('2026년 4월 1일')).toBeTruthy();
+  });
+
+  it('renders dash when start date is missing', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 3,
+          membership_type_name: '6회권',
+          remaining_sessions: 2,
+          is_active: true,
+          start_date: null,
+          expected_end_date: '2026-05-01',
+        },
+      ],
+    });
+
+    render(<CustomerMemberships />);
+
+    await waitFor(() => expect(screen.getByText('6회권')).toBeTruthy());
+    expect(screen.getByText('2026년 5월 1일')).toBeTruthy();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
+
+  it('handles membership load failure gracefully', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    membershipGetByCustomerMock.mockRejectedValueOnce(new Error('failed'));
+
+    render(<CustomerMemberships />);
+
+    await waitFor(() => expect(screen.getByText('활성화된 회원권이 없습니다')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });
