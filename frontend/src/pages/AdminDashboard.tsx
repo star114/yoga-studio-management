@@ -45,8 +45,7 @@ interface DashboardClass {
   max_capacity?: number;
   current_enrollment?: number;
   is_open?: boolean;
-  is_excluded?: boolean;
-  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
 }
 
 type CalendarView = 'month' | 'week' | 'day';
@@ -159,7 +158,7 @@ const AdminDashboard: React.FC = () => {
 
       setRecentCustomers(customersRes.data.slice(0, 5));
       setTodayAttendances(todayRes.data);
-      setClasses(classesRes.data.filter((item: DashboardClass) => !item.is_excluded));
+      setClasses(classesRes.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -169,15 +168,13 @@ const AdminDashboard: React.FC = () => {
 
   const renderClassChip = (item: DashboardClass) => {
     const status = item.class_status || 'open';
-    const closed = status === 'closed' || status === 'completed' || status === 'excluded';
+    const closed = status === 'closed' || status === 'completed';
     const statusLabel =
       status === 'completed'
         ? '완료'
         : status === 'in_progress'
           ? '진행중'
-          : status === 'excluded'
-            ? '제외'
-            : status === 'closed'
+          : status === 'closed'
               ? '닫힘'
               : '오픈';
     return (
@@ -402,9 +399,7 @@ const AdminDashboard: React.FC = () => {
                           ? '완료'
                           : item.class_status === 'in_progress'
                             ? '진행중'
-                            : item.class_status === 'excluded'
-                              ? '제외'
-                              : item.is_open === false
+                            : item.is_open === false
                                 ? '마감'
                                 : '접수중'}
                       </span>

@@ -11,7 +11,7 @@ interface CustomerClassDetailData {
   class_date: string;
   start_time: string;
   end_time: string;
-  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
   registration_comment?: string | null;
   instructor_comment?: string | null;
   attendance_status?: 'reserved' | 'attended' | 'absent';

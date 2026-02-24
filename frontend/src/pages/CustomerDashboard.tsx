@@ -44,7 +44,6 @@ interface MyRegistrationClass {
   start_time: string;
   end_time: string;
   is_open: boolean;
-  is_excluded: boolean;
 }
 
 interface CustomerCalendarEntry {
@@ -140,7 +139,7 @@ const CustomerDashboard: React.FC = () => {
       ]);
 
       const attendanceItems = attendancesRes.data as CustomerAttendance[];
-      const registrationItems = (registrationsRes.data as MyRegistrationClass[]).filter((item) => !item.is_excluded);
+      const registrationItems = registrationsRes.data as MyRegistrationClass[];
 
       const now = new Date();
       const nextClasses = registrationItems.filter((item) => {

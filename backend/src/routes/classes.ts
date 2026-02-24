@@ -2,7 +2,7 @@ import express from 'express';
 import { body, param, query } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
-import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
+import { isValidTime, timeToMinutes } from '../utils/classSchedule';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -35,7 +35,6 @@ router.get('/',
         SELECT
           c.*,
           CASE
-            WHEN c.is_excluded THEN 'excluded'
             WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
             WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
             WHEN c.is_open THEN 'open'
@@ -109,8 +108,7 @@ router.get('/registrations/me',
            c.class_date,
            c.start_time,
            c.end_time,
-           c.is_open,
-           c.is_excluded
+           c.is_open
          FROM yoga_class_registrations r
          INNER JOIN yoga_classes c ON c.id = r.class_id
          WHERE r.customer_id = $1
@@ -140,7 +138,6 @@ router.get('/:id',
         `SELECT
            c.*,
            CASE
-             WHEN c.is_excluded THEN 'excluded'
              WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
              WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
              WHEN c.is_open THEN 'open'
@@ -194,9 +191,7 @@ router.get('/:id/me',
            c.end_time,
            c.max_capacity,
            c.is_open,
-           c.is_excluded,
            CASE
-             WHEN c.is_excluded THEN 'excluded'
              WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
              WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
              WHEN c.is_open THEN 'open'
@@ -430,7 +425,7 @@ router.post('/:id/registrations',
       await client.query('BEGIN');
 
       const classResult = await client.query(
-        `SELECT id, is_open, max_capacity, is_excluded, class_date, start_time, end_time
+        `SELECT id, is_open, max_capacity, class_date, start_time, end_time
          FROM yoga_classes
          WHERE id = $1
          FOR UPDATE`,
@@ -443,11 +438,6 @@ router.post('/:id/registrations',
       }
 
       const yogaClass = classResult.rows[0];
-
-      if (yogaClass.is_excluded) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Class is excluded' });
-      }
 
       const now = new Date();
       const classEndAt = new Date(`${String(yogaClass.class_date).slice(0, 10)}T${String(yogaClass.end_time).slice(0, 8)}`);
@@ -604,206 +594,6 @@ router.post('/',
       res.status(201).json(result.rows[0]);
     } catch (error) {
       console.error('Create class error:', error);
-      res.status(500).json({ error: 'Server error' });
-    }
-  }
-);
-
-// 반복 수업 일괄 등록 (관리자)
-router.post('/recurring',
-  authenticate,
-  requireAdmin,
-  body('title').notEmpty(),
-  body('recurrence_start_date').isDate(),
-  body('recurrence_end_date').isDate(),
-  body('weekdays').isArray({ min: 1 }),
-  body('weekdays.*').isInt({ min: 0, max: 6 }),
-  body('excluded_dates').optional().isArray(),
-  body('excluded_dates.*').optional().isDate(),
-  body('start_time').custom(isValidTime),
-  body('end_time').custom(isValidTime),
-  body('max_capacity').isInt({ min: 1 }),
-  validateRequest,
-  async (req, res) => {
-    const {
-      title,
-      recurrence_start_date,
-      recurrence_end_date,
-      weekdays,
-      excluded_dates,
-      start_time,
-      end_time,
-      max_capacity,
-      is_open,
-      notes,
-    } = req.body;
-
-    if (timeToMinutes(start_time) >= timeToMinutes(end_time)) {
-      return res.status(400).json({ error: 'End time must be after start time' });
-    }
-
-    const uniqueWeekdays = Array.from(new Set((weekdays as number[]).map((value) => Number(value))));
-    let classDates: string[] = [];
-    try {
-      classDates = getRecurringClassDates(
-        recurrence_start_date,
-        recurrence_end_date,
-        uniqueWeekdays,
-        Array.isArray(excluded_dates) ? excluded_dates : []
-      );
-    } catch (recurrenceError: unknown) {
-      return res.status(400).json({
-        error: recurrenceError instanceof Error ? recurrenceError.message : 'Invalid recurrence rule',
-      });
-    }
-
-    if (classDates.length === 0) {
-      return res.status(400).json({ error: 'No classes to create for the given recurrence rule' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const seriesResult = await client.query(
-        `INSERT INTO yoga_class_series
-         (title, start_time, end_time, max_capacity, is_open, notes, recurrence_start_date, recurrence_end_date, weekdays)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING id`,
-        [
-          title,
-          start_time,
-          end_time,
-          max_capacity,
-          is_open ?? true,
-          notes || null,
-          recurrence_start_date,
-          recurrence_end_date,
-          uniqueWeekdays,
-        ]
-      );
-
-      const seriesId = seriesResult.rows[0].id as number;
-      const values: Array<string | number | boolean | null> = [];
-      const rows: string[] = [];
-      let paramIndex = 1;
-
-      classDates.forEach((classDate) => {
-        rows.push(
-          `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, FALSE, NULL)`
-        );
-
-        values.push(
-          title,
-          classDate,
-          start_time,
-          end_time,
-          max_capacity,
-          is_open ?? true,
-          notes || null,
-          seriesId,
-        );
-
-        paramIndex += 8;
-      });
-
-      const insertResult = await client.query(
-        `INSERT INTO yoga_classes
-         (title, class_date, start_time, end_time, max_capacity, is_open, notes, recurring_series_id, is_excluded, excluded_reason)
-         VALUES ${rows.join(', ')}
-         RETURNING id`,
-        values
-      );
-
-      await client.query('COMMIT');
-      res.status(201).json({
-        series_id: seriesId,
-        created_count: insertResult.rows.length,
-      });
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Create recurring classes error:', error);
-      res.status(500).json({ error: 'Server error' });
-    } finally {
-      client.release();
-    }
-  }
-);
-
-// 반복 수업 중 특정 회차 제외 (관리자)
-router.post('/series/:seriesId/exclusions',
-  authenticate,
-  requireAdmin,
-  param('seriesId').isInt({ min: 1 }),
-  body('class_id').optional().isInt({ min: 1 }),
-  body('class_date').isDate(),
-  body('reason').optional().isString().isLength({ max: 200 }),
-  validateRequest,
-  async (req, res) => {
-    const seriesId = Number(req.params.seriesId);
-    const classId = req.body.class_id ? Number(req.body.class_id) : null;
-    const classDate = String(req.body.class_date).slice(0, 10);
-    const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
-
-    try {
-      const updateByClassId = classId !== null;
-      const result = updateByClassId
-        ? await pool.query(
-          `UPDATE yoga_classes
-           SET is_excluded = TRUE,
-               is_open = FALSE,
-               excluded_reason = CASE
-                 WHEN $3 = '' THEN excluded_reason
-                 ELSE $3
-               END
-           WHERE recurring_series_id = $1
-             AND id = $2
-             AND is_excluded = FALSE
-           RETURNING *`,
-          [seriesId, classId, reason]
-        )
-        : await pool.query(
-          `UPDATE yoga_classes
-           SET is_excluded = TRUE,
-               is_open = FALSE,
-               excluded_reason = CASE
-                 WHEN $3 = '' THEN excluded_reason
-                 ELSE $3
-               END
-           WHERE recurring_series_id = $1
-             AND class_date = $2
-             AND is_excluded = FALSE
-           RETURNING *`,
-          [seriesId, classDate, reason]
-        );
-
-      if (result.rows.length === 0) {
-        const checkResult = updateByClassId
-          ? await pool.query(
-            `SELECT id, is_excluded
-             FROM yoga_classes
-             WHERE recurring_series_id = $1
-               AND id = $2`,
-            [seriesId, classId]
-          )
-          : await pool.query(
-            `SELECT id, is_excluded
-             FROM yoga_classes
-             WHERE recurring_series_id = $1
-               AND class_date = $2`,
-            [seriesId, classDate]
-          );
-
-        if (checkResult.rows.length === 0) {
-          return res.status(404).json({ error: 'Recurring class occurrence not found' });
-        }
-
-        return res.status(400).json({ error: 'Class occurrence is already excluded' });
-      }
-
-      res.json(result.rows[0]);
-    } catch (error) {
-      console.error('Exclude recurring class occurrence error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }

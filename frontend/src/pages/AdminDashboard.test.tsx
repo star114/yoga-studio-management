@@ -72,7 +72,6 @@ describe('AdminDashboard page', () => {
           max_capacity: 10,
           current_enrollment: 4,
           is_open: true,
-          is_excluded: false,
           class_status: 'open',
         },
         {
@@ -85,7 +84,6 @@ describe('AdminDashboard page', () => {
           max_capacity: 10,
           current_enrollment: 10,
           is_open: false,
-          is_excluded: false,
           class_status: 'completed',
         },
         {
@@ -98,24 +96,10 @@ describe('AdminDashboard page', () => {
           max_capacity: 8,
           current_enrollment: 6,
           is_open: true,
-          is_excluded: false,
           class_status: 'in_progress',
         },
         {
           id: 4,
-          title: '제외표시',
-          class_date: todayDate,
-          start_time: '14:00:00',
-          end_time: '15:00:00',
-          instructor_name: '강사F',
-          max_capacity: 8,
-          current_enrollment: 1,
-          is_open: true,
-          is_excluded: false,
-          class_status: 'excluded',
-        },
-        {
-          id: 5,
           title: '마감수업',
           class_date: todayDate,
           start_time: '15:00:00',
@@ -124,22 +108,20 @@ describe('AdminDashboard page', () => {
           max_capacity: 8,
           current_enrollment: 8,
           is_open: false,
-          is_excluded: false,
           class_status: 'open',
         },
         {
-          id: 6,
+          id: 5,
           title: '닫힘수업',
           class_date: todayDate,
           start_time: '16:00:00',
           end_time: '17:00:00',
           instructor_name: '강사H',
           is_open: false,
-          is_excluded: false,
           class_status: 'closed',
         },
         {
-          id: 7,
+          id: 6,
           title: '진행수업',
           class_date: tomorrowDate,
           start_time: '09:00:00',
@@ -148,24 +130,10 @@ describe('AdminDashboard page', () => {
           max_capacity: 8,
           current_enrollment: 6,
           is_open: true,
-          is_excluded: false,
           class_status: 'in_progress',
         },
         {
-          id: 8,
-          title: '제외수업',
-          class_date: tomorrowDate,
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          instructor_name: '강사D',
-          max_capacity: 8,
-          current_enrollment: 1,
-          is_open: true,
-          is_excluded: true,
-          class_status: 'excluded',
-        },
-        {
-          id: 9,
+          id: 7,
           title: '기본상태수업',
           class_date: todayDate,
           start_time: '17:00:00',
@@ -173,7 +141,6 @@ describe('AdminDashboard page', () => {
           max_capacity: 12,
           current_enrollment: 1,
           is_open: true,
-          is_excluded: false,
         },
       ],
     });
@@ -198,7 +165,6 @@ describe('AdminDashboard page', () => {
     expect(screen.getByText('회원권 2개')).toBeTruthy();
     expect(screen.getByText(/\+\d+개 더 있음/)).toBeTruthy();
 
-    expect(screen.queryByText('제외수업')).toBeNull();
   });
 
   it('supports calendar month/week/day navigation', async () => {
@@ -222,7 +188,6 @@ describe('AdminDashboard page', () => {
     await waitFor(() => expect(screen.getAllByText('접수중').length).toBeGreaterThan(0));
     expect(screen.getByText('완료')).toBeTruthy();
     expect(screen.getByText('진행중')).toBeTruthy();
-    expect(screen.getByText('제외')).toBeTruthy();
     expect(screen.getAllByText('마감').length).toBeGreaterThan(0);
     expect(screen.getByText('기본상태수업')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '다음' }));

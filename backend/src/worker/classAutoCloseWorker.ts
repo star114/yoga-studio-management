@@ -33,7 +33,6 @@ export const startClassAutoCloseWorker = () => {
          FROM yoga_classes c
          WHERE r.class_id = c.id
            AND r.attendance_status = 'reserved'
-           AND c.is_excluded = FALSE
            AND (c.class_date::timestamp + c.start_time + INTERVAL '15 minutes') <= CURRENT_TIMESTAMP
          RETURNING r.id`
       );
@@ -47,7 +46,6 @@ export const startClassAutoCloseWorker = () => {
          SET is_open = FALSE,
              updated_at = CURRENT_TIMESTAMP
          WHERE is_open = TRUE
-           AND is_excluded = FALSE
            AND (class_date::timestamp + start_time + INTERVAL '15 minutes') <= CURRENT_TIMESTAMP
          RETURNING id`
       );

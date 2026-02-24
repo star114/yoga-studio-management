@@ -143,16 +143,6 @@ export const classAPI = {
   update: (id: number, data: unknown) =>
     api.put(`/classes/${id}`, data),
 
-  createRecurring: (data: unknown) =>
-    api.post('/classes/recurring', data),
-
-  excludeRecurringOccurrence: (seriesId: number, classDate: string, classId?: number, reason?: string) =>
-    api.post(`/classes/series/${seriesId}/exclusions`, {
-      class_id: classId,
-      class_date: classDate,
-      reason,
-    }),
-
   register: (classId: number, data: ClassRegistrationPayload = {}) =>
     api.post(`/classes/${classId}/registrations`, data),
 

@@ -12,10 +12,9 @@ interface YogaClassDetail {
   end_time: string;
   max_capacity: number;
   is_open: boolean;
-  is_excluded?: boolean;
   current_enrollment?: number;
   remaining_seats?: number;
-  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
 }
 
 interface Customer {
@@ -63,8 +62,6 @@ const ClassDetail: React.FC = () => {
         return '진행중';
       case 'closed':
         return '닫힘';
-      case 'excluded':
-        return '제외';
       default:
         return '오픈';
     }
@@ -298,7 +295,6 @@ const ClassDetail: React.FC = () => {
             disabled={
               isRegisterSubmitting
               || !classDetail.is_open
-              || !!classDetail.is_excluded
               || classDetail.class_status === 'completed'
             }
             className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"

@@ -43,21 +43,6 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 반복 수업 시리즈 테이블
-CREATE TABLE IF NOT EXISTS yoga_class_series (
-    id SERIAL PRIMARY KEY,
-    title VARCHAR(100) NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    max_capacity INTEGER NOT NULL CHECK (max_capacity > 0),
-    is_open BOOLEAN DEFAULT TRUE,
-    notes TEXT,
-    recurrence_start_date DATE NOT NULL,
-    recurrence_end_date DATE NOT NULL,
-    weekdays INTEGER[] NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- 오픈 수업 테이블
 CREATE TABLE IF NOT EXISTS yoga_classes (
     id SERIAL PRIMARY KEY,
@@ -68,9 +53,6 @@ CREATE TABLE IF NOT EXISTS yoga_classes (
     max_capacity INTEGER NOT NULL CHECK (max_capacity > 0),
     is_open BOOLEAN DEFAULT TRUE,
     notes TEXT,
-    recurring_series_id INTEGER REFERENCES yoga_class_series(id) ON DELETE SET NULL,
-    is_excluded BOOLEAN NOT NULL DEFAULT FALSE,
-    excluded_reason TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -109,8 +91,6 @@ CREATE INDEX IF NOT EXISTS idx_attendances_date ON yoga_attendances(attendance_d
 CREATE INDEX IF NOT EXISTS idx_attendances_class_id ON yoga_attendances(class_id);
 CREATE INDEX IF NOT EXISTS idx_classes_date ON yoga_classes(class_date);
 CREATE INDEX IF NOT EXISTS idx_classes_open ON yoga_classes(is_open);
-CREATE INDEX IF NOT EXISTS idx_classes_recurring_series_id ON yoga_classes(recurring_series_id);
-CREATE INDEX IF NOT EXISTS idx_classes_is_excluded ON yoga_classes(is_excluded);
 CREATE INDEX IF NOT EXISTS idx_class_registrations_class_id ON yoga_class_registrations(class_id);
 CREATE INDEX IF NOT EXISTS idx_class_registrations_customer_id ON yoga_class_registrations(customer_id);
 

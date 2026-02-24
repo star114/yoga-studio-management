@@ -11,7 +11,7 @@ interface YogaClass {
   start_time: string;
   end_time: string;
   max_capacity: number;
-  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
   current_enrollment?: number;
   remaining_seats?: number;
 }
@@ -20,8 +20,6 @@ const PAGE_SIZE = 20;
 
 const getClassStatusBadge = (item: YogaClass) => {
   switch (item.class_status) {
-    case 'excluded':
-      return { label: '제외', className: 'bg-red-100 text-red-700' };
     case 'completed':
       return { label: '완료', className: 'bg-slate-200 text-slate-700' };
     case 'in_progress':

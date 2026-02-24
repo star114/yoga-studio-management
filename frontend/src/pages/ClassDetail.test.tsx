@@ -75,7 +75,6 @@ const seedLoad = (overrides?: Record<string, unknown>) => {
       end_time: '10:00:00',
       max_capacity: 10,
       is_open: true,
-      is_excluded: false,
       class_status: 'open',
       current_enrollment: 1,
       remaining_seats: 9,
@@ -177,12 +176,6 @@ describe('ClassDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('상태: 닫힘')).toBeTruthy());
 
-    cleanup();
-    classGetByIdMock.mockResolvedValueOnce({ data: { id: 1, title: 'A', class_date: '2026-03-01', start_time: '09:00:00', end_time: '10:00:00', max_capacity: 10, is_open: true, class_status: 'excluded' } });
-    classGetRegistrationsMock.mockResolvedValueOnce({ data: [] });
-    customerGetAllMock.mockResolvedValueOnce({ data: [] });
-    renderPage();
-    await waitFor(() => expect(screen.getByText('상태: 제외')).toBeTruthy());
   });
 
   it('shows error when manual register is submitted without customer', async () => {
@@ -402,7 +395,6 @@ describe('ClassDetail page', () => {
         end_time: '10:00:00',
         max_capacity: 10,
         is_open: false,
-        is_excluded: true,
         class_status: 'completed',
       },
     });

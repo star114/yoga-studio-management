@@ -13,13 +13,10 @@ interface YogaClass {
   end_time: string;
   max_capacity: number;
   is_open: boolean;
-  is_excluded?: boolean;
-  excluded_reason?: string | null;
-  recurring_series_id?: number | null;
   notes?: string | null;
   current_enrollment?: number;
   remaining_seats?: number;
-  class_status?: 'open' | 'closed' | 'in_progress' | 'completed' | 'excluded';
+  class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
 }
 
 interface ClassForm {
@@ -52,10 +49,29 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: '토' },
 ];
 
+const buildRecurringDates = (startDate: string, endDate: string, weekdays: number[]): string[] => {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    return [];
+  }
+
+  const weekdaySet = new Set(weekdays);
+  const cursor = new Date(start);
+  const dates: string[] = [];
+
+  while (cursor <= end) {
+    if (weekdaySet.has(cursor.getDay())) {
+      dates.push(format(cursor, 'yyyy-MM-dd'));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dates;
+};
+
 const getClassStatusBadge = (item: YogaClass) => {
   switch (item.class_status) {
-    case 'excluded':
-      return { label: '제외', className: 'bg-red-100 text-red-700' };
     case 'completed':
       return { label: '완료', className: 'bg-slate-200 text-slate-700' };
     case 'in_progress':
@@ -216,13 +232,19 @@ const ClassManagement: React.FC = () => {
         await classAPI.update(editingClassId, payload);
         setFormNotice('수업 정보가 수정되었습니다.');
       } else if (isRecurringCreate) {
-        const recurringRes = await classAPI.createRecurring({
-          ...payload,
-          recurrence_start_date: form.class_date,
-          recurrence_end_date: recurrenceEndDate,
-          weekdays: recurrenceWeekdays,
-        });
-        setFormNotice(`반복 수업이 ${recurringRes.data.created_count || 0}건 생성되었습니다.`);
+        const recurringDates = buildRecurringDates(form.class_date, recurrenceEndDate, recurrenceWeekdays);
+        if (recurringDates.length === 0) {
+          setFormError('선택한 조건에 맞는 반복 수업 날짜가 없습니다.');
+          return;
+        }
+
+        await Promise.all(
+          recurringDates.map((classDate) => classAPI.create({
+            ...payload,
+            class_date: classDate,
+          }))
+        );
+        setFormNotice(`반복 수업이 ${recurringDates.length}건 생성되었습니다.`);
       } else {
         await classAPI.create(payload);
         setFormNotice('수업이 추가되었습니다.');
@@ -256,28 +278,6 @@ const ClassManagement: React.FC = () => {
     } catch (deleteError: unknown) {
       console.error('Failed to delete class:', deleteError);
       setError(parseApiError(deleteError));
-    }
-  };
-
-  const handleExcludeRecurringOccurrence = async (item: YogaClass) => {
-    const targetDate = item.class_date.slice(0, 10);
-    const ok = window.confirm(`${targetDate} 회차를 반복 일정에서 제외할까요?`);
-    if (!ok) return;
-
-    const reasonInput = window.prompt('제외 사유를 입력하세요. (선택)', '');
-
-    try {
-      await classAPI.excludeRecurringOccurrence(
-        item.recurring_series_id,
-        targetDate,
-        item.id,
-        reasonInput?.trim() || undefined
-      );
-      await loadClasses();
-      setFormNotice(`${targetDate} 회차가 제외되었습니다.`);
-    } catch (excludeError: unknown) {
-      console.error('Failed to exclude recurring occurrence:', excludeError);
-      setError(parseApiError(excludeError));
     }
   };
 
@@ -540,15 +540,6 @@ const ClassManagement: React.FC = () => {
                           >
                             상세
                           </Link>
-                          {item.recurring_series_id && !item.is_excluded && (
-                            <button
-                              type="button"
-                              onClick={() => void handleExcludeRecurringOccurrence(item)}
-                              className="px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200"
-                            >
-                              회차 제외
-                            </button>
-                          )}
                           <button
                             type="button"
                             onClick={() => startEdit(item)}

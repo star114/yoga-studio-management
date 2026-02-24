@@ -121,7 +121,6 @@ describe('CustomerDashboard page', () => {
           start_time: '09:00:00',
           end_time: '10:00:00',
           is_open: true,
-          is_excluded: false,
           instructor_name: '강사B',
         },
         {
@@ -133,7 +132,6 @@ describe('CustomerDashboard page', () => {
           start_time: '08:00:00',
           end_time: '09:00:00',
           is_open: true,
-          is_excluded: false,
           instructor_name: '강사A',
         },
       ],
@@ -175,7 +173,6 @@ describe('CustomerDashboard page', () => {
           start_time: '10:00:00',
           end_time: '11:00:00',
           is_open: true,
-          is_excluded: false,
         },
       ],
     });

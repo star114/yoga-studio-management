@@ -149,8 +149,6 @@ describe('api service', () => {
     classAPI.getMyRegistrations();
     classAPI.create(payload);
     classAPI.update(2, payload);
-    classAPI.createRecurring(payload);
-    classAPI.excludeRecurringOccurrence(3, '2026-01-01', 2, 'skip');
     classAPI.register(2);
     classAPI.register(2, { customer_id: 7 });
     classAPI.updateRegistrationComment(2, 7, 'note');
@@ -195,12 +193,6 @@ describe('api service', () => {
     expect(getMock).toHaveBeenCalledWith('/classes/registrations/me');
     expect(postMock).toHaveBeenCalledWith('/classes', payload);
     expect(putMock).toHaveBeenCalledWith('/classes/2', payload);
-    expect(postMock).toHaveBeenCalledWith('/classes/recurring', payload);
-    expect(postMock).toHaveBeenCalledWith('/classes/series/3/exclusions', {
-      class_id: 2,
-      class_date: '2026-01-01',
-      reason: 'skip',
-    });
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', {});
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7 });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment', { registration_comment: 'note' });
