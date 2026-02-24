@@ -149,6 +149,7 @@ describe('api service', () => {
     classAPI.getRegistrations(2);
     classAPI.getMyRegistrations();
     classAPI.create(payload);
+    classAPI.createRecurring(payload);
     classAPI.update(2, payload);
     classAPI.register(2);
     classAPI.register(2, { customer_id: 7 });
@@ -194,6 +195,7 @@ describe('api service', () => {
     expect(getMock).toHaveBeenCalledWith('/classes/2/registrations');
     expect(getMock).toHaveBeenCalledWith('/classes/registrations/me');
     expect(postMock).toHaveBeenCalledWith('/classes', payload);
+    expect(postMock).toHaveBeenCalledWith('/classes/recurring', payload);
     expect(putMock).toHaveBeenCalledWith('/classes/2', payload);
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', {});
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7 });

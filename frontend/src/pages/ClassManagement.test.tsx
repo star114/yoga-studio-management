@@ -7,11 +7,13 @@ import ClassManagement, { buildRecurringDates } from './ClassManagement';
 const {
   getAllMock,
   createMock,
+  createRecurringMock,
   deleteMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getAllMock: vi.fn(),
   createMock: vi.fn(),
+  createRecurringMock: vi.fn(),
   deleteMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
 }));
@@ -20,6 +22,7 @@ vi.mock('../services/api', () => ({
   classAPI: {
     getAll: getAllMock,
     create: createMock,
+    createRecurring: createRecurringMock,
     delete: deleteMock,
   },
 }));
@@ -141,7 +144,7 @@ describe('ClassManagement page', () => {
   });
 
   it('creates recurring classes and validates recurring form', async () => {
-    createMock.mockResolvedValue(undefined);
+    createRecurringMock.mockResolvedValue({ data: { created_count: 2 } });
     getAllMock
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ data: [] });
@@ -175,14 +178,12 @@ describe('ClassManagement page', () => {
     fireEvent.click(screen.getByLabelText('화'));
     fireEvent.submit(screen.getByRole('button', { name: '수업 추가' }).closest('form') as HTMLFormElement);
 
-    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(2));
-    expect(createMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    await waitFor(() => expect(createRecurringMock).toHaveBeenCalledTimes(1));
+    expect(createRecurringMock).toHaveBeenCalledWith(expect.objectContaining({
       title: '반복 요가',
-      class_date: '2026-02-23',
-    }));
-    expect(createMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      title: '반복 요가',
-      class_date: '2026-02-24',
+      recurrence_start_date: '2026-02-23',
+      recurrence_end_date: '2026-02-24',
+      weekdays: [1, 2],
     }));
     await waitFor(() => expect(screen.getByText('반복 수업이 2건 생성되었습니다.')).toBeTruthy());
 
@@ -200,6 +201,25 @@ describe('ClassManagement page', () => {
     fireEvent.submit(screen.getByRole('button', { name: '수업 추가' }).closest('form') as HTMLFormElement);
     await waitFor(() => expect(screen.getByText('선택한 조건에 맞는 반복 수업 날짜가 없습니다.')).toBeTruthy());
 
+  });
+
+  it('uses zero as recurring created count fallback when API omits created_count', async () => {
+    createRecurringMock.mockResolvedValueOnce({});
+    getAllMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '반복 요가' } });
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-23' } });
+    fireEvent.click(screen.getByLabelText('반복 일정으로 생성'));
+    fireEvent.change(screen.getByLabelText('반복 종료 날짜'), { target: { value: '2026-02-24' } });
+    fireEvent.click(screen.getByRole('button', { name: '수업 추가' }));
+
+    await waitFor(() => expect(createRecurringMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('반복 수업이 0건 생성되었습니다.')).toBeTruthy());
   });
 
   it('updates recurring end date when start date moves forward and clears weekdays when recurring is off', async () => {

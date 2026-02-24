@@ -140,6 +140,9 @@ export const classAPI = {
   create: (data: unknown) =>
     api.post('/classes', data),
 
+  createRecurring: (data: unknown) =>
+    api.post('/classes/recurring', data),
+
   update: (id: number, data: unknown) =>
     api.put(`/classes/${id}`, data),
 

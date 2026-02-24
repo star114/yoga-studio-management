@@ -206,13 +206,14 @@ const ClassManagement: React.FC = () => {
           return;
         }
 
-        await Promise.all(
-          recurringDates.map((classDate) => classAPI.create({
-            ...payload,
-            class_date: classDate,
-          }))
-        );
-        setFormNotice(`반복 수업이 ${recurringDates.length}건 생성되었습니다.`);
+        const recurringRes = await classAPI.createRecurring({
+          ...payload,
+          recurrence_start_date: form.class_date,
+          recurrence_end_date: recurrenceEndDate,
+          weekdays: recurrenceWeekdays,
+        });
+        const createdCount = Number(recurringRes.data?.created_count ?? 0);
+        setFormNotice(`반복 수업이 ${createdCount}건 생성되었습니다.`);
       } else {
         await classAPI.create(payload);
         setFormNotice('수업이 추가되었습니다.');

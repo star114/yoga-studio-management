@@ -162,7 +162,13 @@ test('attendances list/update/today routes cover success and errors', async () =
   });
   assert.equal(res.status, 500);
 
-  h.queryQueue.push({ rows: [] });
+  const updateNotFoundClient = h.createDbClientMock();
+  updateNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateNotFoundClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -172,7 +178,14 @@ test('attendances list/update/today routes cover success and errors', async () =
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [] });
+  const updateClassNotFoundClient = h.createDbClientMock();
+  updateClassNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, customer_id: 3, class_id: 1 }] },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateClassNotFoundClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -182,7 +195,14 @@ test('attendances list/update/today routes cover success and errors', async () =
   });
   assert.equal(res.status, 400);
 
-  h.queryQueue.push({ rows: [{ id: 8, instructor_comment: 'x2' }] });
+  const updateCommentOnlyClient = h.createDbClientMock();
+  updateCommentOnlyClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, customer_id: 3, class_id: 1 }] },
+    { rows: [{ id: 8, instructor_comment: 'x2', class_id: 1, customer_id: 3 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateCommentOnlyClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -192,10 +212,19 @@ test('attendances list/update/today routes cover success and errors', async () =
   });
   assert.equal(res.status, 200);
 
-  h.queryQueue.push(
+  const updateMoveClassClient = h.createDbClientMock();
+  updateMoveClassClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, customer_id: 3, class_id: 1 }] },
     { rows: [{ id: 2, title: '빈야사' }] },
-    { rows: [{ id: 8, instructor_comment: 'x2', class_id: 2, class_type: '빈야사' }] }
+    { rows: [{ id: 900 }] },
+    { rows: [] },
+    { rows: [{ id: 8, instructor_comment: 'x2', class_id: 2, class_type: '빈야사', customer_id: 3 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
   );
+  h.connectQueue.push(updateMoveClassClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -204,8 +233,17 @@ test('attendances list/update/today routes cover success and errors', async () =
     body: { class_id: 2 },
   });
   assert.equal(res.status, 200);
+  assert.match(String(updateMoveClassClient.queryCalls[6][0]), /UPDATE yoga_class_registrations r/i);
+  assert.match(String(updateMoveClassClient.queryCalls[7][0]), /SET attendance_status = 'attended'/i);
 
-  h.queryQueue.push(new Error('update fail'));
+  const updateErrClient = h.createDbClientMock();
+  updateErrClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, customer_id: 3, class_id: 1 }] },
+    new Error('update fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateErrClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',

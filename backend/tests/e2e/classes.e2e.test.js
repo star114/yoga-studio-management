@@ -682,3 +682,66 @@ test('class registration and recurring routes cover core branches', async () => 
   assert.equal(res.status, 500);
 
 });
+
+test('registration status change reconciles attendance row and membership usage', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness();
+  const client = h.createDbClientMock();
+  client.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 90,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'attended',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [{ id: 501, membership_id: 77 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 90,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'absent',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(client);
+
+  const res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'absent' },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.body.attendance_status, 'absent');
+  assert.ok(
+    client.queryCalls.some(
+      ([sql]) =>
+        typeof sql === 'string'
+        && sql.includes('UPDATE yoga_memberships')
+    )
+  );
+  assert.ok(
+    client.queryCalls.some(
+      ([sql]) =>
+        typeof sql === 'string'
+        && sql.includes('DELETE FROM yoga_attendances')
+    )
+  );
+});

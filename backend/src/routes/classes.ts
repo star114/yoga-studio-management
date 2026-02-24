@@ -2,7 +2,7 @@ import express from 'express';
 import { body, param, query } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
-import { isValidTime, timeToMinutes } from '../utils/classSchedule';
+import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -378,8 +378,89 @@ router.put('/:id/registrations/:customerId/status',
     const customerId = Number(req.params.customerId);
     const attendanceStatus = String(req.body.attendance_status);
 
+    const client = await pool.connect();
     try {
-      const result = await pool.query(
+      await client.query('BEGIN');
+
+      const registrationResult = await client.query(
+        `SELECT id, class_id, customer_id, attendance_status, registration_comment, registered_at
+         FROM yoga_class_registrations
+         WHERE class_id = $1 AND customer_id = $2
+         FOR UPDATE`,
+        [classId, customerId]
+      );
+
+      if (registrationResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Registration not found' });
+      }
+
+      const currentRegistration = registrationResult.rows[0];
+
+      if (currentRegistration.attendance_status === attendanceStatus) {
+        await client.query('COMMIT');
+        return res.json(currentRegistration);
+      }
+
+      if (attendanceStatus === 'attended') {
+        const attendanceCheckResult = await client.query(
+          `SELECT id
+           FROM yoga_attendances
+           WHERE class_id = $1 AND customer_id = $2
+           LIMIT 1`,
+          [classId, customerId]
+        );
+
+        if (attendanceCheckResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Attendance record not found; use check-in endpoint first' });
+        }
+      } else {
+        const attendanceResult = await client.query(
+          `SELECT id, membership_id
+           FROM yoga_attendances
+           WHERE class_id = $1 AND customer_id = $2
+           FOR UPDATE`,
+          [classId, customerId]
+        );
+
+        const attendanceRows = attendanceResult.rows as Array<{ id: number; membership_id: number | null }>;
+
+        if (attendanceRows.length > 0) {
+          const membershipUsage = new Map<number, number>();
+
+          attendanceRows.forEach((attendanceRow) => {
+            if (attendanceRow.membership_id === null) return;
+            const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
+            membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
+          });
+
+          for (const [membershipId, usedCount] of membershipUsage.entries()) {
+            await client.query(
+              `UPDATE yoga_memberships
+               SET remaining_sessions = CASE
+                     WHEN remaining_sessions IS NULL THEN NULL
+                     ELSE remaining_sessions + $2
+                   END,
+                   is_active = CASE
+                     WHEN remaining_sessions IS NULL THEN is_active
+                     WHEN (remaining_sessions + $2) > 0 THEN TRUE
+                     ELSE FALSE
+                   END
+               WHERE id = $1`,
+              [membershipId, usedCount]
+            );
+          }
+
+          const attendanceIds = attendanceRows.map((attendanceRow) => attendanceRow.id);
+          await client.query(
+            'DELETE FROM yoga_attendances WHERE id = ANY($1::int[])',
+            [attendanceIds]
+          );
+        }
+      }
+
+      const result = await client.query(
         `UPDATE yoga_class_registrations
          SET attendance_status = $3
          WHERE class_id = $1 AND customer_id = $2
@@ -387,14 +468,14 @@ router.put('/:id/registrations/:customerId/status',
         [classId, customerId, attendanceStatus]
       );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Registration not found' });
-      }
-
+      await client.query('COMMIT');
       res.json(result.rows[0]);
     } catch (error) {
+      await client.query('ROLLBACK');
       console.error('Update registration attendance status error:', error);
       res.status(500).json({ error: 'Server error' });
+    } finally {
+      client.release();
     }
   }
 );
@@ -595,6 +676,100 @@ router.post('/',
     } catch (error) {
       console.error('Create class error:', error);
       res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 반복 수업 일괄 등록 (관리자)
+router.post('/recurring',
+  authenticate,
+  requireAdmin,
+  body('title').notEmpty(),
+  body('recurrence_start_date').isDate(),
+  body('recurrence_end_date').isDate(),
+  body('weekdays').isArray({ min: 1 }),
+  body('weekdays.*').isInt({ min: 0, max: 6 }),
+  body('start_time').custom(isValidTime),
+  body('end_time').custom(isValidTime),
+  body('max_capacity').isInt({ min: 1 }),
+  validateRequest,
+  async (req, res) => {
+    const {
+      title,
+      recurrence_start_date,
+      recurrence_end_date,
+      weekdays,
+      start_time,
+      end_time,
+      max_capacity,
+      is_open,
+      notes,
+    } = req.body as {
+      title: string;
+      recurrence_start_date: string;
+      recurrence_end_date: string;
+      weekdays: number[];
+      start_time: string;
+      end_time: string;
+      max_capacity: number;
+      is_open?: boolean;
+      notes?: string;
+    };
+
+    if (timeToMinutes(start_time) >= timeToMinutes(end_time)) {
+      return res.status(400).json({ error: 'End time must be after start time' });
+    }
+
+    const uniqueWeekdays = Array.from(new Set((weekdays || []).map((value) => Number(value))));
+    let classDates: string[] = [];
+
+    try {
+      classDates = getRecurringClassDates(
+        recurrence_start_date,
+        recurrence_end_date,
+        uniqueWeekdays
+      );
+    } catch (recurrenceError: unknown) {
+      return res.status(400).json({
+        error: recurrenceError instanceof Error ? recurrenceError.message : 'Invalid recurrence rule',
+      });
+    }
+
+    if (classDates.length === 0) {
+      return res.status(400).json({ error: 'No classes to create for the given recurrence rule' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const classDate of classDates) {
+        await client.query(
+          `INSERT INTO yoga_classes
+           (title, class_date, start_time, end_time, max_capacity, is_open, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            title,
+            classDate,
+            start_time,
+            end_time,
+            max_capacity,
+            is_open ?? true,
+            notes || null,
+          ]
+        );
+      }
+
+      await client.query('COMMIT');
+      res.status(201).json({
+        created_count: classDates.length,
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Create recurring classes error:', error);
+      res.status(500).json({ error: 'Server error' });
+    } finally {
+      client.release();
     }
   }
 );

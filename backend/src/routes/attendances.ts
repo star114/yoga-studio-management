@@ -240,18 +240,41 @@ router.put('/:id',
     const { id } = req.params;
     const { instructor_comment, class_type, class_id } = req.body;
 
+    const client = await pool.connect();
     try {
+      await client.query('BEGIN');
+
+      const existingAttendanceResult = await client.query(
+        `SELECT id, customer_id, class_id
+         FROM yoga_attendances
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+
+      if (existingAttendanceResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Attendance record not found' });
+      }
+
+      const currentAttendance = existingAttendanceResult.rows[0] as {
+        id: number;
+        customer_id: number;
+        class_id: number | null;
+      };
+
       let resolvedClassId: number | null | undefined;
       let resolvedClassType = typeof class_type === 'string' ? class_type.trim() : undefined;
 
       if (class_id !== undefined && class_id !== null) {
         const classId = Number(class_id);
-        const classResult = await pool.query(
+        const classResult = await client.query(
           'SELECT id, title FROM yoga_classes WHERE id = $1',
           [classId]
         );
 
         if (classResult.rows.length === 0) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Class not found' });
         }
 
@@ -259,11 +282,41 @@ router.put('/:id',
         if (!resolvedClassType) {
           resolvedClassType = String(classResult.rows[0].title ?? '').trim() || undefined;
         }
+
+        if (resolvedClassId !== currentAttendance.class_id) {
+          const registrationResult = await client.query(
+            `SELECT id
+             FROM yoga_class_registrations
+             WHERE class_id = $1 AND customer_id = $2
+             LIMIT 1`,
+            [resolvedClassId, currentAttendance.customer_id]
+          );
+
+          if (registrationResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Target class registration not found' });
+          }
+
+          const duplicateAttendanceResult = await client.query(
+            `SELECT id
+             FROM yoga_attendances
+             WHERE class_id = $1
+               AND customer_id = $2
+               AND id <> $3
+             LIMIT 1`,
+            [resolvedClassId, currentAttendance.customer_id, id]
+          );
+
+          if (duplicateAttendanceResult.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Attendance already exists for target class and customer' });
+          }
+        }
       } else {
         resolvedClassId = undefined;
       }
 
-      const result = await pool.query(
+      const result = await client.query(
         `UPDATE yoga_attendances 
          SET instructor_comment = COALESCE($1, instructor_comment),
              class_type = COALESCE($2, class_type),
@@ -273,14 +326,51 @@ router.put('/:id',
         [instructor_comment, resolvedClassType, resolvedClassId, id]
       );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Attendance record not found' });
+      const updatedAttendance = result.rows[0] as {
+        id: number;
+        customer_id: number;
+        class_id: number | null;
+      };
+
+      if (
+        resolvedClassId !== undefined
+        && currentAttendance.class_id !== null
+        && resolvedClassId !== currentAttendance.class_id
+      ) {
+        await client.query(
+          `UPDATE yoga_class_registrations r
+           SET attendance_status = 'reserved'
+           WHERE r.class_id = $1
+             AND r.customer_id = $2
+             AND r.attendance_status = 'attended'
+             AND NOT EXISTS (
+               SELECT 1
+               FROM yoga_attendances a
+               WHERE a.class_id = r.class_id
+                 AND a.customer_id = r.customer_id
+             )`,
+          [currentAttendance.class_id, currentAttendance.customer_id]
+        );
+
+        if (updatedAttendance.class_id !== null) {
+          await client.query(
+            `UPDATE yoga_class_registrations
+             SET attendance_status = 'attended'
+             WHERE class_id = $1
+               AND customer_id = $2`,
+            [updatedAttendance.class_id, updatedAttendance.customer_id]
+          );
+        }
       }
 
-      res.json(result.rows[0]);
+      await client.query('COMMIT');
+      res.json(updatedAttendance);
     } catch (error) {
+      await client.query('ROLLBACK');
       console.error('Update attendance error:', error);
       res.status(500).json({ error: 'Server error' });
+    } finally {
+      client.release();
     }
   }
 );
