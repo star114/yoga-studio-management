@@ -315,6 +315,17 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       }
     }
 
+    if (attendance.class_id) {
+      await client.query(
+        `UPDATE yoga_class_registrations
+         SET attendance_status = 'reserved'
+         WHERE class_id = $1
+           AND customer_id = $2
+           AND attendance_status = 'attended'`,
+        [attendance.class_id, attendance.customer_id]
+      );
+    }
+
     // 출석 기록 삭제
     await client.query('DELETE FROM yoga_attendances WHERE id = $1', [id]);
 

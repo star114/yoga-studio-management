@@ -428,8 +428,9 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const deleteSuccessClient = h.createDbClientMock();
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 22, membership_id: 2 }] },
+    { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3 }] },
     { rows: [{ id: 2, remaining_sessions: 1 }] },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
@@ -442,6 +443,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
+  assert.match(String(deleteSuccessClient.queryCalls[4][0]), /UPDATE yoga_class_registrations/i);
 
   const deleteErrClient = h.createDbClientMock();
   deleteErrClient.queryQueue.push(
