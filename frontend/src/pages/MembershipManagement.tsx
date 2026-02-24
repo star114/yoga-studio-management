@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { customerAPI, membershipAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatKoreanDate } from '../utils/dateFormat';
 
 interface Customer {
   id: number;
@@ -19,6 +20,8 @@ interface Membership {
   remaining_sessions?: number | null;
   is_active: boolean;
   notes?: string | null;
+  start_date?: string | null;
+  expected_end_date?: string | null;
 }
 
 interface NewMembershipForm {
@@ -318,6 +321,12 @@ const MembershipManagement: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-sm text-warm-700">잔여 횟수: {membership.remaining_sessions ?? '무제한'}</p>
+                      <p className="text-sm text-warm-700">
+                        시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
+                      </p>
+                      <p className="text-sm text-warm-700">
+                        예상 종료일: {membership.expected_end_date ? formatKoreanDate(membership.expected_end_date, false) : '-'}
+                      </p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>

@@ -61,6 +61,8 @@ describe('CustomerMemberships page', () => {
           membership_type_name: '프리패스',
           remaining_sessions: 5,
           is_active: true,
+          start_date: '2026-02-01',
+          expected_end_date: '2026-03-15',
         },
       ],
     });
@@ -69,5 +71,7 @@ describe('CustomerMemberships page', () => {
 
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
     expect(screen.getByText('5회')).toBeTruthy();
+    expect(screen.getByText('2026년 2월 1일')).toBeTruthy();
+    expect(screen.getByText('2026년 3월 15일')).toBeTruthy();
   });
 });

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { customerAPI } from '../services/api';
-import { formatKoreanDate, formatKoreanDateTime } from '../utils/dateFormat';
+import { formatKoreanDateTime } from '../utils/dateFormat';
 
 interface Attendance {
   id: number;
@@ -158,10 +158,9 @@ const CustomerAttendances: React.FC = () => {
                       {attendance.class_title || attendance.class_type || '수업 정보 없음'}
                     </p>
                     <p className="text-sm text-warm-700 mt-1">
-                      출석일: {formatKoreanDate(attendance.attendance_date)}
                       {attendance.class_date && attendance.class_start_time
-                        ? ` / 수업일시: ${formatKoreanDateTime(attendance.class_date, attendance.class_start_time)}`
-                        : ''}
+                        ? `수업일시: ${formatKoreanDateTime(attendance.class_date, attendance.class_start_time)}`
+                        : '-'}
                     </p>
                     <p className="text-sm text-warm-700 mt-2">
                       강사 코멘트: {attendance.instructor_comment?.trim() || '-'}

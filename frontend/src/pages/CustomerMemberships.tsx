@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { membershipAPI } from '../services/api';
+import { formatKoreanDate } from '../utils/dateFormat';
 
 interface CustomerMembership {
   id: number;
   membership_type_name: string;
   remaining_sessions?: number | null;
   is_active: boolean;
+  start_date?: string | null;
+  expected_end_date?: string | null;
 }
 
 const CustomerMemberships: React.FC = () => {
@@ -64,21 +67,35 @@ const CustomerMemberships: React.FC = () => {
             </div>
           ) : (
             activeMemberships.map((membership) => (
-              <div key={membership.id} className="p-4 bg-gradient-to-r from-primary-50 to-warm-50 rounded-lg border border-primary-100">
-                <div className="flex items-start justify-between mb-3">
+              <div key={membership.id} className="p-4 bg-primary-50 rounded-lg border border-primary-100 space-y-4">
+                <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-semibold text-primary-800 text-lg">{membership.membership_type_name}</h3>
                   </div>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-medium">활성</span>
+                  <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">활성</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {membership.remaining_sessions !== null && (
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-sm text-warm-600 mb-1">잔여 횟수</p>
-                      <p className="text-2xl font-bold text-primary-800">{membership.remaining_sessions}회</p>
-                    </div>
-                  )}
+                <div className="space-y-1.5 text-sm text-warm-700">
+                  <p>
+                    <span className="text-warm-600">잔여 횟수:</span>{' '}
+                    <span className="font-semibold text-primary-800">
+                      {membership.remaining_sessions === null || membership.remaining_sessions === undefined
+                        ? '무제한'
+                        : `${membership.remaining_sessions}회`}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-warm-600">시작일:</span>{' '}
+                    <span className="font-medium text-primary-800">
+                      {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-warm-600">예상 종료일:</span>{' '}
+                    <span className="font-medium text-primary-800">
+                      {membership.expected_end_date ? formatKoreanDate(membership.expected_end_date, false) : '-'}
+                    </span>
+                  </p>
                 </div>
               </div>
             ))

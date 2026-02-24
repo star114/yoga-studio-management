@@ -114,9 +114,54 @@ router.get('/customer/:customerId', authenticate, async (req, res) => {
 
   try {
     const result = await pool.query(`
-      SELECT m.*, mt.name as membership_type_name, mt.description
+      SELECT
+        m.*,
+        mt.name as membership_type_name,
+        mt.description,
+        usage.start_date,
+        projection.expected_end_date
       FROM yoga_memberships m
       LEFT JOIN yoga_membership_types mt ON m.membership_type_id = mt.id
+      LEFT JOIN LATERAL (
+        SELECT MIN(events.class_date) AS start_date
+        FROM (
+          SELECT COALESCE(cls.class_date, a.attendance_date::date) AS class_date
+          FROM yoga_attendances a
+          LEFT JOIN yoga_classes cls ON cls.id = a.class_id
+          WHERE a.membership_id = m.id
+
+          UNION ALL
+
+          SELECT cls.class_date
+          FROM yoga_class_registrations r
+          INNER JOIN yoga_classes cls ON cls.id = r.class_id
+          WHERE r.customer_id = m.customer_id
+            AND r.attendance_status = 'reserved'
+            AND mt.name IS NOT NULL
+            AND cls.title = mt.name
+        ) events
+      ) usage ON true
+      LEFT JOIN LATERAL (
+        SELECT projected.class_date AS expected_end_date
+        FROM (
+          SELECT
+            cls.class_date,
+            ROW_NUMBER() OVER (
+              ORDER BY cls.class_date ASC, cls.start_time ASC, cls.id ASC
+            ) AS row_num
+          FROM yoga_class_registrations r
+          INNER JOIN yoga_classes cls ON cls.id = r.class_id
+          WHERE r.customer_id = m.customer_id
+            AND r.attendance_status = 'reserved'
+            AND mt.name IS NOT NULL
+            AND cls.title = mt.name
+            AND cls.class_date >= CURRENT_DATE
+        ) projected
+        WHERE m.remaining_sessions IS NOT NULL
+          AND m.remaining_sessions > 0
+          AND projected.row_num = m.remaining_sessions
+        LIMIT 1
+      ) projection ON true
       WHERE m.customer_id = $1
       ORDER BY m.created_at DESC
     `, [customerId]);
@@ -150,15 +195,19 @@ router.post('/',
       }
 
       const membershipType = typeResult.rows[0];
+      const initialRemainingSessions = membershipType.total_sessions ?? null;
+      const initialIsActive =
+        initialRemainingSessions === null ? true : Number(initialRemainingSessions) > 0;
 
       const result = await pool.query(
         `INSERT INTO yoga_memberships 
-         (customer_id, membership_type_id, remaining_sessions, notes)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
+         (customer_id, membership_type_id, remaining_sessions, is_active, notes)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
         [
           customer_id,
           membership_type_id,
-          membershipType.total_sessions || null,
+          initialRemainingSessions,
+          initialIsActive,
           notes || null
         ]
       );
@@ -183,7 +232,11 @@ router.put('/:id',
       const result = await pool.query(
         `UPDATE yoga_memberships 
          SET remaining_sessions = COALESCE($1, remaining_sessions),
-             is_active = COALESCE($2, is_active),
+             is_active = CASE
+               WHEN COALESCE($1, remaining_sessions) IS NOT NULL
+                 THEN COALESCE($1, remaining_sessions) > 0
+               ELSE COALESCE($2, is_active)
+             END,
              notes = COALESCE($3, notes)
          WHERE id = $4
          RETURNING *`,
