@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { addMonths, format, subMonths } from 'date-fns';
 import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
@@ -8,7 +8,6 @@ import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 interface YogaClass {
   id: number;
   title: string;
-  instructor_name?: string | null;
   class_date: string;
   start_time: string;
   end_time: string;
@@ -25,7 +24,6 @@ interface YogaClass {
 
 interface ClassForm {
   title: string;
-  instructor_name: string;
   class_date: string;
   start_time: string;
   end_time: string;
@@ -36,7 +34,6 @@ interface ClassForm {
 
 const INITIAL_FORM: ClassForm = {
   title: '',
-  instructor_name: '',
   class_date: format(new Date(), 'yyyy-MM-dd'),
   start_time: '09:00',
   end_time: '10:00',
@@ -84,6 +81,8 @@ const ClassManagement: React.FC = () => {
   const [isRecurringCreate, setIsRecurringCreate] = useState(false);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(INITIAL_FORM.class_date);
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
+  const defaultDateFrom = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
+  const defaultDateTo = format(addMonths(new Date(), 2), 'yyyy-MM-dd');
 
   const isEditMode = editingClassId !== null;
 
@@ -98,7 +97,6 @@ const ClassManagement: React.FC = () => {
       }
       return (
         item.title.toLowerCase().includes(keyword)
-        || (item.instructor_name || '').toLowerCase().includes(keyword)
       );
     });
   }, [classes, search, showOpenOnly]);
@@ -113,7 +111,10 @@ const ClassManagement: React.FC = () => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const response = await classAPI.getAll();
+      const response = await classAPI.getAll({
+        date_from: defaultDateFrom,
+        date_to: defaultDateTo,
+      });
       setClasses(response.data);
     } catch (loadError) {
       console.error('Failed to load classes:', loadError);
@@ -142,7 +143,6 @@ const ClassManagement: React.FC = () => {
     setIsRecurringCreate(false);
     setForm({
       title: item.title,
-      instructor_name: item.instructor_name || '',
       class_date: item.class_date.slice(0, 10),
       start_time: item.start_time.slice(0, 5),
       end_time: item.end_time.slice(0, 5),
@@ -204,7 +204,6 @@ const ClassManagement: React.FC = () => {
     try {
       const payload = {
         title: form.title.trim(),
-        instructor_name: form.instructor_name.trim() || null,
         class_date: form.class_date,
         start_time: form.start_time,
         end_time: form.end_time,
@@ -304,16 +303,6 @@ const ClassManagement: React.FC = () => {
                 value={form.title}
                 onChange={(e) => handleFormChange('title', e.target.value)}
                 required
-              />
-            </div>
-
-            <div>
-              <label className="label" htmlFor="class-instructor">강사명</label>
-              <input
-                id="class-instructor"
-                className="input-field"
-                value={form.instructor_name}
-                onChange={(e) => handleFormChange('instructor_name', e.target.value)}
               />
             </div>
 
@@ -476,11 +465,17 @@ const ClassManagement: React.FC = () => {
 
         <section className="card xl:col-span-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <h2 className="text-xl font-display font-semibold text-primary-800">전체 수업 목록</h2>
+            <div className="space-y-1">
+              <h2 className="text-xl font-display font-semibold text-primary-800">전체 수업 목록</h2>
+              <p className="text-sm text-warm-600">기본 표시 범위: {defaultDateFrom} ~ {defaultDateTo}</p>
+            </div>
             <div className="flex gap-2">
+              <Link to="/classes/history" className="btn-secondary whitespace-nowrap">
+                수업 전체 내역
+              </Link>
               <input
                 className="input-field md:max-w-xs"
-                placeholder="수업명/강사명 검색"
+                placeholder="수업명 검색"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -510,7 +505,6 @@ const ClassManagement: React.FC = () => {
                 <thead>
                   <tr className="border-b border-warm-200 text-left text-warm-600">
                     <th className="py-2 pr-4">수업명</th>
-                    <th className="py-2 pr-4">강사</th>
                     <th className="py-2 pr-4">일정</th>
                     <th className="py-2 pr-4">제한 인원</th>
                     <th className="py-2 pr-4">신청 인원</th>
@@ -525,7 +519,6 @@ const ClassManagement: React.FC = () => {
                     return (
                     <tr key={item.id} className="border-b border-warm-100">
                       <td className="py-3 pr-4 font-medium text-primary-800">{item.title}</td>
-                      <td className="py-3 pr-4">{item.instructor_name || '-'}</td>
                       <td className="py-3 pr-4">{formatKoreanDateTime(item.class_date, item.start_time)} ~ {formatKoreanTime(item.end_time)}</td>
                       <td className="py-3 pr-4">{item.max_capacity}명</td>
                       <td className="py-3 pr-4">{item.current_enrollment ?? 0}명</td>

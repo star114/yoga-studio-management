@@ -37,6 +37,7 @@ vi.mock('./pages/CustomerAttendances', () => ({ default: () => <div>Customer Att
 vi.mock('./pages/CustomerProfile', () => ({ default: () => <div>Customer Profile</div> }));
 vi.mock('./pages/MembershipTypeManagement', () => ({ default: () => <div>Membership Types</div> }));
 vi.mock('./pages/ClassManagement', () => ({ default: () => <div>Class Management</div> }));
+vi.mock('./pages/ClassHistory', () => ({ default: () => <div>Class History</div> }));
 vi.mock('./pages/ClassDetail', () => ({ default: () => <div>Class Detail</div> }));
 
 const renderAt = async (path: string) => {
@@ -89,6 +90,12 @@ describe('App routing shell', () => {
     authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
     await renderAt('/classes/1');
     expect(screen.getByText('Class Detail')).toBeTruthy();
+  });
+
+  it('renders class history route for admin users', async () => {
+    authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
+    await renderAt('/classes/history');
+    expect(screen.getByText('Class History')).toBeTruthy();
   });
 
   it('renders customer attendance history route for admin users', async () => {

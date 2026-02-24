@@ -128,7 +128,6 @@ describe('ClassManagement page', () => {
     await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '  아침 요가  ' } });
-    fireEvent.change(screen.getByLabelText('강사명'), { target: { value: '  강사  ' } });
     fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-02-22' } });
     fireEvent.change(screen.getByLabelText('시작 시간'), { target: { value: '09:00' } });
     fireEvent.change(screen.getByLabelText('종료 시간'), { target: { value: '10:00' } });
@@ -138,7 +137,6 @@ describe('ClassManagement page', () => {
 
     await waitFor(() => expect(createMock).toHaveBeenCalledWith({
       title: '아침 요가',
-      instructor_name: '강사',
       class_date: '2026-02-22',
       start_time: '09:00',
       end_time: '10:00',
@@ -382,11 +380,11 @@ describe('ClassManagement page', () => {
     expect(screen.getByText('0자리')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: '수정' }).some((button) => (button as HTMLButtonElement).disabled)).toBe(true);
 
-    fireEvent.change(screen.getByPlaceholderText('수업명/강사명 검색'), { target: { value: '강사b' } });
+    fireEvent.change(screen.getByPlaceholderText('수업명 검색'), { target: { value: '완료수업' } });
     expect(screen.getByText('완료수업')).toBeTruthy();
     expect(screen.queryByText('오픈수업')).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText('수업명/강사명 검색'), { target: { value: '' } });
+    fireEvent.change(screen.getByPlaceholderText('수업명 검색'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '오픈만 보기' }));
     expect(screen.queryByText('완료수업')).toBeNull();
     expect(screen.getByText('오픈수업')).toBeTruthy();
