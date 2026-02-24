@@ -79,6 +79,9 @@ npm run test:coverage:all-src
 - 커밋 접두사: `feat:`, `fix:`, `test:`, `chore:`
 - 커밋 단위: 반드시 기능 단위(한 커밋에 여러 기능 혼합 금지)
 
+## 9) PR Requirements
+- .github/pull_request_template.md must be used as template.
+
 ## 9) 금지 사항
 - 요청 없는 대규모 리팩터링
 - 게이트 우회를 위한 커버리지 범위 축소
