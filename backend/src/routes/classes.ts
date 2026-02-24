@@ -201,13 +201,14 @@ router.get('/:id/me',
            r.registration_comment,
            r.attendance_status,
            a.id AS attendance_id,
-           a.instructor_comment AS instructor_comment
+           a.instructor_comment AS instructor_comment,
+           a.customer_comment AS customer_comment
          FROM yoga_classes c
          LEFT JOIN yoga_class_registrations r
            ON r.class_id = c.id
           AND r.customer_id = $2
          LEFT JOIN LATERAL (
-           SELECT id, instructor_comment
+           SELECT id, instructor_comment, customer_comment
            FROM yoga_attendances
            WHERE class_id = c.id
              AND customer_id = $2
@@ -257,16 +258,17 @@ router.get('/:id/registrations',
            r.class_id,
            r.customer_id,
            r.attendance_status,
-           r.registered_at,
-           r.registration_comment,
-           a.id AS attendance_id,
-           a.instructor_comment AS attendance_instructor_comment,
-           c.name AS customer_name,
-           c.phone AS customer_phone
+         r.registered_at,
+         r.registration_comment,
+         a.id AS attendance_id,
+         a.instructor_comment AS attendance_instructor_comment,
+         a.customer_comment AS attendance_customer_comment,
+         c.name AS customer_name,
+         c.phone AS customer_phone
          FROM yoga_class_registrations r
          INNER JOIN yoga_customers c ON r.customer_id = c.id
          LEFT JOIN LATERAL (
-           SELECT id, instructor_comment
+           SELECT id, instructor_comment, customer_comment
            FROM yoga_attendances
            WHERE class_id = r.class_id
              AND customer_id = r.customer_id
@@ -281,6 +283,58 @@ router.get('/:id/registrations',
       res.json(result.rows);
     } catch (error) {
       console.error('Get class registrations error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 수련생 코멘트 저장 (고객 본인)
+router.put('/:id/me/attendance-comment',
+  authenticate,
+  param('id').isInt({ min: 1 }),
+  body('customer_comment').optional({ values: 'falsy' }).isString().isLength({ max: 500 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin cannot update customer attendance comment' });
+    }
+
+    const comment = typeof req.body.customer_comment === 'string'
+      ? req.body.customer_comment.trim()
+      : null;
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const result = await pool.query(
+        `WITH latest_attendance AS (
+           SELECT id
+           FROM yoga_attendances
+           WHERE class_id = $1
+             AND customer_id = $2
+           ORDER BY attendance_date DESC, id DESC
+           LIMIT 1
+         )
+         UPDATE yoga_attendances a
+         SET customer_comment = $3
+         FROM latest_attendance la
+         WHERE a.id = la.id
+         RETURNING a.*`,
+        [classId, customerId, comment && comment.length > 0 ? comment : null]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Update my attendance customer comment error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }
