@@ -43,32 +43,6 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 출석 기록 테이블
-CREATE TABLE IF NOT EXISTS yoga_attendances (
-    id SERIAL PRIMARY KEY,
-    customer_id INTEGER REFERENCES yoga_customers(id) ON DELETE CASCADE,
-    membership_id INTEGER REFERENCES yoga_memberships(id) ON DELETE CASCADE,
-    attendance_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    instructor_comment TEXT,
-    instructor_id INTEGER REFERENCES yoga_users(id),
-    class_type VARCHAR(100),  -- 수업 종류
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 오픈 수업 테이블
-CREATE TABLE IF NOT EXISTS yoga_classes (
-    id SERIAL PRIMARY KEY,
-    title VARCHAR(100) NOT NULL,
-    class_date DATE NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    max_capacity INTEGER NOT NULL CHECK (max_capacity > 0),
-    is_open BOOLEAN DEFAULT TRUE,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- 반복 수업 시리즈 테이블
 CREATE TABLE IF NOT EXISTS yoga_class_series (
     id SERIAL PRIMARY KEY,
@@ -84,22 +58,35 @@ CREATE TABLE IF NOT EXISTS yoga_class_series (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE yoga_classes
-    ADD COLUMN IF NOT EXISTS recurring_series_id INTEGER REFERENCES yoga_class_series(id) ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS excluded_reason TEXT;
+-- 오픈 수업 테이블
+CREATE TABLE IF NOT EXISTS yoga_classes (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(100) NOT NULL,
+    class_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    max_capacity INTEGER NOT NULL CHECK (max_capacity > 0),
+    is_open BOOLEAN DEFAULT TRUE,
+    notes TEXT,
+    recurring_series_id INTEGER REFERENCES yoga_class_series(id) ON DELETE SET NULL,
+    is_excluded BOOLEAN NOT NULL DEFAULT FALSE,
+    excluded_reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-ALTER TABLE yoga_classes
-    DROP COLUMN IF EXISTS instructor_name;
-
-ALTER TABLE yoga_class_series
-    DROP COLUMN IF EXISTS instructor_name;
-
-ALTER TABLE yoga_attendances
-    ADD COLUMN IF NOT EXISTS class_id INTEGER REFERENCES yoga_classes(id) ON DELETE SET NULL;
-
-ALTER TABLE yoga_attendances
-    ALTER COLUMN class_id SET NOT NULL;
+-- 출석 기록 테이블
+CREATE TABLE IF NOT EXISTS yoga_attendances (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER REFERENCES yoga_customers(id) ON DELETE CASCADE,
+    membership_id INTEGER REFERENCES yoga_memberships(id) ON DELETE CASCADE,
+    class_id INTEGER NOT NULL REFERENCES yoga_classes(id) ON DELETE SET NULL,
+    attendance_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    instructor_comment TEXT,
+    instructor_id INTEGER REFERENCES yoga_users(id),
+    class_type VARCHAR(100),  -- 수업 종류
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- 수업 신청 테이블
 CREATE TABLE IF NOT EXISTS yoga_class_registrations (
@@ -111,9 +98,6 @@ CREATE TABLE IF NOT EXISTS yoga_class_registrations (
     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (class_id, customer_id)
 );
-
-ALTER TABLE yoga_class_registrations
-    ADD COLUMN IF NOT EXISTS registration_comment TEXT;
 
 -- 인덱스 생성
 CREATE INDEX IF NOT EXISTS idx_customers_user_id ON yoga_customers(user_id);
