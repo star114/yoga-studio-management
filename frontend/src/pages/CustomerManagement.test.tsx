@@ -7,13 +7,11 @@ import CustomerManagement from './CustomerManagement';
 const {
   getAllMock,
   createMock,
-  updateMock,
   deleteMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getAllMock: vi.fn(),
   createMock: vi.fn(),
-  updateMock: vi.fn(),
   deleteMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
 }));
@@ -22,7 +20,6 @@ vi.mock('../services/api', () => ({
   customerAPI: {
     getAll: getAllMock,
     create: createMock,
-    update: updateMock,
     delete: deleteMock,
   },
 }));
@@ -163,59 +160,28 @@ describe('CustomerManagement page', () => {
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('starts edit mode, updates customer, and supports cancel', async () => {
-    updateMock.mockResolvedValueOnce(undefined);
-    getAllMock
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 5,
-            user_id: 100,
-            name: '수정대상',
-            phone: '010-9999-9999',
-            notes: null,
-            membership_count: 1,
-            total_attendance: 3,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 5,
-            user_id: 100,
-            name: '수정완료',
-            phone: '010-8888-8888',
-            membership_count: 1,
-            total_attendance: 3,
-          },
-        ],
-      });
+  it('does not render edit button in customer list', async () => {
+    getAllMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 5,
+          user_id: 100,
+          name: '수정대상',
+          phone: '010-9999-9999',
+          notes: null,
+          membership_count: 1,
+          total_attendance: 3,
+        },
+      ],
+    });
 
     renderPage();
 
     await waitFor(() => expect(screen.getByText('수정대상')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-
-    expect(screen.getByText('고객 정보 수정')).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '수정완료' } });
-    fireEvent.change(screen.getByLabelText('전화번호'), { target: { value: ' 010-8888-8888 ' } });
-    fireEvent.change(screen.getByLabelText('메모'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: '정보 저장' }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalledWith(5, {
-      name: '수정완료',
-      phone: '010-8888-8888',
-      notes: null,
-    }));
-
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.click(screen.getByRole('button', { name: '취소' }));
-    expect(screen.getByText('신규 고객 계정 생성')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '수정' })).toBeNull();
   });
 
-  it('delete flow handles cancel and success including edit-reset', async () => {
+  it('delete flow handles cancel and success', async () => {
     deleteMock.mockResolvedValueOnce(undefined);
     getAllMock
       .mockResolvedValueOnce({
@@ -239,7 +205,6 @@ describe('CustomerManagement page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('삭제대상')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
 
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     expect(deleteMock).not.toHaveBeenCalled();

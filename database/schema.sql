@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     end_date DATE,
     remaining_sessions INTEGER,  -- 잔여 횟수
     is_active BOOLEAN DEFAULT TRUE,
-    purchase_price INTEGER,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

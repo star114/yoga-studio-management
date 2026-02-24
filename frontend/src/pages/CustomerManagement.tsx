@@ -32,10 +32,7 @@ const CustomerManagement: React.FC = () => {
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
   const [search, setSearch] = useState('');
-  const [editingCustomerId, setEditingCustomerId] = useState<number | null>(null);
   const [form, setForm] = useState<CustomerForm>(INITIAL_FORM);
-
-  const isEditMode = editingCustomerId !== null;
 
   const filteredCustomers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -68,17 +65,6 @@ const CustomerManagement: React.FC = () => {
   const resetForm = () => {
     setForm(INITIAL_FORM);
     setFormError('');
-    setEditingCustomerId(null);
-  };
-
-  const startEdit = (customer: Customer) => {
-    setEditingCustomerId(customer.id);
-    setFormError('');
-    setForm({
-      name: customer.name,
-      phone: customer.phone,
-      notes: customer.notes || '',
-    });
   };
 
   const handleFormChange = (key: keyof CustomerForm, value: string) => {
@@ -98,19 +84,11 @@ const CustomerManagement: React.FC = () => {
         return;
       }
 
-      if (isEditMode && editingCustomerId) {
-        await customerAPI.update(editingCustomerId, {
-          name: form.name,
-          phone: trimmedPhone,
-          notes: form.notes || null,
-        });
-      } else {
-        await customerAPI.create({
-          name: form.name,
-          phone: trimmedPhone,
-          notes: form.notes || null,
-        });
-      }
+      await customerAPI.create({
+        name: form.name,
+        phone: trimmedPhone,
+        notes: form.notes || null,
+      });
 
       await loadCustomers();
       resetForm();
@@ -129,9 +107,6 @@ const CustomerManagement: React.FC = () => {
     try {
       await customerAPI.delete(customer.id);
       await loadCustomers();
-      if (editingCustomerId === customer.id) {
-        resetForm();
-      }
     } catch (deleteError: unknown) {
       console.error('Failed to delete customer:', deleteError);
       setError(parseApiError(deleteError));
@@ -147,9 +122,7 @@ const CustomerManagement: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-            {isEditMode ? '고객 정보 수정' : '신규 고객 계정 생성'}
-          </h2>
+          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">신규 고객 계정 생성</h2>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
@@ -191,25 +164,18 @@ const CustomerManagement: React.FC = () => {
               </p>
             )}
 
-            {!isEditMode && (
-              <p className="text-xs text-warm-500">
-                신규 고객의 초기 비밀번호는 <span className="font-semibold text-primary-800">12345</span>로 자동 설정됩니다.
-              </p>
-            )}
+            <p className="text-xs text-warm-500">
+              신규 고객의 초기 비밀번호는 <span className="font-semibold text-primary-800">12345</span>로 자동 설정됩니다.
+            </p>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
               <button
                 type="submit"
                 disabled={isSubmitting}
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? '저장 중...' : isEditMode ? '정보 저장' : '고객 생성'}
+                {isSubmitting ? '저장 중...' : '고객 생성'}
               </button>
-              {isEditMode && (
-                <button type="button" className="btn-secondary" onClick={resetForm}>
-                  취소
-                </button>
-              )}
             </div>
           </form>
         </section>
@@ -262,13 +228,6 @@ const CustomerManagement: React.FC = () => {
                           >
                             상세
                           </Link>
-                          <button
-                            type="button"
-                            onClick={() => startEdit(customer)}
-                            className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200"
-                          >
-                            수정
-                          </button>
                           <button
                             type="button"
                             onClick={() => handleDelete(customer)}

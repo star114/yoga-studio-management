@@ -23,7 +23,6 @@ interface Membership {
   start_date: string;
   end_date?: string | null;
   remaining_sessions?: number | null;
-  purchase_price?: string | number | null;
   is_active: boolean;
   notes?: string | null;
 }
@@ -38,10 +37,15 @@ interface Attendance {
   instructor_comment?: string | null;
 }
 
+interface EditCustomerForm {
+  name: string;
+  phone: string;
+  notes: string;
+}
+
 interface NewMembershipForm {
   membership_type_id: string;
   start_date: string;
-  purchase_price: string;
   notes: string;
 }
 
@@ -55,15 +59,7 @@ interface EditMembershipForm {
 const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
   start_date: new Date().toISOString().slice(0, 10),
-  purchase_price: '',
   notes: '',
-};
-
-const formatAmount = (value?: string | number | null): string => {
-  if (value === null || value === undefined || value === '') return '-';
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return '-';
-  return Math.round(amount).toLocaleString('ko-KR');
 };
 
 const CustomerDetail: React.FC = () => {
@@ -76,6 +72,13 @@ const CustomerDetail: React.FC = () => {
   const [recentAttendances, setRecentAttendances] = useState<Attendance[]>([]);
   const [newMembershipForm, setNewMembershipForm] = useState<NewMembershipForm>(INITIAL_NEW_MEMBERSHIP_FORM);
   const [editingMembershipId, setEditingMembershipId] = useState<number | null>(null);
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+  const [editCustomerForm, setEditCustomerForm] = useState<EditCustomerForm>({
+    name: '',
+    phone: '',
+    notes: '',
+  });
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
     end_date: '',
     remaining_sessions: '',
@@ -90,6 +93,7 @@ const CustomerDetail: React.FC = () => {
   const [notice, setNotice] = useState('');
 
   const hasValidCustomerId = useMemo(() => Number.isInteger(customerId) && customerId > 0, [customerId]);
+  const latestAttendance = useMemo(() => recentAttendances[0] || null, [recentAttendances]);
 
   useEffect(() => {
     if (!hasValidCustomerId) {
@@ -109,6 +113,13 @@ const CustomerDetail: React.FC = () => {
         ]);
 
         setCustomer(customerRes.data.customer);
+        if (customerRes.data.customer) {
+          setEditCustomerForm({
+            name: customerRes.data.customer.name,
+            phone: customerRes.data.customer.phone,
+            notes: customerRes.data.customer.notes || '',
+          });
+        }
         setRecentAttendances(customerRes.data.recentAttendances || []);
         setMembershipTypes(membershipTypesRes.data);
         setMemberships(membershipsRes.data);
@@ -132,11 +143,77 @@ const CustomerDetail: React.FC = () => {
     const response = await customerAPI.getById(customerId);
     setCustomer(response.data.customer);
     setRecentAttendances(response.data.recentAttendances || []);
+    const nextCustomer = response.data.customer as Customer | null;
+    if (nextCustomer) {
+      setEditCustomerForm({
+        name: nextCustomer.name,
+        phone: nextCustomer.phone,
+        notes: nextCustomer.notes || '',
+      });
+    }
   };
 
   const loadMemberships = async () => {
     const response = await membershipAPI.getByCustomer(customerId);
     setMemberships(response.data);
+  };
+
+  const startEditCustomer = () => {
+    if (!customer) return;
+    setEditCustomerForm({
+      name: customer.name,
+      phone: customer.phone,
+      notes: customer.notes || '',
+    });
+    setIsEditingCustomer(true);
+    setError('');
+  };
+
+  const cancelEditCustomer = () => {
+    if (!customer) return;
+    setEditCustomerForm({
+      name: customer.name,
+      phone: customer.phone,
+      notes: customer.notes || '',
+    });
+    setIsEditingCustomer(false);
+  };
+
+  const handleSaveCustomer = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!customer) return;
+
+    const trimmedPhone = editCustomerForm.phone.trim();
+    if (!trimmedPhone) {
+      setError('전화번호는 필수입니다.');
+      return;
+    }
+
+    setError('');
+    setIsSavingCustomer(true);
+    try {
+      await customerAPI.update(customerId, {
+        name: editCustomerForm.name,
+        phone: trimmedPhone,
+        notes: editCustomerForm.notes.trim() || null,
+      });
+
+      setCustomer((prev) => (prev
+        ? {
+            ...prev,
+            name: editCustomerForm.name,
+            phone: trimmedPhone,
+            notes: editCustomerForm.notes.trim() || null,
+          }
+        : prev));
+      setIsEditingCustomer(false);
+      showNotice('고객 정보를 수정했습니다.');
+    } catch (saveError: unknown) {
+      console.error('Failed to update customer:', saveError);
+      setError(parseApiError(saveError));
+    } finally {
+      setIsSavingCustomer(false);
+    }
   };
 
   const handleCreateMembership = async (event: React.FormEvent) => {
@@ -150,7 +227,6 @@ const CustomerDetail: React.FC = () => {
         customer_id: customerId,
         membership_type_id: Number(newMembershipForm.membership_type_id),
         start_date: newMembershipForm.start_date,
-        purchase_price: newMembershipForm.purchase_price ? Number(newMembershipForm.purchase_price) : null,
         notes: newMembershipForm.notes || null,
       });
 
@@ -219,7 +295,7 @@ const CustomerDetail: React.FC = () => {
 
   const handleResetPassword = async () => {
     setError('');
-    const ok = window.confirm(`${customer.name} 고객의 비밀번호를 기본값(12345)으로 초기화할까요?`);
+    const ok = window.confirm('고객 로그인 비밀번호를 기본값 12345로 초기화합니다.');
     if (!ok) return;
 
     setIsResettingPassword(true);
@@ -266,57 +342,108 @@ const CustomerDetail: React.FC = () => {
       </div>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">기본 정보</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
-          <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="text-xl font-display font-semibold text-primary-800">기본 정보</h2>
+          <div className="flex items-center gap-2">
+            {!isEditingCustomer && (
+              <button type="button" className="btn-secondary" onClick={startEditCustomer}>
+                기본 정보 수정
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isResettingPassword}
+              onClick={() => void handleResetPassword()}
+            >
+              {isResettingPassword ? '초기화 중...' : '비밀번호 초기화'}
+            </button>
+          </div>
         </div>
-        {customer.notes && (
-          <div className="mt-3 text-sm text-warm-700">
-            <span className="text-warm-600">메모:</span> {customer.notes}
+
+        {isEditingCustomer ? (
+          <form className="space-y-4" onSubmit={handleSaveCustomer}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label" htmlFor="customer-detail-name">고객 이름</label>
+                <input
+                  id="customer-detail-name"
+                  className="input-field"
+                  value={editCustomerForm.name}
+                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, name: e.target.value }))}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="customer-detail-phone">고객 전화번호</label>
+                <input
+                  id="customer-detail-phone"
+                  className="input-field"
+                  value={editCustomerForm.phone}
+                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="customer-detail-notes">고객 메모</label>
+              <textarea
+                id="customer-detail-notes"
+                className="input-field min-h-[84px]"
+                value={editCustomerForm.notes}
+                onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" disabled={isSavingCustomer} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSavingCustomer ? '저장 중...' : '고객 정보 저장'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={cancelEditCustomer}>
+                취소
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
+              <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
+            </div>
+            {customer.notes && (
+              <div className="mt-3 text-sm text-warm-700">
+                <span className="text-warm-600">메모:</span> {customer.notes}
+              </div>
+            )}
           </div>
         )}
       </section>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">계정 관리</h2>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <p className="text-sm text-warm-700">
-            고객 로그인 비밀번호를 기본값 <span className="font-semibold text-primary-800">12345</span>로 초기화합니다.
-          </p>
-          <button
-            type="button"
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isResettingPassword}
-            onClick={() => void handleResetPassword()}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업 및 코멘트</h2>
+          <Link
+            to={`/customers/${customerId}/attendances`}
+            className="btn-secondary text-sm"
           >
-            {isResettingPassword ? '초기화 중...' : '비밀번호 초기화'}
-          </button>
+            전체 보기
+          </Link>
         </div>
-      </section>
-
-      <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">참석 수업 및 코멘트</h2>
-        {recentAttendances.length === 0 ? (
-          <p className="text-warm-600 py-3">최근 출석 기록이 없습니다.</p>
+        {!latestAttendance ? (
+          <p className="text-warm-600 py-3">출석 기록이 없습니다.</p>
         ) : (
-          <div className="space-y-3">
-            {recentAttendances.map((attendance) => (
-              <div key={attendance.id} className="rounded-lg border border-warm-200 bg-warm-50 p-4">
-                <p className="text-primary-800 font-medium">
-                  {attendance.class_title || attendance.class_type || '수업 정보 없음'}
-                </p>
-                <p className="text-sm text-warm-700 mt-1">
-                  출석일: {formatKoreanDate(attendance.attendance_date)}
-                  {attendance.class_date && attendance.class_start_time
-                    ? ` / 수업일시: ${formatKoreanDateTime(attendance.class_date, attendance.class_start_time)}`
-                    : ''}
-                </p>
-                <p className="text-sm text-warm-700 mt-2">
-                  강사 코멘트: {attendance.instructor_comment?.trim() || '-'}
-                </p>
-              </div>
-            ))}
+          <div className="rounded-lg border border-warm-200 bg-warm-50 p-4">
+            <p className="text-primary-800 font-medium">
+              {latestAttendance.class_title || latestAttendance.class_type || '수업 정보 없음'}
+            </p>
+            <p className="text-sm text-warm-700 mt-1">
+              출석일: {formatKoreanDate(latestAttendance.attendance_date)}
+              {latestAttendance.class_date && latestAttendance.class_start_time
+                ? ` / 수업일시: ${formatKoreanDateTime(latestAttendance.class_date, latestAttendance.class_start_time)}`
+                : ''}
+            </p>
+            <p className="text-sm text-warm-700 mt-2">
+              강사 코멘트: {latestAttendance.instructor_comment?.trim() || '-'}
+            </p>
           </div>
         )}
       </section>
@@ -356,19 +483,6 @@ const CustomerDetail: React.FC = () => {
                 value={newMembershipForm.start_date}
                 onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, start_date: e.target.value }))}
                 required
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="purchase-price">결제 금액</label>
-              <input
-                id="purchase-price"
-                type="number"
-                className="input-field"
-                min={0}
-                step={1}
-                placeholder="비워두면 기본값"
-                value={newMembershipForm.purchase_price}
-                onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, purchase_price: e.target.value }))}
               />
             </div>
             <div>
@@ -459,9 +573,7 @@ const CustomerDetail: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">
-                        잔여 횟수: {membership.remaining_sessions ?? '무제한'} / 결제금액: {formatAmount(membership.purchase_price)}
-                      </p>
+                      <p className="text-sm text-warm-700">잔여 횟수: {membership.remaining_sessions ?? '무제한'}</p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>

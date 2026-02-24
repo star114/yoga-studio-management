@@ -20,7 +20,6 @@ interface Membership {
   start_date: string;
   end_date?: string | null;
   remaining_sessions?: number | null;
-  purchase_price?: string | number | null;
   is_active: boolean;
   notes?: string | null;
 }
@@ -28,7 +27,6 @@ interface Membership {
 interface NewMembershipForm {
   membership_type_id: string;
   start_date: string;
-  purchase_price: string;
   notes: string;
 }
 
@@ -42,15 +40,7 @@ interface EditMembershipForm {
 const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
   start_date: new Date().toISOString().slice(0, 10),
-  purchase_price: '',
   notes: '',
-};
-
-const formatAmount = (value?: string | number | null): string => {
-  if (value === null || value === undefined || value === '') return '-';
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return '-';
-  return Math.round(amount).toLocaleString('ko-KR');
 };
 
 const MembershipManagement: React.FC = () => {
@@ -140,7 +130,6 @@ const MembershipManagement: React.FC = () => {
         customer_id: selectedCustomerId,
         membership_type_id: Number(newMembershipForm.membership_type_id),
         start_date: newMembershipForm.start_date,
-        purchase_price: newMembershipForm.purchase_price ? Number(newMembershipForm.purchase_price) : null,
         notes: newMembershipForm.notes || null,
       });
 
@@ -281,19 +270,6 @@ const MembershipManagement: React.FC = () => {
               />
             </div>
             <div>
-              <label className="label" htmlFor="purchase-price">결제 금액</label>
-              <input
-                id="purchase-price"
-                type="number"
-                className="input-field"
-                placeholder="비워두면 기본값"
-                min={0}
-                step={1}
-                value={newMembershipForm.purchase_price}
-                onChange={(e) => setNewMembershipForm((prev) => ({ ...prev, purchase_price: e.target.value }))}
-              />
-            </div>
-            <div>
               <label className="label" htmlFor="membership-notes">메모</label>
               <textarea
                 id="membership-notes"
@@ -381,9 +357,7 @@ const MembershipManagement: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">
-                        잔여 횟수: {membership.remaining_sessions ?? '무제한'} / 결제금액: {formatAmount(membership.purchase_price)}
-                      </p>
+                      <p className="text-sm text-warm-700">잔여 횟수: {membership.remaining_sessions ?? '무제한'}</p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>

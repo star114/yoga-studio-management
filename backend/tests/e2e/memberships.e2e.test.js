@@ -297,7 +297,6 @@ test('memberships routes cover list/create/update/delete branches', async () => 
       customer_id: 2,
       membership_type_id: 2,
       start_date: '2026-01-01',
-      purchase_price: 90000,
       notes: 'memo',
     },
   });

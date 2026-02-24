@@ -6,6 +6,7 @@ import CustomerDetail from './CustomerDetail';
 
 const {
   getByIdMock,
+  updateCustomerMock,
   resetPasswordMock,
   getTypesMock,
   getByCustomerMock,
@@ -15,6 +16,7 @@ const {
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getByIdMock: vi.fn(),
+  updateCustomerMock: vi.fn(),
   resetPasswordMock: vi.fn(),
   getTypesMock: vi.fn(),
   getByCustomerMock: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../services/api', () => ({
   customerAPI: {
     getById: getByIdMock,
+    update: updateCustomerMock,
     resetPassword: resetPasswordMock,
   },
   membershipAPI: {
@@ -140,10 +143,35 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('홍길동')).toBeTruthy();
     expect(screen.getByText(/메모:/)).toBeTruthy();
     expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy();
-    expect(screen.getByText('최근 출석 기록이 없습니다.')).toBeTruthy();
+    expect(screen.getByText('출석 기록이 없습니다.')).toBeTruthy();
   });
 
-  it('renders attended classes and instructor comments', async () => {
+  it('edits customer info in detail page and supports cancel', async () => {
+    updateCustomerMock.mockResolvedValueOnce(undefined);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '기본 정보 수정' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '기본 정보 수정' }));
+
+    fireEvent.change(screen.getByLabelText('고객 이름'), { target: { value: '홍길순' } });
+    fireEvent.change(screen.getByLabelText('고객 전화번호'), { target: { value: ' 010-9999-8888 ' } });
+    fireEvent.change(screen.getByLabelText('고객 메모'), { target: { value: '새 메모' } });
+    fireEvent.click(screen.getByRole('button', { name: '고객 정보 저장' }));
+
+    await waitFor(() => expect(updateCustomerMock).toHaveBeenCalledWith(1, {
+      name: '홍길순',
+      phone: '010-9999-8888',
+      notes: '새 메모',
+    }));
+    await waitFor(() => expect(screen.getByText('고객 정보를 수정했습니다.')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '기본 정보 수정' }));
+    fireEvent.change(screen.getByLabelText('고객 이름'), { target: { value: '변경전취소' } });
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByRole('button', { name: '고객 정보 저장' })).toBeNull();
+  });
+
+  it('renders only latest attended class and instructor comment', async () => {
     getByIdMock.mockResolvedValueOnce({
       data: {
         customer: {
@@ -172,11 +200,11 @@ describe('CustomerDetail page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('참석 수업 및 코멘트')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('최근 출석 수업 및 코멘트')).toBeTruthy());
     expect(screen.getByText('아쉬탕가')).toBeTruthy();
-    expect(screen.getByText('빈야사')).toBeTruthy();
+    expect(screen.queryByText('빈야사')).toBeNull();
     expect(screen.getByText('강사 코멘트: 호흡이 좋습니다.')).toBeTruthy();
-    expect(screen.getByText('강사 코멘트: -')).toBeTruthy();
+    expect(screen.getByRole('link', { name: '전체 보기' })).toBeTruthy();
   });
 
   it('resets password with cancel and success paths', async () => {
@@ -225,7 +253,6 @@ describe('CustomerDetail page', () => {
     await waitFor(() => expect(screen.getByText('회원권 발급')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('회원권 관리'), { target: { value: '5' } });
     fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-02' } });
-    fireEvent.change(screen.getByLabelText('결제 금액'), { target: { value: '100000' } });
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '프로모션' } });
     fireEvent.click(screen.getByRole('button', { name: '회원권 지급' }));
 
@@ -233,7 +260,6 @@ describe('CustomerDetail page', () => {
       customer_id: 1,
       membership_type_id: 5,
       start_date: '2026-03-02',
-      purchase_price: 100000,
       notes: '프로모션',
     }));
 
@@ -269,7 +295,6 @@ describe('CustomerDetail page', () => {
             start_date: '2026-01-01',
             end_date: '2026-03-01',
             remaining_sessions: 5,
-            purchase_price: 'not-number',
             is_active: true,
             notes: null,
           },
@@ -283,7 +308,6 @@ describe('CustomerDetail page', () => {
             start_date: '2026-01-01',
             end_date: null,
             remaining_sessions: null,
-            purchase_price: null,
             is_active: false,
             notes: '변경됨',
           },
@@ -293,7 +317,6 @@ describe('CustomerDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
-    expect(screen.getByText(/결제금액: -/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '' } });
@@ -327,7 +350,6 @@ describe('CustomerDetail page', () => {
           start_date: '2026-01-01',
           end_date: null,
           remaining_sessions: 2,
-          purchase_price: 50000,
           is_active: true,
           notes: '',
         },
@@ -357,7 +379,6 @@ describe('CustomerDetail page', () => {
             start_date: '2026-01-01',
             end_date: null,
             remaining_sessions: 1,
-            purchase_price: 10000,
             is_active: true,
             notes: null,
           },
@@ -393,7 +414,6 @@ describe('CustomerDetail page', () => {
           start_date: '2026-01-01',
           end_date: null,
           remaining_sessions: 1,
-          purchase_price: 10000,
           is_active: true,
           notes: null,
         },

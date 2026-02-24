@@ -92,7 +92,6 @@ describe('MembershipManagement page', () => {
             start_date: '2026-01-01',
             end_date: null,
             remaining_sessions: null,
-            purchase_price: '100000',
             is_active: true,
             notes: null,
           },
@@ -104,7 +103,6 @@ describe('MembershipManagement page', () => {
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('회원권 관리'), { target: { value: '5' } });
     fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-01' } });
-    fireEvent.change(screen.getByLabelText('결제 금액'), { target: { value: '100000' } });
     fireEvent.change(screen.getByLabelText('메모'), { target: { value: '특가' } });
     fireEvent.click(screen.getByRole('button', { name: '회원권 지급' }));
 
@@ -112,12 +110,10 @@ describe('MembershipManagement page', () => {
       customer_id: 1,
       membership_type_id: 5,
       start_date: '2026-03-01',
-      purchase_price: 100000,
       notes: '특가',
     }));
 
     await waitFor(() => expect(screen.getByText('회원권을 지급했습니다.')).toBeTruthy());
-    expect(screen.getByText(/결제금액: 100,000/)).toBeTruthy();
   });
 
   it('shows parsed error when create fails', async () => {
@@ -164,7 +160,6 @@ describe('MembershipManagement page', () => {
             start_date: '2026-01-01',
             end_date: null,
             remaining_sessions: null,
-            purchase_price: 'invalid',
             is_active: true,
             notes: null,
           },
@@ -178,7 +173,6 @@ describe('MembershipManagement page', () => {
             start_date: '2026-01-01',
             end_date: '2026-02-01',
             remaining_sessions: 3,
-            purchase_price: null,
             is_active: false,
             notes: '변경됨',
           },
@@ -188,7 +182,6 @@ describe('MembershipManagement page', () => {
     render(<MembershipManagement />);
 
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
-    expect(screen.getByText(/결제금액: -/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-02-01' } });
@@ -223,7 +216,6 @@ describe('MembershipManagement page', () => {
           start_date: '2026-01-01',
           end_date: null,
           remaining_sessions: 2,
-          purchase_price: 10000,
           is_active: true,
           notes: '',
         },
@@ -253,7 +245,6 @@ describe('MembershipManagement page', () => {
             start_date: '2026-01-01',
             end_date: null,
             remaining_sessions: 1,
-            purchase_price: 5000,
             is_active: true,
             notes: null,
           },
@@ -290,7 +281,6 @@ describe('MembershipManagement page', () => {
           start_date: '2026-01-01',
           end_date: null,
           remaining_sessions: 1,
-          purchase_price: 5000,
           is_active: true,
           notes: null,
         },
@@ -346,7 +336,6 @@ describe('MembershipManagement page', () => {
             start_date: '2026-01-01',
             end_date: '2026-02-01',
             remaining_sessions: 2,
-            purchase_price: 10000,
             is_active: true,
             notes: null,
           },
@@ -360,7 +349,6 @@ describe('MembershipManagement page', () => {
             start_date: '2026-01-01',
             end_date: null,
             remaining_sessions: null,
-            purchase_price: 10000,
             is_active: true,
             notes: null,
           },

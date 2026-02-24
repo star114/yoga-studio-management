@@ -139,10 +139,9 @@ router.post('/',
   body('customer_id').isInt(),
   body('membership_type_id').isInt(),
   body('start_date').isDate(),
-  body('purchase_price').optional({ nullable: true }).isInt({ min: 0 }),
   validateRequest,
   async (req, res) => {
-    const { customer_id, membership_type_id, start_date, purchase_price, notes } = req.body;
+    const { customer_id, membership_type_id, start_date, notes } = req.body;
 
     try {
       // 회원권 종류 정보 조회
@@ -167,15 +166,14 @@ router.post('/',
 
       const result = await pool.query(
         `INSERT INTO yoga_memberships 
-         (customer_id, membership_type_id, start_date, end_date, remaining_sessions, purchase_price, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+         (customer_id, membership_type_id, start_date, end_date, remaining_sessions, notes)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [
           customer_id,
           membership_type_id,
           start_date,
           endDate,
           membershipType.total_sessions || null,
-          purchase_price ?? membershipType.price ?? null,
           notes || null
         ]
       );

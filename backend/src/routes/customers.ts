@@ -96,6 +96,88 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// 특정 고객 전체 출석 조회
+router.get('/:id/attendances', authenticate, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const rawMonths = typeof req.query.months === 'string' ? Number(req.query.months) : null;
+  const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
+  const rawPageSize = typeof req.query.page_size === 'string' ? Number(req.query.page_size) : 20;
+  const months = rawMonths === 3 || rawMonths === 6 ? rawMonths : null;
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
+  const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
+    ? Math.min(Math.floor(rawPageSize), 100)
+    : 20;
+  const offset = (page - 1) * pageSize;
+
+  // 일반 사용자는 자기 정보만 조회 가능
+  if (req.user!.role !== 'admin') {
+    const checkResult = await pool.query(
+      'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
+      [id, req.user!.id]
+    );
+    if (checkResult.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  }
+
+  try {
+    const whereClauses = ['a.customer_id = $1'];
+    const queryParams: Array<number | string> = [id];
+
+    if (months) {
+      whereClauses.push(`a.attendance_date >= (CURRENT_DATE - ($2::text || ' months')::interval)`);
+      queryParams.push(months);
+    }
+
+    const whereSql = whereClauses.join(' AND ');
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM yoga_attendances a
+       WHERE ${whereSql}`,
+      queryParams
+    );
+    const total = countResult.rows[0]?.total ?? 0;
+
+    const limitParamIndex = queryParams.length + 1;
+    const offsetParamIndex = queryParams.length + 2;
+    const result = await pool.query(
+      `SELECT
+         a.*,
+         u.login_id as instructor_email,
+         cls.id as class_id,
+         cls.title as class_title,
+         cls.class_date,
+         cls.start_time as class_start_time,
+         cls.end_time as class_end_time,
+         COALESCE(a.class_type, cls.title) as class_type
+       FROM yoga_attendances a
+       LEFT JOIN yoga_users u ON a.instructor_id = u.id
+       LEFT JOIN yoga_classes cls ON cls.id = a.class_id
+       WHERE ${whereSql}
+       ORDER BY a.attendance_date DESC
+       LIMIT $${limitParamIndex}
+       OFFSET $${offsetParamIndex}`,
+      [...queryParams, pageSize, offset]
+    );
+
+    res.json({
+      items: result.rows,
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+      filter: {
+        months,
+      },
+    });
+  } catch (error) {
+    console.error('Get customer attendances error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // 고객 생성 (관리자)
 router.post('/',
   authenticate,
