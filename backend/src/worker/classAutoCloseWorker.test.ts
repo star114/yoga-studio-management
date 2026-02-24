@@ -48,18 +48,32 @@ test('worker starts with fallback interval, runs query, and stops', async (t) =>
   }) as typeof clearInterval;
 
   const logMock = t.mock.method(console, 'log', () => undefined);
-  const queryMock = t.mock.method(pool, 'query', async () => ({ rowCount: 2 }) as any);
+  const queryMock = t.mock.method(pool, 'query', async (sql: string) => {
+    if (/WITH eligible/i.test(sql)) {
+      return {
+        rowCount: 1,
+        rows: [{
+          eligible_count: 2,
+          no_attendance_count: 2,
+          selected_count: 2,
+          inserted_count: 2,
+          updated_registration_count: 2,
+          updated_membership_count: 2,
+        }],
+      } as any;
+    }
+    return { rowCount: 2 } as any;
+  });
 
   const stop = startClassAutoCloseWorker();
   await flushAsync();
 
   assert.equal(queryMock.mock.calls.length, 2);
   const firstQuery = String(queryMock.mock.calls[0].arguments[0]);
-  assert.match(firstQuery, /UPDATE yoga_class_registrations/i);
-  assert.match(firstQuery, /c\.is_open\s*=\s*TRUE/i);
+  assert.match(firstQuery, /INSERT INTO yoga_attendances/i);
   assert.equal(typeof capturedCallback, 'function');
   const initialLogs = logMock.mock.calls.map((call) => String(call.arguments[0]));
-  assert.equal(initialLogs.some((line) => /Auto-marked 2 registration/.test(line)), true);
+  assert.equal(initialLogs.some((line) => /Auto-processed 2 attendance/.test(line)), true);
   assert.equal(initialLogs.some((line) => /Auto-closed 2 completed class/.test(line)), true);
   assert.equal(initialLogs.some((line) => /interval: 60000ms/.test(line)), true);
 
@@ -106,7 +120,22 @@ test('worker uses default env values when variables are missing', async (t) => {
   global.clearInterval = (((_timer: NodeJS.Timeout) => undefined)) as typeof clearInterval;
 
   t.mock.method(console, 'log', () => undefined);
-  const queryMock = t.mock.method(pool, 'query', async () => ({ rowCount: 0 }) as any);
+  const queryMock = t.mock.method(pool, 'query', async (sql: string) => {
+    if (/WITH eligible/i.test(sql)) {
+      return {
+        rowCount: 1,
+        rows: [{
+          eligible_count: 0,
+          no_attendance_count: 0,
+          selected_count: 0,
+          inserted_count: 0,
+          updated_registration_count: 0,
+          updated_membership_count: 0,
+        }],
+      } as any;
+    }
+    return { rowCount: 0 } as any;
+  });
 
   startClassAutoCloseWorker();
   await flushAsync();
@@ -135,11 +164,34 @@ test('worker prevents overlapping run execution when already running', async (t)
   });
   let isFirstCall = true;
 
-  const queryMock = t.mock.method(pool, 'query', async () => {
+  const queryMock = t.mock.method(pool, 'query', async (sql: string) => {
     if (isFirstCall) {
       isFirstCall = false;
       await firstPending;
-      return { rowCount: 0 } as any;
+      return {
+        rowCount: 1,
+        rows: [{
+          eligible_count: 0,
+          no_attendance_count: 0,
+          selected_count: 0,
+          inserted_count: 0,
+          updated_registration_count: 0,
+          updated_membership_count: 0,
+        }],
+      } as any;
+    }
+    if (/WITH eligible/i.test(sql)) {
+      return {
+        rowCount: 1,
+        rows: [{
+          eligible_count: 0,
+          no_attendance_count: 0,
+          selected_count: 0,
+          inserted_count: 0,
+          updated_registration_count: 0,
+          updated_membership_count: 0,
+        }],
+      } as any;
     }
     return { rowCount: 0 } as any;
   });
