@@ -8,6 +8,7 @@ const {
   classGetByIdMock,
   classGetRegistrationsMock,
   classRegisterMock,
+  classUpdateMock,
   classCancelRegistrationMock,
   classUpdateRegistrationStatusMock,
   attendanceCheckInMock,
@@ -18,6 +19,7 @@ const {
   classGetByIdMock: vi.fn(),
   classGetRegistrationsMock: vi.fn(),
   classRegisterMock: vi.fn(),
+  classUpdateMock: vi.fn(),
   classCancelRegistrationMock: vi.fn(),
   classUpdateRegistrationStatusMock: vi.fn(),
   attendanceCheckInMock: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock('../services/api', () => ({
     getById: classGetByIdMock,
     getRegistrations: classGetRegistrationsMock,
     register: classRegisterMock,
+    update: classUpdateMock,
     cancelRegistration: classCancelRegistrationMock,
     updateRegistrationStatus: classUpdateRegistrationStatusMock,
   },
@@ -152,6 +155,77 @@ describe('ClassDetail page', () => {
     expect(screen.getByText('상태: 오픈')).toBeTruthy();
     expect(screen.getByText('홍길동')).toBeTruthy();
     expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
+  });
+
+  it('updates class basic info from detail page', async () => {
+    classUpdateMock.mockResolvedValueOnce(undefined);
+    classGetByIdMock
+      .mockResolvedValueOnce({
+        data: {
+          id: 1,
+          title: '빈야사',
+          class_date: '2026-03-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          max_capacity: 10,
+          is_open: true,
+          class_status: 'open',
+          current_enrollment: 1,
+          remaining_seats: 9,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 1,
+          title: '수정 빈야사',
+          class_date: '2026-03-02',
+          start_time: '09:30:00',
+          end_time: '10:30:00',
+          max_capacity: 8,
+          is_open: false,
+          class_status: 'open',
+          current_enrollment: 1,
+          remaining_seats: 7,
+        },
+      });
+    classGetRegistrationsMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '기본정보 수정' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '기본정보 수정' }));
+    fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '수정 빈야사' } });
+    fireEvent.change(screen.getByLabelText('수업 날짜'), { target: { value: '2026-03-02' } });
+    fireEvent.change(screen.getByLabelText('시작 시간'), { target: { value: '09:30' } });
+    fireEvent.change(screen.getByLabelText('종료 시간'), { target: { value: '10:30' } });
+    fireEvent.change(screen.getByLabelText('제한 인원'), { target: { value: '8' } });
+    fireEvent.click(screen.getByLabelText('오픈 상태'));
+    fireEvent.click(screen.getByRole('button', { name: '기본정보 저장' }));
+
+    await waitFor(() => expect(classUpdateMock).toHaveBeenCalledWith(1, expect.objectContaining({
+      title: '수정 빈야사',
+      class_date: '2026-03-02',
+      start_time: '09:30',
+      end_time: '10:30',
+      max_capacity: 8,
+      is_open: false,
+    })));
+    await waitFor(() => expect(screen.getByText('수업 기본정보를 수정했습니다.')).toBeTruthy());
+  });
+
+  it('shows validation error when class basic info is invalid', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '기본정보 수정' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '기본정보 수정' }));
+    fireEvent.change(screen.getByLabelText('시작 시간'), { target: { value: '10:30' } });
+    fireEvent.change(screen.getByLabelText('종료 시간'), { target: { value: '10:00' } });
+    fireEvent.click(screen.getByRole('button', { name: '기본정보 저장' }));
+
+    await waitFor(() => expect(screen.getByText('종료 시간은 시작 시간보다 늦어야 합니다.')).toBeTruthy());
+    expect(classUpdateMock).not.toHaveBeenCalled();
   });
 
   it('shows all status labels', async () => {

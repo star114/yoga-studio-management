@@ -7,13 +7,11 @@ import ClassManagement from './ClassManagement';
 const {
   getAllMock,
   createMock,
-  updateMock,
   deleteMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getAllMock: vi.fn(),
   createMock: vi.fn(),
-  updateMock: vi.fn(),
   deleteMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
 }));
@@ -22,7 +20,6 @@ vi.mock('../services/api', () => ({
   classAPI: {
     getAll: getAllMock,
     create: createMock,
-    update: updateMock,
     delete: deleteMock,
   },
 }));
@@ -203,7 +200,7 @@ describe('ClassManagement page', () => {
 
   });
 
-  it('shows parsed error when create/update fails', async () => {
+  it('shows parsed error when create fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     createMock.mockRejectedValueOnce(new Error('create failed'));
 
@@ -215,82 +212,9 @@ describe('ClassManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
 
-    updateMock.mockRejectedValueOnce(new Error('update failed'));
-    getAllMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 2,
-          title: '수정대상',
-          class_date: '2026-02-24',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          max_capacity: 10,
-          is_open: true,
-          class_status: 'open',
-        },
-      ],
-    });
-
-    cleanup();
-    renderPage();
-    await waitFor(() => expect(screen.getByText('수정대상')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.click(screen.getByRole('button', { name: '수업 저장' }));
-
-    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(parseApiErrorMock).toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
-  });
-
-  it('edits class and supports cancel/reset', async () => {
-    updateMock.mockResolvedValueOnce(undefined);
-    getAllMock
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 3,
-            title: '수정수업',
-            class_date: '2026-02-24',
-            start_time: '09:00:00',
-            end_time: '10:00:00',
-            max_capacity: 10,
-            is_open: true,
-            class_status: 'open',
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 3,
-            title: '수정완료',
-            class_date: '2026-02-24',
-            start_time: '09:00:00',
-            end_time: '10:00:00',
-            max_capacity: 10,
-            is_open: false,
-            class_status: 'open',
-          },
-        ],
-      });
-
-    renderPage();
-    await waitFor(() => expect(screen.getByText('수정수업')).toBeTruthy());
-
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.click(screen.getByRole('button', { name: '취소' }));
-    expect(screen.getByRole('heading', { name: '수업 추가' })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.change(screen.getByLabelText('수업명'), { target: { value: '수정완료' } });
-    fireEvent.click(screen.getByLabelText('오픈 상태'));
-    fireEvent.click(screen.getByRole('button', { name: '수업 저장' }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalledWith(3, expect.objectContaining({
-      title: '수정완료',
-      is_open: false,
-    })));
   });
 
   it('filters list by search/open-only and shows status badges', async () => {
@@ -358,7 +282,7 @@ describe('ClassManagement page', () => {
     expect(screen.getByText('닫힘')).toBeTruthy();
     expect(screen.getByText('기본수업')).toBeTruthy();
     expect(screen.getByText('0자리')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '수정' }).some((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+    expect(screen.queryByRole('button', { name: '수정' })).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText('수업명 검색'), { target: { value: '완료수업' } });
     expect(screen.getByText('완료수업')).toBeTruthy();
@@ -398,8 +322,6 @@ describe('ClassManagement page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByText('삭제수업')).toBeTruthy());
-
-    fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     expect(deleteMock).not.toHaveBeenCalled();
 

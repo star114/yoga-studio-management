@@ -12,9 +12,20 @@ interface YogaClassDetail {
   end_time: string;
   max_capacity: number;
   is_open: boolean;
+  notes?: string | null;
   current_enrollment?: number;
   remaining_seats?: number;
   class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
+}
+
+interface ClassEditForm {
+  title: string;
+  class_date: string;
+  start_time: string;
+  end_time: string;
+  max_capacity: string;
+  is_open: boolean;
+  notes: string;
 }
 
 interface Customer {
@@ -50,6 +61,9 @@ const ClassDetail: React.FC = () => {
   const [savingAttendanceStatusCustomerId, setSavingAttendanceStatusCustomerId] = useState<number | null>(null);
   const [checkingInCustomerId, setCheckingInCustomerId] = useState<number | null>(null);
   const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
+  const [isEditingClass, setIsEditingClass] = useState(false);
+  const [classEditForm, setClassEditForm] = useState<ClassEditForm | null>(null);
+  const [isClassSaving, setIsClassSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -89,7 +103,21 @@ const ClassDetail: React.FC = () => {
           customerAPI.getAll(),
         ]);
 
-        setClassDetail(classRes.data);
+        const detail = classRes.data as YogaClassDetail | null;
+        setClassDetail(detail);
+        if (detail) {
+          setClassEditForm({
+            title: detail.title,
+            class_date: String(detail.class_date).slice(0, 10),
+            start_time: String(detail.start_time).slice(0, 5),
+            end_time: String(detail.end_time).slice(0, 5),
+            max_capacity: String(detail.max_capacity),
+            is_open: Boolean(detail.is_open),
+            notes: detail.notes || '',
+          });
+        } else {
+          setClassEditForm(null);
+        }
         setRegistrations(registrationsRes.data);
         setCustomers(customersRes.data);
         setInstructorCommentDrafts(
@@ -113,7 +141,21 @@ const ClassDetail: React.FC = () => {
       classAPI.getById(classId),
       classAPI.getRegistrations(classId),
     ]);
-    setClassDetail(classRes.data);
+    const detail = classRes.data as YogaClassDetail | null;
+    setClassDetail(detail);
+    if (detail) {
+      setClassEditForm({
+        title: detail.title,
+        class_date: String(detail.class_date).slice(0, 10),
+        start_time: String(detail.start_time).slice(0, 5),
+        end_time: String(detail.end_time).slice(0, 5),
+        max_capacity: String(detail.max_capacity),
+        is_open: Boolean(detail.is_open),
+        notes: detail.notes || '',
+      });
+    } else {
+      setClassEditForm(null);
+    }
     setRegistrations(registrationsRes.data);
     setInstructorCommentDrafts(
       Object.fromEntries(
@@ -233,6 +275,78 @@ const ClassDetail: React.FC = () => {
     }
   };
 
+  const handleClassEditChange = (key: keyof ClassEditForm, value: string | boolean) => {
+    setClassEditForm((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [key]: value } as ClassEditForm;
+    });
+  };
+
+  const resetClassEditForm = () => {
+    if (!classDetail) return;
+    setClassEditForm({
+      title: classDetail.title,
+      class_date: String(classDetail.class_date).slice(0, 10),
+      start_time: String(classDetail.start_time).slice(0, 5),
+      end_time: String(classDetail.end_time).slice(0, 5),
+      max_capacity: String(classDetail.max_capacity),
+      is_open: Boolean(classDetail.is_open),
+      notes: classDetail.notes || '',
+    });
+    setIsEditingClass(false);
+  };
+
+  const handleSaveClassInfo = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!classEditForm) return;
+
+    const title = classEditForm.title.trim();
+    if (!title) {
+      setError('수업명은 필수입니다.');
+      return;
+    }
+    if (!classEditForm.class_date) {
+      setError('수업 날짜를 입력하세요.');
+      return;
+    }
+    if (!classEditForm.start_time || !classEditForm.end_time) {
+      setError('시작/종료 시간을 입력하세요.');
+      return;
+    }
+    if (classEditForm.start_time >= classEditForm.end_time) {
+      setError('종료 시간은 시작 시간보다 늦어야 합니다.');
+      return;
+    }
+    const capacity = Number(classEditForm.max_capacity);
+    if (!Number.isInteger(capacity) || capacity < 1) {
+      setError('제한 인원은 1명 이상 정수여야 합니다.');
+      return;
+    }
+
+    try {
+      setError('');
+      setNotice('');
+      setIsClassSaving(true);
+      await classAPI.update(classId, {
+        title,
+        class_date: classEditForm.class_date,
+        start_time: classEditForm.start_time,
+        end_time: classEditForm.end_time,
+        max_capacity: capacity,
+        is_open: classEditForm.is_open,
+        notes: classEditForm.notes.trim() || null,
+      });
+      await refreshClassAndRegistrations();
+      setIsEditingClass(false);
+      setNotice('수업 기본정보를 수정했습니다.');
+    } catch (classUpdateError: unknown) {
+      console.error('Failed to update class info:', classUpdateError);
+      setError(parseApiError(classUpdateError, '수업 기본정보 수정에 실패했습니다.'));
+    } finally {
+      setIsClassSaving(false);
+    }
+  };
+
   if (isLoading) {
     return <p className="text-warm-600 py-8">수업 상세 로딩 중...</p>;
   }
@@ -268,11 +382,125 @@ const ClassDetail: React.FC = () => {
       {notice && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{notice}</p>}
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">수업 정보</h2>
-        <p className="text-warm-700">
-          신청 {classDetail.current_enrollment ?? 0}명 / 잔여 {classDetail.remaining_seats ?? classDetail.max_capacity}자리
-        </p>
-        <p className="text-warm-700 mt-2">상태: {classStatusLabel}</p>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-xl font-display font-semibold text-primary-800">수업 정보</h2>
+          {!isEditingClass && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setIsEditingClass(true)}
+            >
+              기본정보 수정
+            </button>
+          )}
+        </div>
+        {isEditingClass && classEditForm ? (
+          <form className="space-y-4" onSubmit={handleSaveClassInfo}>
+            <div>
+              <label className="label" htmlFor="detail-class-title">수업명</label>
+              <input
+                id="detail-class-title"
+                className="input-field"
+                value={classEditForm.title}
+                onChange={(event) => handleClassEditChange('title', event.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="label" htmlFor="detail-class-date">수업 날짜</label>
+              <input
+                id="detail-class-date"
+                type="date"
+                className="input-field"
+                value={classEditForm.class_date}
+                onChange={(event) => handleClassEditChange('class_date', event.target.value)}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label" htmlFor="detail-class-start">시작 시간</label>
+                <input
+                  id="detail-class-start"
+                  type="time"
+                  className="input-field"
+                  value={classEditForm.start_time}
+                  onChange={(event) => handleClassEditChange('start_time', event.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="detail-class-end">종료 시간</label>
+                <input
+                  id="detail-class-end"
+                  type="time"
+                  className="input-field"
+                  value={classEditForm.end_time}
+                  onChange={(event) => handleClassEditChange('end_time', event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="label" htmlFor="detail-class-capacity">제한 인원</label>
+              <input
+                id="detail-class-capacity"
+                type="number"
+                min={1}
+                className="input-field"
+                value={classEditForm.max_capacity}
+                onChange={(event) => handleClassEditChange('max_capacity', event.target.value)}
+                required
+              />
+            </div>
+
+            <label className="inline-flex items-center gap-2 text-sm text-warm-700">
+              <input
+                type="checkbox"
+                checked={classEditForm.is_open}
+                onChange={(event) => handleClassEditChange('is_open', event.target.checked)}
+              />
+              오픈 상태
+            </label>
+
+            <div>
+              <label className="label" htmlFor="detail-class-notes">메모</label>
+              <textarea
+                id="detail-class-notes"
+                className="input-field min-h-[88px]"
+                value={classEditForm.notes}
+                onChange={(event) => handleClassEditChange('notes', event.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={isClassSaving}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isClassSaving ? '저장 중...' : '기본정보 저장'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={resetClassEditForm}
+              >
+                취소
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <p className="text-warm-700">
+              신청 {classDetail.current_enrollment ?? 0}명 / 잔여 {classDetail.remaining_seats ?? classDetail.max_capacity}자리
+            </p>
+            <p className="text-warm-700 mt-2">상태: {classStatusLabel}</p>
+          </>
+        )}
       </section>
 
       <section className="card">

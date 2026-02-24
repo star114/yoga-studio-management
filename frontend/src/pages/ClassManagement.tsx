@@ -86,7 +86,6 @@ const getClassStatusBadge = (item: YogaClass) => {
 const ClassManagement: React.FC = () => {
   const [classes, setClasses] = useState<YogaClass[]>([]);
   const [form, setForm] = useState<ClassForm>(INITIAL_FORM);
-  const [editingClassId, setEditingClassId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [showOpenOnly, setShowOpenOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,8 +98,6 @@ const ClassManagement: React.FC = () => {
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
   const defaultDateFrom = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
   const defaultDateTo = format(addMonths(new Date(), 2), 'yyyy-MM-dd');
-
-  const isEditMode = editingClassId !== null;
 
   const filteredClasses = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -142,32 +139,6 @@ const ClassManagement: React.FC = () => {
     }
   };
 
-  const resetForm = () => {
-    setForm(INITIAL_FORM);
-    setFormError('');
-    setFormNotice('');
-    setEditingClassId(null);
-    setIsRecurringCreate(false);
-    setRecurrenceEndDate(INITIAL_FORM.class_date);
-    setRecurrenceWeekdays([]);
-  };
-
-  const startEdit = (item: YogaClass) => {
-    setEditingClassId(item.id);
-    setFormError('');
-    setFormNotice('');
-    setIsRecurringCreate(false);
-    setForm({
-      title: item.title,
-      class_date: item.class_date.slice(0, 10),
-      start_time: item.start_time.slice(0, 5),
-      end_time: item.end_time.slice(0, 5),
-      max_capacity: String(item.max_capacity),
-      is_open: item.is_open,
-      notes: item.notes || '',
-    });
-  };
-
   const handleFormChange = (key: keyof ClassForm, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value } as ClassForm));
   };
@@ -201,7 +172,7 @@ const ClassManagement: React.FC = () => {
       return;
     }
 
-    if (!isEditMode && isRecurringCreate) {
+    if (isRecurringCreate) {
       if (!recurrenceEndDate) {
         setFormError('반복 종료 날짜를 입력하세요.');
         return;
@@ -228,10 +199,7 @@ const ClassManagement: React.FC = () => {
         notes: form.notes.trim() || null,
       };
 
-      if (isEditMode && editingClassId) {
-        await classAPI.update(editingClassId, payload);
-        setFormNotice('수업 정보가 수정되었습니다.');
-      } else if (isRecurringCreate) {
+      if (isRecurringCreate) {
         const recurringDates = buildRecurringDates(form.class_date, recurrenceEndDate, recurrenceWeekdays);
         if (recurringDates.length === 0) {
           setFormError('선택한 조건에 맞는 반복 수업 날짜가 없습니다.');
@@ -251,12 +219,10 @@ const ClassManagement: React.FC = () => {
       }
 
       await loadClasses();
-      if (!isEditMode) {
-        setForm(INITIAL_FORM);
-        setIsRecurringCreate(false);
-        setRecurrenceEndDate(INITIAL_FORM.class_date);
-        setRecurrenceWeekdays([]);
-      }
+      setForm(INITIAL_FORM);
+      setIsRecurringCreate(false);
+      setRecurrenceEndDate(INITIAL_FORM.class_date);
+      setRecurrenceWeekdays([]);
     } catch (submitError: unknown) {
       console.error('Failed to save class:', submitError);
       setFormError(parseApiError(submitError));
@@ -272,9 +238,6 @@ const ClassManagement: React.FC = () => {
     try {
       await classAPI.delete(item.id);
       await loadClasses();
-      if (editingClassId === item.id) {
-        resetForm();
-      }
     } catch (deleteError: unknown) {
       console.error('Failed to delete class:', deleteError);
       setError(parseApiError(deleteError));
@@ -285,13 +248,13 @@ const ClassManagement: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-display font-bold text-primary-800">수업 관리</h1>
-        <p className="text-warm-600">수업 생성/수정/삭제와 상세 페이지 이동을 관리합니다.</p>
+        <p className="text-warm-600">수업 생성/삭제와 상세 페이지 이동을 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section className="card xl:col-span-2">
           <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-            {isEditMode ? '수업 수정' : '수업 추가'}
+            수업 추가
           </h2>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -370,60 +333,58 @@ const ClassManagement: React.FC = () => {
               오픈 상태
             </label>
 
-            {!isEditMode && (
-              <div className="space-y-3 rounded-lg border border-warm-200 bg-warm-50 p-3">
-                <label className="inline-flex items-center gap-2 text-sm text-warm-700">
-                  <input
-                    type="checkbox"
-                    checked={isRecurringCreate}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setIsRecurringCreate(checked);
-                      if (checked) {
-                        setRecurrenceEndDate(form.class_date);
-                        setRecurrenceWeekdays([new Date(`${form.class_date}T00:00:00`).getDay()]);
-                      } else {
-                        setRecurrenceWeekdays([]);
-                      }
-                    }}
-                  />
-                  반복 일정으로 생성
-                </label>
+            <div className="space-y-3 rounded-lg border border-warm-200 bg-warm-50 p-3">
+              <label className="inline-flex items-center gap-2 text-sm text-warm-700">
+                <input
+                  type="checkbox"
+                  checked={isRecurringCreate}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsRecurringCreate(checked);
+                    if (checked) {
+                      setRecurrenceEndDate(form.class_date);
+                      setRecurrenceWeekdays([new Date(`${form.class_date}T00:00:00`).getDay()]);
+                    } else {
+                      setRecurrenceWeekdays([]);
+                    }
+                  }}
+                />
+                반복 일정으로 생성
+              </label>
 
-                {isRecurringCreate && (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="label" htmlFor="recurrence-end-date">반복 종료 날짜</label>
-                      <input
-                        id="recurrence-end-date"
-                        type="date"
-                        className="input-field"
-                        min={form.class_date}
-                        value={recurrenceEndDate}
-                        onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                        required
-                      />
-                    </div>
+              {isRecurringCreate && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="label" htmlFor="recurrence-end-date">반복 종료 날짜</label>
+                    <input
+                      id="recurrence-end-date"
+                      type="date"
+                      className="input-field"
+                      min={form.class_date}
+                      value={recurrenceEndDate}
+                      onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                      required
+                    />
+                  </div>
 
-                    <div>
-                      <p className="label mb-1">반복 요일</p>
-                      <div className="flex flex-wrap gap-2">
-                        {WEEKDAY_OPTIONS.map((option) => (
-                          <label key={option.value} className="inline-flex items-center gap-1 text-sm text-warm-700">
-                            <input
-                              type="checkbox"
-                              checked={recurrenceWeekdays.includes(option.value)}
-                              onChange={() => toggleWeekday(option.value)}
-                            />
-                            {option.label}
-                          </label>
-                        ))}
-                      </div>
+                  <div>
+                    <p className="label mb-1">반복 요일</p>
+                    <div className="flex flex-wrap gap-2">
+                      {WEEKDAY_OPTIONS.map((option) => (
+                        <label key={option.value} className="inline-flex items-center gap-1 text-sm text-warm-700">
+                          <input
+                            type="checkbox"
+                            checked={recurrenceWeekdays.includes(option.value)}
+                            onChange={() => toggleWeekday(option.value)}
+                          />
+                          {option.label}
+                        </label>
+                      ))}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="label" htmlFor="class-notes">메모</label>
@@ -452,13 +413,8 @@ const ClassManagement: React.FC = () => {
                 disabled={isSubmitting}
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? '저장 중...' : isEditMode ? '수업 저장' : '수업 추가'}
+                {isSubmitting ? '저장 중...' : '수업 추가'}
               </button>
-              {isEditMode && (
-                <button type="button" className="btn-secondary" onClick={resetForm}>
-                  취소
-                </button>
-              )}
             </div>
           </form>
         </section>
@@ -540,14 +496,6 @@ const ClassManagement: React.FC = () => {
                           >
                             상세
                           </Link>
-                          <button
-                            type="button"
-                            onClick={() => startEdit(item)}
-                            disabled={item.class_status === 'completed'}
-                            className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            수정
-                          </button>
                           <button
                             type="button"
                             onClick={() => void handleDelete(item)}
