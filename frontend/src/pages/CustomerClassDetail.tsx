@@ -14,6 +14,7 @@ interface CustomerClassDetailData {
   class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
   registration_comment?: string | null;
   instructor_comment?: string | null;
+  customer_comment?: string | null;
   attendance_status?: 'reserved' | 'attended' | 'absent';
 }
 
@@ -22,6 +23,9 @@ const CustomerClassDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const classId = Number(id);
   const [detail, setDetail] = useState<CustomerClassDetailData | null>(null);
+  const [attendanceCommentDraft, setAttendanceCommentDraft] = useState('');
+  const [isSavingAttendanceComment, setIsSavingAttendanceComment] = useState(false);
+  const [attendanceCommentNotice, setAttendanceCommentNotice] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -43,6 +47,7 @@ const CustomerClassDetail: React.FC = () => {
         setIsLoading(true);
         const response = await classAPI.getMyClassDetail(classId);
         setDetail(response.data);
+        setAttendanceCommentDraft(response.data?.customer_comment || '');
       } catch (loadError: unknown) {
         console.error('Failed to load my class detail:', loadError);
         setError(parseApiError(loadError, '수업 상세 정보를 불러오지 못했습니다.'));
@@ -77,6 +82,24 @@ const CustomerClassDetail: React.FC = () => {
       ? '결석'
       : '예약';
 
+  const handleSaveAttendanceComment = async () => {
+    try {
+      setError('');
+      setAttendanceCommentNotice('');
+      setIsSavingAttendanceComment(true);
+      const response = await classAPI.updateMyAttendanceComment(classId, attendanceCommentDraft);
+      const savedComment = response.data?.customer_comment || null;
+      setDetail({ ...detail, customer_comment: savedComment });
+      setAttendanceCommentDraft(savedComment || '');
+      setAttendanceCommentNotice('출석 코멘트를 저장했습니다.');
+    } catch (saveError: unknown) {
+      console.error('Failed to save attendance comment:', saveError);
+      setError(parseApiError(saveError, '출석 코멘트 저장에 실패했습니다.'));
+    } finally {
+      setIsSavingAttendanceComment(false);
+    }
+  };
+
   return (
     <div className="space-y-6 fade-in">
       <div className="flex items-center justify-between gap-3">
@@ -90,6 +113,11 @@ const CustomerClassDetail: React.FC = () => {
       </div>
 
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+      {attendanceCommentNotice && (
+        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          {attendanceCommentNotice}
+        </p>
+      )}
 
       <section className="card space-y-3">
         <h2 className="text-xl font-display font-semibold text-primary-800">나의 수업 정보</h2>
@@ -105,6 +133,31 @@ const CustomerClassDetail: React.FC = () => {
         <h2 className="text-xl font-display font-semibold text-primary-800">강사 코멘트</h2>
         <p className="text-warm-700">{detail.instructor_comment?.trim() || '-'}</p>
       </section>
+
+      {detail.attendance_status === 'attended' && (
+        <section className="card space-y-3">
+          <h2 className="text-xl font-display font-semibold text-primary-800">나의 출석 코멘트</h2>
+          <label className="label" htmlFor="customer-attendance-comment">나의 출석 코멘트</label>
+          <textarea
+            id="customer-attendance-comment"
+            className="input-field min-h-[88px]"
+            maxLength={500}
+            placeholder="출석한 수업에 대한 메모를 남겨보세요."
+            value={attendanceCommentDraft}
+            onChange={(event) => setAttendanceCommentDraft(event.target.value)}
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isSavingAttendanceComment}
+              onClick={() => void handleSaveAttendanceComment()}
+            >
+              {isSavingAttendanceComment ? '저장 중...' : '출석 코멘트 저장'}
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 };

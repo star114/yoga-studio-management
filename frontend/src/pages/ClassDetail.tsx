@@ -43,6 +43,7 @@ interface ClassRegistration {
   registration_comment?: string | null;
   attendance_id?: number | null;
   attendance_instructor_comment?: string | null;
+  attendance_customer_comment?: string | null;
   customer_name: string;
   customer_phone: string;
 }
@@ -607,6 +608,13 @@ const ClassDetail: React.FC = () => {
                   <p className="label">수련생 코멘트</p>
                   <p className="text-sm text-warm-700">
                     {registration.registration_comment?.trim() || '-'}
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <p className="label">고객 출석 코멘트</p>
+                  <p className="text-sm text-warm-700">
+                    {registration.attendance_customer_comment?.trim() || '-'}
                   </p>
                 </div>
 

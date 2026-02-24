@@ -35,6 +35,7 @@ interface Attendance {
   class_date?: string | null;
   class_start_time?: string | null;
   instructor_comment?: string | null;
+  customer_comment?: string | null;
 }
 
 interface EditCustomerForm {
@@ -427,6 +428,9 @@ const CustomerDetail: React.FC = () => {
             </p>
             <p className="text-sm text-warm-700 mt-2">
               강사 코멘트: {latestAttendance.instructor_comment?.trim() || '-'}
+            </p>
+            <p className="text-sm text-warm-700 mt-1">
+              고객 출석 코멘트: {latestAttendance.customer_comment?.trim() || '-'}
             </p>
           </div>
         )}
