@@ -212,3 +212,167 @@ test('worker prevents overlapping run execution when already running', async (t)
   await flushAsync();
   assert.equal(queryMock.mock.calls.length, 4);
 });
+
+test('worker uses fallback attendance summary when sync query returns no rows', async (t) => {
+  process.env.CLASS_AUTO_CLOSE_WORKER_ENABLED = 'true';
+  process.env.CLASS_AUTO_CLOSE_INTERVAL_MS = '10';
+
+  global.setInterval = (((_cb: () => void) => ({} as NodeJS.Timeout))) as typeof setInterval;
+  global.clearInterval = (((_timer: NodeJS.Timeout) => undefined)) as typeof clearInterval;
+
+  const logMock = t.mock.method(console, 'log', () => undefined);
+  const warnMock = t.mock.method(console, 'warn', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  const queryMock = t.mock.method(pool, 'query', async (sql: string) => {
+    if (/WITH eligible/i.test(sql)) {
+      return { rowCount: 0, rows: [] } as any;
+    }
+    return { rowCount: 0 } as any;
+  });
+
+  startClassAutoCloseWorker();
+  await flushAsync();
+
+  assert.equal(queryMock.mock.calls.length, 2);
+  assert.equal(
+    logMock.mock.calls.some((call) => /Auto-processed/.test(String(call.arguments[0]))),
+    false
+  );
+  assert.equal(warnMock.mock.calls.length, 0);
+});
+
+test('worker warns skipped registrations with no eligible membership count', async (t) => {
+  process.env.CLASS_AUTO_CLOSE_WORKER_ENABLED = 'true';
+  process.env.CLASS_AUTO_CLOSE_INTERVAL_MS = '10';
+
+  global.setInterval = (((_cb: () => void) => ({} as NodeJS.Timeout))) as typeof setInterval;
+  global.clearInterval = (((_timer: NodeJS.Timeout) => undefined)) as typeof clearInterval;
+
+  t.mock.method(console, 'log', () => undefined);
+  const warnMock = t.mock.method(console, 'warn', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  t.mock.method(pool, 'query', async (sql: string) => {
+    if (/WITH eligible/i.test(sql)) {
+      return {
+        rowCount: 1,
+        rows: [{
+          eligible_count: 4,
+          no_attendance_count: 3,
+          selected_count: 1,
+          inserted_count: 1,
+          updated_registration_count: 1,
+          updated_membership_count: 1,
+        }],
+      } as any;
+    }
+    return { rowCount: 0 } as any;
+  });
+
+  startClassAutoCloseWorker();
+  await flushAsync();
+
+  assert.equal(warnMock.mock.calls.length, 1);
+  const warnMessage = String(warnMock.mock.calls[0].arguments[0]);
+  assert.match(warnMessage, /skipped 2 registration/);
+  assert.match(warnMessage, /no eligible membership: 2/);
+});
+
+test('worker warns skipped registrations without membership suffix when all were selectable', async (t) => {
+  process.env.CLASS_AUTO_CLOSE_WORKER_ENABLED = 'true';
+  process.env.CLASS_AUTO_CLOSE_INTERVAL_MS = '10';
+
+  global.setInterval = (((_cb: () => void) => ({} as NodeJS.Timeout))) as typeof setInterval;
+  global.clearInterval = (((_timer: NodeJS.Timeout) => undefined)) as typeof clearInterval;
+
+  t.mock.method(console, 'log', () => undefined);
+  const warnMock = t.mock.method(console, 'warn', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  t.mock.method(pool, 'query', async (sql: string) => {
+    if (/WITH eligible/i.test(sql)) {
+      return {
+        rowCount: 1,
+        rows: [{
+          eligible_count: 4,
+          no_attendance_count: 3,
+          selected_count: 3,
+          inserted_count: 1,
+          updated_registration_count: 1,
+          updated_membership_count: 1,
+        }],
+      } as any;
+    }
+    return { rowCount: 0 } as any;
+  });
+
+  startClassAutoCloseWorker();
+  await flushAsync();
+
+  assert.equal(warnMock.mock.calls.length, 1);
+  const warnMessage = String(warnMock.mock.calls[0].arguments[0]);
+  assert.match(warnMessage, /skipped 2 registration/);
+  assert.doesNotMatch(warnMessage, /no eligible membership/);
+});
+
+test('worker handles partial attendance summary fields with nullish fallbacks', async (t) => {
+  process.env.CLASS_AUTO_CLOSE_WORKER_ENABLED = 'true';
+  process.env.CLASS_AUTO_CLOSE_INTERVAL_MS = '10';
+
+  global.setInterval = (((_cb: () => void) => ({} as NodeJS.Timeout))) as typeof setInterval;
+  global.clearInterval = (((_timer: NodeJS.Timeout) => undefined)) as typeof clearInterval;
+
+  const logMock = t.mock.method(console, 'log', () => undefined);
+  const warnMock = t.mock.method(console, 'warn', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  t.mock.method(pool, 'query', async (sql: string) => {
+    if (/WITH eligible/i.test(sql)) {
+      return {
+        rowCount: 1,
+        rows: [{
+          inserted_count: 1,
+        }],
+      } as any;
+    }
+    return { rowCount: 0 } as any;
+  });
+
+  startClassAutoCloseWorker();
+  await flushAsync();
+
+  assert.equal(warnMock.mock.calls.length, 0);
+  const logs = logMock.mock.calls.map((call) => String(call.arguments[0]));
+  assert.equal(logs.some((line) => /Auto-processed 1 attendance/.test(line)), true);
+  assert.equal(logs.some((line) => /registrations: 0, memberships: 0/.test(line)), true);
+});
+
+test('worker treats missing inserted_count as zero', async (t) => {
+  process.env.CLASS_AUTO_CLOSE_WORKER_ENABLED = 'true';
+  process.env.CLASS_AUTO_CLOSE_INTERVAL_MS = '10';
+
+  global.setInterval = (((_cb: () => void) => ({} as NodeJS.Timeout))) as typeof setInterval;
+  global.clearInterval = (((_timer: NodeJS.Timeout) => undefined)) as typeof clearInterval;
+
+  const logMock = t.mock.method(console, 'log', () => undefined);
+  const warnMock = t.mock.method(console, 'warn', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  t.mock.method(pool, 'query', async (sql: string) => {
+    if (/WITH eligible/i.test(sql)) {
+      return {
+        rowCount: 1,
+        rows: [{
+          no_attendance_count: 0,
+          selected_count: 0,
+        }],
+      } as any;
+    }
+    return { rowCount: 0 } as any;
+  });
+
+  startClassAutoCloseWorker();
+  await flushAsync();
+
+  assert.equal(warnMock.mock.calls.length, 0);
+  assert.equal(
+    logMock.mock.calls.some((call) => /Auto-processed/.test(String(call.arguments[0]))),
+    false
+  );
+});
