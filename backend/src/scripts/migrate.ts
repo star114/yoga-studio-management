@@ -34,7 +34,7 @@ const getSqlFiles = async (): Promise<string[]> => {
     entries = await fs.readdir(migrationsDir, { withFileTypes: true });
   } catch (error: any) {
     if (error?.code === 'ENOENT') {
-      return [];
+      throw new Error(`Migrations directory not found: ${migrationsDir}`);
     }
     throw error;
   }

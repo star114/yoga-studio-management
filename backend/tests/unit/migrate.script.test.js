@@ -109,7 +109,7 @@ test('migrate script exits 0 when no migration files exist', async () => {
   assert.equal(result.poolCalls.length >= 2, true);
 });
 
-test('migrate script exits 0 when migrations directory is missing (ENOENT)', async () => {
+test('migrate script exits 1 when migrations directory is missing (ENOENT)', async () => {
   const missingDirError = new Error('missing');
   missingDirError.code = 'ENOENT';
 
@@ -121,7 +121,7 @@ test('migrate script exits 0 when migrations directory is missing (ENOENT)', asy
   });
 
   assert.equal(result.endCalls, 1);
-  assert.equal(result.exitCodes.includes(0), true);
+  assert.equal(result.exitCodes.includes(1), true);
 });
 
 test('migrate script exits 1 when reading migration directory fails unexpectedly', async () => {
