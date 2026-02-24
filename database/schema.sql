@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS yoga_attendances (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES yoga_customers(id) ON DELETE CASCADE,
     membership_id INTEGER REFERENCES yoga_memberships(id) ON DELETE CASCADE,
-    class_id INTEGER NOT NULL REFERENCES yoga_classes(id) ON DELETE SET NULL,
+    class_id INTEGER REFERENCES yoga_classes(id) ON DELETE SET NULL,
     attendance_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     instructor_comment TEXT,
     instructor_id INTEGER REFERENCES yoga_users(id),
