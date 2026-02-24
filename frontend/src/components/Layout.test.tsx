@@ -71,4 +71,16 @@ describe('Layout', () => {
     screen.getByRole('button', { name: '로그아웃' }).click();
     expect(authState.logout).toHaveBeenCalledTimes(1);
   });
+
+  it('shows fallback login id when login_id is empty', () => {
+    authState = {
+      user: { id: 3, login_id: '', role: 'customer' },
+      customerInfo: { id: 3, name: '테스트', phone: '010-3333-4444' },
+      logout: vi.fn(),
+    };
+
+    renderLayout();
+
+    expect(screen.getByText('-')).toBeTruthy();
+  });
 });

@@ -46,7 +46,8 @@
     "test:coverage:admin-pages": "COVERAGE_SCOPE=admin-pages vitest run --coverage",
     "test:coverage:customer-pages": "COVERAGE_SCOPE=customer-pages vitest run --coverage",
     "test:coverage:all-src": "COVERAGE_SCOPE=all-src vitest run --coverage",
-    "test:coverage:parallel": "npm run test:coverage:core & npm run test:coverage:shell & npm run test:coverage:admin-pages & npm run test:coverage:customer-pages & wait"
+    "test:coverage:parallel": "npm run test:coverage:core & npm run test:coverage:shell & npm run test:coverage:admin-pages & npm run test:coverage:customer-pages & wait",
+    "test:coverage:ci": "COVERAGE_SCOPE=ci vitest run --coverage"
   },
   "browserslist": {
     "production": [

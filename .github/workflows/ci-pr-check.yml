@@ -63,8 +63,8 @@ jobs:
         run: npm run lint
         working-directory: frontend
 
-      - name: Run frontend full coverage (100% gate)
-        run: npm run test:coverage:all-src
+      - name: Run frontend scoped coverage gates (100%)
+        run: npm run test:coverage:ci
         working-directory: frontend
 
       - name: Validate frontend build
