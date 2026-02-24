@@ -105,6 +105,7 @@ router.post('/',
          FROM yoga_classes cls
          INNER JOIN yoga_class_registrations reg ON reg.class_id = cls.id
          WHERE cls.id = $1 AND reg.customer_id = $2
+         FOR UPDATE OF reg
          LIMIT 1`,
         [classId, customer_id]
       );
@@ -117,6 +118,20 @@ router.post('/',
       resolvedClassId = classResult.rows[0].id as number;
       if (!resolvedClassType) {
         resolvedClassType = String(classResult.rows[0].title ?? '').trim();
+      }
+
+      const existingAttendanceResult = await client.query(
+        `SELECT id
+         FROM yoga_attendances
+         WHERE class_id = $1
+           AND customer_id = $2
+         LIMIT 1`,
+        [resolvedClassId, customer_id]
+      );
+
+      if (existingAttendanceResult.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Attendance already exists for this class and customer' });
       }
 
       // 활성 회원권 확인

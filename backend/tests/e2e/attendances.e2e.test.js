@@ -249,6 +249,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '빈야사' }] },
     { rows: [] },
+    { rows: [] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(invalidMembershipClient);
@@ -264,6 +265,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   explicitMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '빈야사' }] },
+    { rows: [] },
     { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 13, membership_id: 9 }] },
     { rows: [], rowCount: 0 }
@@ -292,10 +294,27 @@ test('attendance check/create and delete routes cover transaction branches', asy
   });
   assert.equal(res.status, 400);
 
+  const duplicateAttendanceClient = h.createDbClientMock();
+  duplicateAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [{ id: 31 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(duplicateAttendanceClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 409);
+
   const classMatchClient = h.createDbClientMock();
   classMatchClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [] },
     { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 15, membership_id: 9, class_id: 5, class_type: '아쉬탕가' }] },
     { rows: [], rowCount: 0 }
@@ -314,6 +333,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [] },
+    { rows: [] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(noActiveClient);
@@ -329,6 +349,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   zeroRemainClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [] },
     { rows: [{ id: 1, remaining_sessions: 0, end_date: null }] },
     { rows: [], rowCount: 0 }
   );
@@ -345,6 +366,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   expiredClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [] },
     { rows: [{ id: 1, remaining_sessions: null, end_date: '2000-01-01' }] },
     { rows: [], rowCount: 0 }
   );
@@ -361,6 +383,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   successClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [] },
     { rows: [{ id: 1, remaining_sessions: 5, end_date: null }] },
     { rows: [{ id: 11, membership_id: 1 }] },
     { rows: [], rowCount: 1 },
@@ -374,13 +397,14 @@ test('attendance check/create and delete routes cover transaction branches', asy
     body: { customer_id: 3, class_id: 5, instructor_comment: 'ok' },
   });
   assert.equal(res.status, 201);
-  assert.match(String(successClient.queryCalls[2][0]), /yoga_membership_types/i);
-  assert.equal(successClient.queryCalls[2][1][1], '아쉬탕가');
+  assert.match(String(successClient.queryCalls[3][0]), /yoga_membership_types/i);
+  assert.equal(successClient.queryCalls[3][1][1], '아쉬탕가');
 
   const successNoRemainClient = h.createDbClientMock();
   successNoRemainClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [] },
     { rows: [{ id: 2, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 12, membership_id: 2 }] },
     { rows: [], rowCount: 0 }
@@ -398,6 +422,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   postErrClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [] },
     new Error('check fail'),
     { rows: [], rowCount: 0 }
   );
