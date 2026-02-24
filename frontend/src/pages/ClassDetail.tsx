@@ -258,8 +258,14 @@ const ClassDetail: React.FC = () => {
 
   const handleAttendanceStatusChange = async (
     customerId: number,
+    currentStatus: 'reserved' | 'attended' | 'absent',
     attendanceStatus: 'reserved' | 'attended' | 'absent'
   ) => {
+    if (currentStatus === 'reserved' && attendanceStatus === 'attended') {
+      await handleCheckIn(customerId);
+      return;
+    }
+
     try {
       setError('');
       setNotice('');
@@ -592,8 +598,10 @@ const ClassDetail: React.FC = () => {
                     className="input-field md:max-w-xs"
                     value={registration.attendance_status || 'reserved'}
                     onChange={(event) => {
+                      const currentStatus = (registration.attendance_status || 'reserved') as 'reserved' | 'attended' | 'absent';
                       void handleAttendanceStatusChange(
                         registration.customer_id,
+                        currentStatus,
                         event.target.value as 'reserved' | 'attended' | 'absent'
                       );
                     }}

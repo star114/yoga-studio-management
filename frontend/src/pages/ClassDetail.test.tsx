@@ -365,6 +365,25 @@ describe('ClassDetail page', () => {
     await waitFor(() => expect(screen.getByText('출석 상태를 변경했습니다.')).toBeTruthy());
   });
 
+  it('runs check-in flow when changing status from reserved to attended', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce('  드롭다운 출석  ');
+    attendanceCheckInMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('출석 상태')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('출석 상태'), { target: { value: 'attended' } });
+
+    await waitFor(() => expect(attendanceCheckInMock).toHaveBeenCalledWith({
+      customer_id: 101,
+      class_id: 1,
+      instructor_comment: '드롭다운 출석',
+    }));
+    expect(classUpdateRegistrationStatusMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('출석 체크를 완료했습니다.')).toBeTruthy());
+    promptSpy.mockRestore();
+  });
+
   it('checks attendance with class_id and shows error on failure', async () => {
     const promptSpy = vi.spyOn(window, 'prompt');
     promptSpy.mockReturnValueOnce('  첫 출석 코멘트  ');

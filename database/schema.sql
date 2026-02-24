@@ -103,6 +103,17 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- 횟수제 회원권은 잔여 횟수를 기준으로 활성/만료 상태 자동 동기화
+CREATE OR REPLACE FUNCTION sync_membership_active_from_remaining()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.remaining_sessions IS NOT NULL THEN
+        NEW.is_active = NEW.remaining_sessions > 0;
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
 -- 트리거 생성
 CREATE TRIGGER update_yoga_users_updated_at BEFORE UPDATE ON yoga_users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -112,6 +123,10 @@ CREATE TRIGGER update_yoga_customers_updated_at BEFORE UPDATE ON yoga_customers
 
 CREATE TRIGGER update_yoga_memberships_updated_at BEFORE UPDATE ON yoga_memberships
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER sync_yoga_memberships_active_from_remaining
+    BEFORE INSERT OR UPDATE OF remaining_sessions ON yoga_memberships
+    FOR EACH ROW EXECUTE FUNCTION sync_membership_active_from_remaining();
 
 CREATE TRIGGER update_yoga_classes_updated_at BEFORE UPDATE ON yoga_classes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

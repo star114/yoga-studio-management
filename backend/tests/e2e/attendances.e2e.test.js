@@ -247,6 +247,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const invalidMembershipClient = h.createDbClientMock();
   invalidMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '빈야사' }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
   );
@@ -262,8 +263,8 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const explicitMembershipClient = h.createDbClientMock();
   explicitMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 5, title: '빈야사' }] },
+    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 13, membership_id: 9 }] },
     { rows: [], rowCount: 0 }
   );
@@ -279,7 +280,6 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const classMismatchClient = h.createDbClientMock();
   classMismatchClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
   );
@@ -295,8 +295,8 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const classMatchClient = h.createDbClientMock();
   classMatchClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 15, membership_id: 9, class_id: 5, class_type: '아쉬탕가' }] },
     { rows: [], rowCount: 0 }
   );
@@ -312,6 +312,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const noActiveClient = h.createDbClientMock();
   noActiveClient.queryQueue.push(
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
   );
@@ -327,6 +328,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const zeroRemainClient = h.createDbClientMock();
   zeroRemainClient.queryQueue.push(
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [{ id: 1, remaining_sessions: 0, end_date: null }] },
     { rows: [], rowCount: 0 }
   );
@@ -342,6 +344,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const expiredClient = h.createDbClientMock();
   expiredClient.queryQueue.push(
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [{ id: 1, remaining_sessions: null, end_date: '2000-01-01' }] },
     { rows: [], rowCount: 0 }
   );
@@ -352,13 +355,13 @@ test('attendance check/create and delete routes cover transaction branches', asy
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { customer_id: 3, class_id: 5 },
   });
-  assert.equal(res.status, 400);
+  assert.equal(res.status, 201);
 
   const successClient = h.createDbClientMock();
   successClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 1, remaining_sessions: 5, end_date: null }] },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [{ id: 1, remaining_sessions: 5, end_date: null }] },
     { rows: [{ id: 11, membership_id: 1 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
@@ -371,12 +374,14 @@ test('attendance check/create and delete routes cover transaction branches', asy
     body: { customer_id: 3, class_id: 5, instructor_comment: 'ok' },
   });
   assert.equal(res.status, 201);
+  assert.match(String(successClient.queryCalls[2][0]), /yoga_membership_types/i);
+  assert.equal(successClient.queryCalls[2][1][1], '아쉬탕가');
 
   const successNoRemainClient = h.createDbClientMock();
   successNoRemainClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 2, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
+    { rows: [{ id: 2, remaining_sessions: null, end_date: null }] },
     { rows: [{ id: 12, membership_id: 2 }] },
     { rows: [], rowCount: 0 }
   );
@@ -392,6 +397,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const postErrClient = h.createDbClientMock();
   postErrClient.queryQueue.push(
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가' }] },
     new Error('check fail'),
     { rows: [], rowCount: 0 }
   );

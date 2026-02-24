@@ -96,44 +96,6 @@ router.post('/',
     try {
       await client.query('BEGIN');
 
-      // 활성 회원권 확인
-      let activeMembership;
-      if (membership_id) {
-        const membershipResult = await client.query(
-          `SELECT * FROM yoga_memberships 
-           WHERE id = $1 AND customer_id = $2 AND is_active = true`,
-          [membership_id, customer_id]
-        );
-
-        if (membershipResult.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Invalid or inactive membership' });
-        }
-        activeMembership = membershipResult.rows[0];
-      } else {
-        // 회원권 지정 안 했으면 활성 회원권 중 가장 최근 것 사용
-        const membershipResult = await client.query(
-          `SELECT * FROM yoga_memberships 
-           WHERE customer_id = $1 AND is_active = true
-           ORDER BY created_at DESC LIMIT 1`,
-          [customer_id]
-        );
-
-        if (membershipResult.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'No active membership found' });
-        }
-        activeMembership = membershipResult.rows[0];
-      }
-
-      // 횟수제 회원권인 경우 잔여 횟수 확인
-      if (activeMembership.remaining_sessions !== null) {
-        if (activeMembership.remaining_sessions <= 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'No remaining sessions' });
-        }
-      }
-
       let resolvedClassId: number | null = null;
       let resolvedClassType = typeof class_type === 'string' ? class_type.trim() : '';
 
@@ -155,6 +117,53 @@ router.post('/',
       resolvedClassId = classResult.rows[0].id as number;
       if (!resolvedClassType) {
         resolvedClassType = String(classResult.rows[0].title ?? '').trim();
+      }
+
+      // 활성 회원권 확인
+      let activeMembership;
+      if (membership_id) {
+        const membershipResult = await client.query(
+          `SELECT * FROM yoga_memberships
+           WHERE id = $1 AND customer_id = $2 AND is_active = true`,
+          [membership_id, customer_id]
+        );
+
+        if (membershipResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Invalid or inactive membership' });
+        }
+        activeMembership = membershipResult.rows[0];
+      } else {
+        // 회원권 지정이 없으면 수업명과 회원권명 일치 항목을 우선 선택
+        const membershipResult = await client.query(
+          `SELECT m.*, mt.name AS membership_type_name
+           FROM yoga_memberships m
+           LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
+           WHERE m.customer_id = $1
+             AND m.is_active = true
+           ORDER BY
+             CASE
+               WHEN mt.name = $2 THEN 0
+               ELSE 1
+             END,
+             m.created_at DESC
+           LIMIT 1`,
+          [customer_id, resolvedClassType]
+        );
+
+        if (membershipResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'No active membership found' });
+        }
+        activeMembership = membershipResult.rows[0];
+      }
+
+      // 횟수제 회원권인 경우 잔여 횟수 확인
+      if (activeMembership.remaining_sessions !== null) {
+        if (activeMembership.remaining_sessions <= 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'No remaining sessions' });
+        }
       }
 
       // 출석 기록 생성
@@ -183,7 +192,11 @@ router.post('/',
       if (activeMembership.remaining_sessions !== null) {
         await client.query(
           `UPDATE yoga_memberships 
-           SET remaining_sessions = remaining_sessions - 1
+           SET remaining_sessions = remaining_sessions - 1,
+               is_active = CASE
+                 WHEN (remaining_sessions - 1) <= 0 THEN false
+                 ELSE true
+               END
            WHERE id = $1`,
           [activeMembership.id]
         );
@@ -291,7 +304,11 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       if (membership.remaining_sessions !== null) {
         await client.query(
           `UPDATE yoga_memberships 
-           SET remaining_sessions = remaining_sessions + 1
+           SET remaining_sessions = remaining_sessions + 1,
+               is_active = CASE
+                 WHEN (remaining_sessions + 1) > 0 THEN true
+                 ELSE false
+               END
            WHERE id = $1`,
           [membership.id]
         );
