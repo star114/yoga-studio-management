@@ -105,7 +105,6 @@ describe('ClassManagement page', () => {
           {
             id: 1,
             title: '아침 요가',
-            instructor_name: '강사',
             class_date: '2026-02-22',
             start_time: '09:00:00',
             end_time: '10:00:00',
@@ -222,7 +221,6 @@ describe('ClassManagement page', () => {
         {
           id: 2,
           title: '수정대상',
-          instructor_name: null,
           class_date: '2026-02-24',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -253,7 +251,6 @@ describe('ClassManagement page', () => {
           {
             id: 3,
             title: '수정수업',
-            instructor_name: '기존강사',
             class_date: '2026-02-24',
             start_time: '09:00:00',
             end_time: '10:00:00',
@@ -268,7 +265,6 @@ describe('ClassManagement page', () => {
           {
             id: 3,
             title: '수정완료',
-            instructor_name: '기존강사',
             class_date: '2026-02-24',
             start_time: '09:00:00',
             end_time: '10:00:00',
@@ -303,7 +299,6 @@ describe('ClassManagement page', () => {
         {
           id: 1,
           title: '오픈수업',
-          instructor_name: '강사A',
           class_date: '2026-02-24',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -315,7 +310,6 @@ describe('ClassManagement page', () => {
         {
           id: 2,
           title: '완료수업',
-          instructor_name: '강사B',
           class_date: '2026-02-25',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -326,7 +320,6 @@ describe('ClassManagement page', () => {
         {
           id: 3,
           title: '진행수업',
-          instructor_name: '강사C',
           class_date: '2026-02-26',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -337,7 +330,6 @@ describe('ClassManagement page', () => {
         {
           id: 4,
           title: '닫힘수업',
-          instructor_name: '강사D',
           class_date: '2026-02-27',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -348,7 +340,6 @@ describe('ClassManagement page', () => {
         {
           id: 5,
           title: '기본수업',
-          instructor_name: null,
           class_date: '2026-02-28',
           start_time: '09:00:00',
           end_time: '10:00:00',
@@ -390,7 +381,6 @@ describe('ClassManagement page', () => {
           {
             id: 9,
             title: '삭제수업',
-            instructor_name: null,
             class_date: '2026-02-28',
             start_time: '09:00:00',
             end_time: '10:00:00',
@@ -427,7 +417,6 @@ describe('ClassManagement page', () => {
         {
           id: 10,
           title: '삭제실패',
-          instructor_name: null,
           class_date: '2026-03-01',
           start_time: '09:00:00',
           end_time: '10:00:00',

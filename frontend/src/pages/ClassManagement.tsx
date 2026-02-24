@@ -34,7 +34,7 @@ const INITIAL_FORM: ClassForm = {
   class_date: format(new Date(), 'yyyy-MM-dd'),
   start_time: '09:00',
   end_time: '10:00',
-  max_capacity: '10',
+  max_capacity: '6',
   is_open: true,
   notes: '',
 };
