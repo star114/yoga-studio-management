@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0](https://github.com/star114/yoga-studio-management/compare/v1.5.0...v1.6.0) (2026-02-27)
+
+
+### Features
+
+* add attendance comment thread backend endpoints ([01b7443](https://github.com/star114/yoga-studio-management/commit/01b7443d51b03e575e45abeaeeaa0ff5cb43a100))
+* add attendance comment thread end-to-end ([4b63b65](https://github.com/star114/yoga-studio-management/commit/4b63b658ef97ba7ef4c2a871f7dfc4b49dde4b90))
+* add attendance comment thread schema migrations ([7fc295d](https://github.com/star114/yoga-studio-management/commit/7fc295d01c18410fd86115bf889812523f026a41))
+* add comment thread UI for customer and admin views ([a8e7ab3](https://github.com/star114/yoga-studio-management/commit/a8e7ab3c57aced4f6a68b4aade3842e0c03b0d1a))
+* show full post-class comment thread in dashboard cards ([4b79af2](https://github.com/star114/yoga-studio-management/commit/4b79af2133efcfcc43ebc8c35dff1f6b092e01bb))
+
 ## [1.5.0](https://github.com/star114/yoga-studio-management/compare/v1.4.0...v1.5.0) (2026-02-27)
 
 
