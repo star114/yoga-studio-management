@@ -217,6 +217,44 @@ describe('CustomerClassDetail page', () => {
     expect(screen.queryByText('출석 코멘트를 저장했습니다.')).toBeNull();
   });
 
+  it('ignores late save error after route changed to another class', async () => {
+    let rejectSave: (reason?: unknown) => void = () => {};
+    classUpdateMyAttendanceCommentMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectSave = reject;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('수업 상세')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '출석 코멘트 저장' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'attended',
+        registration_comment: '두번째 수업',
+        instructor_comment: '좋습니다',
+        customer_comment: '클래스2 기존값',
+      },
+    });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    rejectSave(new Error('old save failed'));
+    await waitFor(() => expect((screen.getByLabelText('수업 후 나의 코멘트') as HTMLTextAreaElement).value).toBe('클래스2 기존값'));
+    expect(screen.queryByText('요청 실패')).toBeNull();
+  });
+
   it('shows API error fallback', async () => {
     classGetMyClassDetailMock.mockRejectedValueOnce(new Error('failed'));
     renderPage();

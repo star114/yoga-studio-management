@@ -32,6 +32,8 @@ const CustomerClassDetail: React.FC = () => {
 
   useEffect(() => {
     activeClassIdRef.current = classId;
+    setIsSavingAttendanceComment(false);
+    setAttendanceCommentNotice('');
 
     if (user?.role !== 'customer') {
       setIsLoading(false);
@@ -101,10 +103,15 @@ const CustomerClassDetail: React.FC = () => {
       setAttendanceCommentDraft(savedComment || '');
       setAttendanceCommentNotice('출석 코멘트를 저장했습니다.');
     } catch (saveError: unknown) {
+      if (activeClassIdRef.current !== requestClassId) {
+        return;
+      }
       console.error('Failed to save attendance comment:', saveError);
       setError(parseApiError(saveError, '출석 코멘트 저장에 실패했습니다.'));
     } finally {
-      setIsSavingAttendanceComment(false);
+      if (activeClassIdRef.current === requestClassId) {
+        setIsSavingAttendanceComment(false);
+      }
     }
   };
 
