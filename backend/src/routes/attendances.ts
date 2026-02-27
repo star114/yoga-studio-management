@@ -90,7 +90,7 @@ router.post('/',
   body('class_id').isInt({ min: 1 }),
   validateRequest,
   async (req: AuthRequest, res) => {
-    const { customer_id, membership_id, instructor_comment, class_type, class_id } = req.body;
+    const { customer_id, membership_id, class_type, class_id } = req.body;
 
     const client = await pool.connect();
     try {
@@ -184,13 +184,12 @@ router.post('/',
       // 출석 기록 생성
       const attendanceResult = await client.query(
         `INSERT INTO yoga_attendances 
-         (customer_id, membership_id, class_id, instructor_comment, instructor_id, class_type)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+         (customer_id, membership_id, class_id, instructor_id, class_type)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
         [
           customer_id,
           activeMembership.id,
           resolvedClassId,
-          instructor_comment || null,
           req.user!.id,
           resolvedClassType || null
         ]
@@ -238,7 +237,7 @@ router.put('/:id',
   validateRequest,
   async (req, res) => {
     const { id } = req.params;
-    const { instructor_comment, class_type, class_id } = req.body;
+    const { class_type, class_id } = req.body;
 
     const client = await pool.connect();
     try {
@@ -318,12 +317,11 @@ router.put('/:id',
 
       const result = await client.query(
         `UPDATE yoga_attendances 
-         SET instructor_comment = COALESCE($1, instructor_comment),
-             class_type = COALESCE($2, class_type),
-             class_id = COALESCE($3, class_id)
-         WHERE id = $4
+         SET class_type = COALESCE($1, class_type),
+             class_id = COALESCE($2, class_id)
+         WHERE id = $3
          RETURNING *`,
-        [instructor_comment, resolvedClassType, resolvedClassId, id]
+        [resolvedClassType, resolvedClassId, id]
       );
 
       const updatedAttendance = result.rows[0] as {
