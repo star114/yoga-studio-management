@@ -280,12 +280,15 @@ describe('CustomerDashboard page', () => {
     await waitFor(() => expect(screen.getByText('수업 캘린더')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '일간' }));
 
-    await waitFor(() => expect(screen.getByText('이동 대상 수업')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('이동 대상 수업').length).toBeGreaterThan(0));
 
     const disabledBtn = screen.getByRole('button', { name: /기록만 있는 수업/ });
     expect(disabledBtn).toHaveProperty('disabled', true);
 
-    fireEvent.click(screen.getByRole('button', { name: /이동 대상 수업/ }));
+    const targetButtons = screen.getAllByRole('button', { name: /이동 대상 수업/ });
+    const enabledTargetButton = targetButtons.find((button) => !(button as HTMLButtonElement).disabled);
+    expect(enabledTargetButton).toBeTruthy();
+    fireEvent.click(enabledTargetButton as HTMLButtonElement);
     expect(navigateMock).toHaveBeenCalledWith('/classes/77');
   });
 

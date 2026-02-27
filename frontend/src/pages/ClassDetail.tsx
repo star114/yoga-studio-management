@@ -43,6 +43,7 @@ interface ClassRegistration {
   registration_comment?: string | null;
   attendance_id?: number | null;
   attendance_instructor_comment?: string | null;
+  attendance_customer_comment?: string | null;
   customer_name: string;
   customer_phone: string;
 }
@@ -209,7 +210,7 @@ const ClassDetail: React.FC = () => {
       setNotice('');
       setCheckingInCustomerId(customerId);
       const input = window.prompt(
-        '강사 코멘트(선택)를 입력하세요.',
+        '수업 후 강사 코멘트(선택)를 입력하세요.',
         instructorCommentDrafts[customerId] || ''
       );
       if (input === null) {
@@ -242,10 +243,10 @@ const ClassDetail: React.FC = () => {
         instructor_comment: comment,
       });
       await refreshClassAndRegistrations();
-      setNotice('강사 코멘트를 저장했습니다.');
+      setNotice('수업 후 강사 코멘트를 저장했습니다.');
     } catch (instructorCommentError: unknown) {
       console.error('Failed to save instructor comment:', instructorCommentError);
-      setError(parseApiError(instructorCommentError, '강사 코멘트 저장에 실패했습니다.'));
+      setError(parseApiError(instructorCommentError, '수업 후 강사 코멘트 저장에 실패했습니다.'));
     } finally {
       setSavingInstructorCommentCustomerId(null);
     }
@@ -574,7 +575,7 @@ const ClassDetail: React.FC = () => {
                       className="px-3 py-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={!registration.attendance_id || savingInstructorCommentCustomerId === registration.customer_id}
                     >
-                      {savingInstructorCommentCustomerId === registration.customer_id ? '저장 중...' : '강사 코멘트 저장'}
+                      {savingInstructorCommentCustomerId === registration.customer_id ? '저장 중...' : '수업 후 강사 코멘트 저장'}
                     </button>
                   </div>
                 </div>
@@ -604,15 +605,22 @@ const ClassDetail: React.FC = () => {
                 </div>
 
                 <div className="mt-4">
-                  <p className="label">수련생 코멘트</p>
+                  <p className="label">수업 전 코멘트 (신청 시)</p>
                   <p className="text-sm text-warm-700">
                     {registration.registration_comment?.trim() || '-'}
                   </p>
                 </div>
 
                 <div className="mt-4">
+                  <p className="label">수업 후 수련생 코멘트</p>
+                  <p className="text-sm text-warm-700">
+                    {registration.attendance_customer_comment?.trim() || '-'}
+                  </p>
+                </div>
+
+                <div className="mt-4">
                   <label className="label" htmlFor={`instructor-comment-${registration.customer_id}`}>
-                    강사 코멘트
+                    수업 후 강사 코멘트
                   </label>
                   <textarea
                     id={`instructor-comment-${registration.customer_id}`}

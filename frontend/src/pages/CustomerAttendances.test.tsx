@@ -224,7 +224,7 @@ describe('CustomerAttendances page', () => {
 
     await waitFor(() => expect(screen.getByText('하타')).toBeTruthy());
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
-    expect(screen.getByText('강사 코멘트: -')).toBeTruthy();
+    expect(screen.getByText('수업 후 강사 코멘트: -')).toBeTruthy();
     expect(screen.getByText(/총 1건/)).toBeTruthy();
   });
 
