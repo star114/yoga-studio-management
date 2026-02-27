@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0](https://github.com/star114/yoga-studio-management/compare/v1.4.0...v1.5.0) (2026-02-27)
+
+
+### Features
+
+* add attendance customer comment schema and migration ([a5594dd](https://github.com/star114/yoga-studio-management/commit/a5594dded396c98703d3037d65ebf5e3b25b54fa))
+* add customer attendance comment api and admin visibility ([da2dede](https://github.com/star114/yoga-studio-management/commit/da2dede3dceb1e323ffaf31c5a811f7b40f40c6e))
+* add customer attendance comment flow ([80b3a5f](https://github.com/star114/yoga-studio-management/commit/80b3a5f05561f15c02b281b8774a53be6064d51c))
+* add customer attendance comment ui for class detail ([ea86170](https://github.com/star114/yoga-studio-management/commit/ea86170a97d09ec7a58a5461a1380ce34a75cc3b))
+
+
+### Bug Fixes
+
+* guard stale customer attendance comment save by class id ([0a45764](https://github.com/star114/yoga-studio-management/commit/0a45764e07b1b0ea1b49e5c4308412f6dacf8c74))
+* ignore stale attendance-comment save errors after route change ([773a39a](https://github.com/star114/yoga-studio-management/commit/773a39a9b2a5f7e01d805efb37e2ae6daf78fbfc))
+
 ## [1.4.0](https://github.com/star114/yoga-studio-management/compare/v1.3.0...v1.4.0) (2026-02-24)
 
 
