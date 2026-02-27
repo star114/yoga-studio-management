@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { attendanceAPI, classAPI, customerAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
@@ -42,11 +42,22 @@ interface ClassRegistration {
   registered_at: string;
   registration_comment?: string | null;
   attendance_id?: number | null;
-  attendance_instructor_comment?: string | null;
-  attendance_customer_comment?: string | null;
   customer_name: string;
   customer_phone: string;
 }
+
+interface AttendanceCommentMessage {
+  id: number;
+  attendance_id: number;
+  author_role: 'admin' | 'customer';
+  author_user_id: number;
+  message: string;
+  created_at: string;
+}
+
+const INITIAL_THREAD_PRELOAD_COUNT = 4;
+const BACKGROUND_THREAD_BATCH_SIZE = 4;
+const BACKGROUND_THREAD_DELAY_MS = 150;
 
 const ClassDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -57,9 +68,13 @@ const ClassDetail: React.FC = () => {
   const [registrations, setRegistrations] = useState<ClassRegistration[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [instructorCommentDrafts, setInstructorCommentDrafts] = useState<Record<number, string>>({});
-  const [savingInstructorCommentCustomerId, setSavingInstructorCommentCustomerId] = useState<number | null>(null);
   const [savingAttendanceStatusCustomerId, setSavingAttendanceStatusCustomerId] = useState<number | null>(null);
+  const [loadingThreadCustomerIds, setLoadingThreadCustomerIds] = useState<Record<number, boolean>>({});
+  const [savingThreadCustomerId, setSavingThreadCustomerId] = useState<number | null>(null);
+  const [threadMessagesByCustomer, setThreadMessagesByCustomer] = useState<Record<number, AttendanceCommentMessage[] | undefined>>({});
+  const [threadDraftsByCustomer, setThreadDraftsByCustomer] = useState<Record<number, string>>({});
+  const loadingThreadCustomerIdsRef = useRef<Set<number>>(new Set());
+  const preloadedThreadCustomerIdsRef = useRef<Set<number>>(new Set());
   const [checkingInCustomerId, setCheckingInCustomerId] = useState<number | null>(null);
   const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
   const [isEditingClass, setIsEditingClass] = useState(false);
@@ -119,13 +134,9 @@ const ClassDetail: React.FC = () => {
         } else {
           setClassEditForm(null);
         }
+        preloadedThreadCustomerIdsRef.current.clear();
         setRegistrations(registrationsRes.data);
         setCustomers(customersRes.data);
-        setInstructorCommentDrafts(
-          Object.fromEntries(
-            registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.attendance_instructor_comment || ''])
-          )
-        );
       } catch (loadError: unknown) {
         console.error('Failed to load class detail:', loadError);
         setError(parseApiError(loadError, '수업 상세 정보를 불러오지 못했습니다.'));
@@ -158,11 +169,122 @@ const ClassDetail: React.FC = () => {
       setClassEditForm(null);
     }
     setRegistrations(registrationsRes.data);
-    setInstructorCommentDrafts(
-      Object.fromEntries(
-        registrationsRes.data.map((item: ClassRegistration) => [item.customer_id, item.attendance_instructor_comment || ''])
-      )
-    );
+    setThreadMessagesByCustomer({});
+    setThreadDraftsByCustomer({});
+    setLoadingThreadCustomerIds({});
+    preloadedThreadCustomerIdsRef.current.clear();
+  };
+
+  const handleLoadCommentThread = useCallback(async (
+    registration: ClassRegistration,
+    options?: { silentError?: boolean },
+  ) => {
+    if (loadingThreadCustomerIdsRef.current.has(registration.customer_id)) {
+      return;
+    }
+
+    try {
+      loadingThreadCustomerIdsRef.current.add(registration.customer_id);
+      setError('');
+      setLoadingThreadCustomerIds((prev) => ({
+        ...prev,
+        [registration.customer_id]: true,
+      }));
+      const response = await classAPI.getRegistrationCommentThread(classId, registration.customer_id);
+      setThreadMessagesByCustomer((prev) => ({
+        ...prev,
+        [registration.customer_id]: response.data?.messages || [],
+      }));
+    } catch (threadLoadError: unknown) {
+      console.error('Failed to load registration comment thread:', threadLoadError);
+      if (!options?.silentError) {
+        setError(parseApiError(threadLoadError, '수업 후 코멘트 대화를 불러오지 못했습니다.'));
+      }
+    } finally {
+      loadingThreadCustomerIdsRef.current.delete(registration.customer_id);
+      setLoadingThreadCustomerIds((prev) => ({
+        ...prev,
+        [registration.customer_id]: false,
+      }));
+    }
+  }, [classId]);
+
+  useEffect(() => {
+    const targetRegistrations = registrations.filter((registration) => (
+      Boolean(registration.attendance_id)
+      && !preloadedThreadCustomerIdsRef.current.has(registration.customer_id)
+    ));
+
+    if (targetRegistrations.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const preload = async () => {
+      const firstBatch = targetRegistrations.slice(0, INITIAL_THREAD_PRELOAD_COUNT);
+      firstBatch.forEach((registration) => {
+        preloadedThreadCustomerIdsRef.current.add(registration.customer_id);
+      });
+      await Promise.allSettled(firstBatch.map((registration) => (
+        handleLoadCommentThread(registration, { silentError: true })
+      )));
+
+      for (
+        let cursor = INITIAL_THREAD_PRELOAD_COUNT;
+        cursor < targetRegistrations.length && !cancelled;
+        cursor += BACKGROUND_THREAD_BATCH_SIZE
+      ) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, BACKGROUND_THREAD_DELAY_MS);
+        });
+        if (cancelled) {
+          break;
+        }
+        const batch = targetRegistrations.slice(cursor, cursor + BACKGROUND_THREAD_BATCH_SIZE);
+        batch.forEach((registration) => {
+          preloadedThreadCustomerIdsRef.current.add(registration.customer_id);
+        });
+        await Promise.allSettled(batch.map((registration) => (
+          handleLoadCommentThread(registration, { silentError: true })
+        )));
+      }
+    };
+
+    void preload();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [registrations, handleLoadCommentThread]);
+
+  const handleSendCommentThreadMessage = async (registration: ClassRegistration) => {
+    const draft = threadDraftsByCustomer[registration.customer_id] || '';
+    const message = draft.trim();
+    if (!message) {
+      return;
+    }
+
+    try {
+      setError('');
+      setNotice('');
+      setSavingThreadCustomerId(registration.customer_id);
+      const response = await classAPI.postRegistrationCommentThread(classId, registration.customer_id, message);
+      setThreadMessagesByCustomer((prev) => ({
+        ...prev,
+        [registration.customer_id]: [...(prev[registration.customer_id] || []), response.data],
+      }));
+      setThreadDraftsByCustomer((prev) => ({
+        ...prev,
+        [registration.customer_id]: '',
+      }));
+      setNotice('수업 후 코멘트 대화를 전송했습니다.');
+    } catch (threadSaveError: unknown) {
+      console.error('Failed to send registration comment thread message:', threadSaveError);
+      setError(parseApiError(threadSaveError, '수업 후 코멘트 대화 전송에 실패했습니다.'));
+    } finally {
+      setSavingThreadCustomerId(null);
+    }
   };
 
   const handleManualRegister = async (event: React.FormEvent) => {
@@ -209,20 +331,10 @@ const ClassDetail: React.FC = () => {
       setError('');
       setNotice('');
       setCheckingInCustomerId(customerId);
-      const input = window.prompt(
-        '수업 후 강사 코멘트(선택)를 입력하세요.',
-        instructorCommentDrafts[customerId] || ''
-      );
-      if (input === null) {
-        return;
-      }
-      const comment = input.trim();
       await attendanceAPI.checkIn({
         customer_id: customerId,
         class_id: classId,
-        instructor_comment: comment || null,
       });
-      setInstructorCommentDrafts((prev) => ({ ...prev, [customerId]: comment }));
       await refreshClassAndRegistrations();
       setNotice('출석 체크를 완료했습니다.');
     } catch (checkInError: unknown) {
@@ -230,25 +342,6 @@ const ClassDetail: React.FC = () => {
       setError(parseApiError(checkInError, '출석 체크에 실패했습니다.'));
     } finally {
       setCheckingInCustomerId(null);
-    }
-  };
-
-  const handleSaveInstructorComment = async (registration: ClassRegistration) => {
-    try {
-      setError('');
-      setNotice('');
-      setSavingInstructorCommentCustomerId(registration.customer_id);
-      const comment = (instructorCommentDrafts[registration.customer_id] || '').trim();
-      await attendanceAPI.update(registration.attendance_id, {
-        instructor_comment: comment,
-      });
-      await refreshClassAndRegistrations();
-      setNotice('수업 후 강사 코멘트를 저장했습니다.');
-    } catch (instructorCommentError: unknown) {
-      console.error('Failed to save instructor comment:', instructorCommentError);
-      setError(parseApiError(instructorCommentError, '수업 후 강사 코멘트 저장에 실패했습니다.'));
-    } finally {
-      setSavingInstructorCommentCustomerId(null);
     }
   };
 
@@ -569,14 +662,6 @@ const ClassDetail: React.FC = () => {
                     >
                       {checkingInCustomerId === registration.customer_id ? '처리 중...' : '출석 체크'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveInstructorComment(registration)}
-                      className="px-3 py-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!registration.attendance_id || savingInstructorCommentCustomerId === registration.customer_id}
-                    >
-                      {savingInstructorCommentCustomerId === registration.customer_id ? '저장 중...' : '수업 후 강사 코멘트 저장'}
-                    </button>
                   </div>
                 </div>
 
@@ -611,32 +696,79 @@ const ClassDetail: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="mt-4">
-                  <p className="label">수업 후 수련생 코멘트</p>
-                  <p className="text-sm text-warm-700">
-                    {registration.attendance_customer_comment?.trim() || '-'}
-                  </p>
-                </div>
+                {registration.attendance_id && (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="label">수업 후 코멘트 대화 (강사 ↔ 수련생)</p>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-md bg-warm-100 text-warm-700 hover:bg-warm-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => void handleLoadCommentThread(registration)}
+                        disabled={loadingThreadCustomerIds[registration.customer_id] === true}
+                      >
+                        {loadingThreadCustomerIds[registration.customer_id] === true ? '불러오는 중...' : '대화 불러오기'}
+                      </button>
+                    </div>
+                    {loadingThreadCustomerIds[registration.customer_id] === true ? (
+                      <p className="text-xs text-warm-600">대화 불러오는 중...</p>
+                    ) : threadMessagesByCustomer[registration.customer_id] === undefined ? (
+                      <p className="text-xs text-warm-600">대화 내역을 불러오는 중입니다.</p>
+                    ) : threadMessagesByCustomer[registration.customer_id]!.length === 0 ? (
+                      <p className="text-xs text-warm-600">아직 대화가 없습니다.</p>
+                    ) : (
+                      <div className="space-y-2 rounded-2xl bg-warm-100/40 p-3">
+                        {threadMessagesByCustomer[registration.customer_id]!.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`flex ${message.author_role === 'admin' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div className="max-w-[85%] space-y-1">
+                              <div
+                                className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                                  message.author_role === 'admin'
+                                    ? 'rounded-br-md bg-primary-500 text-white'
+                                    : 'rounded-bl-md bg-white text-warm-800 border border-warm-200'
+                                }`}
+                              >
+                                <p className="whitespace-pre-wrap break-words">{message.message}</p>
+                              </div>
+                              <p className={`text-[11px] text-warm-500 ${message.author_role === 'admin' ? 'text-right' : 'text-left'}`}>
+                                {new Date(message.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <label className="label" htmlFor={`attendance-thread-message-${registration.customer_id}`}>
+                        수업 후 코멘트 대화 작성
+                      </label>
+                      <textarea
+                        id={`attendance-thread-message-${registration.customer_id}`}
+                        className="input-field min-h-[72px]"
+                        maxLength={1000}
+                        placeholder="수련생과 주고받을 수업 후 코멘트를 입력하세요."
+                        value={threadDraftsByCustomer[registration.customer_id] || ''}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setThreadDraftsByCustomer((prev) => ({ ...prev, [registration.customer_id]: value }));
+                        }}
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => void handleSendCommentThreadMessage(registration)}
+                          disabled={savingThreadCustomerId === registration.customer_id}
+                        >
+                          {savingThreadCustomerId === registration.customer_id ? '전송 중...' : '대화 전송'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                <div className="mt-4">
-                  <label className="label" htmlFor={`instructor-comment-${registration.customer_id}`}>
-                    수업 후 강사 코멘트
-                  </label>
-                  <textarea
-                    id={`instructor-comment-${registration.customer_id}`}
-                    className="input-field min-h-[88px]"
-                    placeholder="예: 자세 안정적, 다음 수업에서 호흡 연동 연습 권장"
-                    value={instructorCommentDrafts[registration.customer_id] || ''}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setInstructorCommentDrafts((prev) => ({ ...prev, [registration.customer_id]: value }));
-                    }}
-                    disabled={!registration.attendance_id}
-                  />
-                  {!registration.attendance_id && (
-                    <p className="mt-2 text-xs text-warm-600">출석 체크 후 입력할 수 있습니다.</p>
-                  )}
-                </div>
               </div>
             ))}
           </div>

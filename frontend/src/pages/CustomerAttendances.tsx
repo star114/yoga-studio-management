@@ -11,7 +11,6 @@ interface Attendance {
   class_type?: string | null;
   class_date?: string | null;
   class_start_time?: string | null;
-  instructor_comment?: string | null;
 }
 
 interface AttendanceResponse {
@@ -100,7 +99,7 @@ const CustomerAttendances: React.FC = () => {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-display font-bold text-primary-800">출석 수업 전체 내역</h1>
-          <p className="text-warm-600">이 고객의 출석 수업과 수업 후 강사 코멘트를 모두 확인합니다.</p>
+          <p className="text-warm-600">이 고객의 출석 수업 내역을 확인합니다.</p>
         </div>
         <Link to={`/customers/${customerId}`} className="btn-secondary">고객 상세로</Link>
       </div>
@@ -161,9 +160,6 @@ const CustomerAttendances: React.FC = () => {
                       {attendance.class_date && attendance.class_start_time
                         ? `수업일시: ${formatKoreanDateTime(attendance.class_date, attendance.class_start_time)}`
                         : '-'}
-                    </p>
-                    <p className="text-sm text-warm-700 mt-2">
-                      수업 후 강사 코멘트: {attendance.instructor_comment?.trim() || '-'}
                     </p>
                   </div>
                 ))}

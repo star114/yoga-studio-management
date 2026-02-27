@@ -214,7 +214,7 @@ describe('CustomerDetail page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('renders only latest attended class and instructor comment', async () => {
+  it('renders only latest attended class', async () => {
     getByIdMock.mockResolvedValueOnce({
       data: {
         customer: {
@@ -229,14 +229,11 @@ describe('CustomerDetail page', () => {
             class_title: '아쉬탕가',
             class_date: '2026-02-20',
             class_start_time: '09:00:00',
-            instructor_comment: '호흡이 좋습니다.',
-            customer_comment: '집중이 잘 됐어요.',
           },
           {
             id: 102,
             attendance_date: '2026-02-21T10:00:00.000Z',
             class_type: '빈야사',
-            instructor_comment: '',
           },
         ],
       },
@@ -244,11 +241,9 @@ describe('CustomerDetail page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('최근 출석 수업 및 코멘트')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
     expect(screen.getByText('아쉬탕가')).toBeTruthy();
     expect(screen.queryByText('빈야사')).toBeNull();
-    expect(screen.getByText('수업 후 강사 코멘트: 호흡이 좋습니다.')).toBeTruthy();
-    expect(screen.getByText('수업 후 수련생 코멘트: 집중이 잘 됐어요.')).toBeTruthy();
     expect(screen.getByRole('link', { name: '전체 보기' })).toBeTruthy();
   });
 
@@ -267,8 +262,6 @@ describe('CustomerDetail page', () => {
             class_title: '아쉬탕가',
             class_date: null,
             class_start_time: null,
-            instructor_comment: null,
-            customer_comment: null,
           },
         ],
       },
@@ -277,7 +270,6 @@ describe('CustomerDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
     expect(screen.getByText('-')).toBeTruthy();
-    expect(screen.getByText('수업 후 수련생 코멘트: -')).toBeTruthy();
   });
 
   it('renders fallback latest attendance title when class title/type are both missing', async () => {
@@ -296,7 +288,6 @@ describe('CustomerDetail page', () => {
             class_type: null,
             class_date: null,
             class_start_time: null,
-            instructor_comment: null,
           },
         ],
       },

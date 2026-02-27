@@ -13,9 +13,16 @@ interface CustomerClassDetailData {
   end_time: string;
   class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
   registration_comment?: string | null;
-  instructor_comment?: string | null;
-  customer_comment?: string | null;
   attendance_status?: 'reserved' | 'attended' | 'absent';
+}
+
+interface AttendanceCommentMessage {
+  id: number;
+  attendance_id: number;
+  author_role: 'admin' | 'customer';
+  author_user_id: number;
+  message: string;
+  created_at: string;
 }
 
 const CustomerClassDetail: React.FC = () => {
@@ -24,16 +31,17 @@ const CustomerClassDetail: React.FC = () => {
   const classId = Number(id);
   const activeClassIdRef = useRef<number | null>(null);
   const [detail, setDetail] = useState<CustomerClassDetailData | null>(null);
-  const [attendanceCommentDraft, setAttendanceCommentDraft] = useState('');
-  const [isSavingAttendanceComment, setIsSavingAttendanceComment] = useState(false);
-  const [attendanceCommentNotice, setAttendanceCommentNotice] = useState('');
+  const [threadMessages, setThreadMessages] = useState<AttendanceCommentMessage[]>([]);
+  const [threadMessageDraft, setThreadMessageDraft] = useState('');
+  const [isThreadLoading, setIsThreadLoading] = useState(false);
+  const [isThreadSaving, setIsThreadSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     activeClassIdRef.current = classId;
-    setIsSavingAttendanceComment(false);
-    setAttendanceCommentNotice('');
+    setIsThreadLoading(false);
+    setIsThreadSaving(false);
 
     if (user?.role !== 'customer') {
       setIsLoading(false);
@@ -52,11 +60,33 @@ const CustomerClassDetail: React.FC = () => {
         setIsLoading(true);
         const response = await classAPI.getMyClassDetail(classId);
         setDetail(response.data);
-        setAttendanceCommentDraft(response.data?.customer_comment || '');
+        setIsLoading(false);
+        if (response.data?.attendance_status === 'attended') {
+          setIsThreadLoading(true);
+          try {
+            const threadResponse = await classAPI.getMyCommentThread(classId);
+            if (activeClassIdRef.current !== classId) {
+              return;
+            }
+            setThreadMessages(threadResponse.data?.messages || []);
+          } catch (threadLoadError: unknown) {
+            if (activeClassIdRef.current !== classId) {
+              return;
+            }
+            console.error('Failed to load my comment thread:', threadLoadError);
+            setError(parseApiError(threadLoadError, '수업 후 코멘트 대화를 불러오지 못했습니다.'));
+          } finally {
+            if (activeClassIdRef.current === classId) {
+              setIsThreadLoading(false);
+            }
+          }
+        } else {
+          setThreadMessages([]);
+          setThreadMessageDraft('');
+        }
       } catch (loadError: unknown) {
         console.error('Failed to load my class detail:', loadError);
         setError(parseApiError(loadError, '수업 상세 정보를 불러오지 못했습니다.'));
-      } finally {
         setIsLoading(false);
       }
     };
@@ -87,30 +117,31 @@ const CustomerClassDetail: React.FC = () => {
       ? '결석'
       : '예약';
 
-  const handleSaveAttendanceComment = async () => {
+  const handleSendThreadMessage = async () => {
     const requestClassId = classId;
+    const message = threadMessageDraft.trim();
+    if (!message) {
+      return;
+    }
 
     try {
       setError('');
-      setAttendanceCommentNotice('');
-      setIsSavingAttendanceComment(true);
-      const response = await classAPI.updateMyAttendanceComment(classId, attendanceCommentDraft);
+      setIsThreadSaving(true);
+      const response = await classAPI.postMyCommentThread(classId, message);
       if (activeClassIdRef.current !== requestClassId) {
         return;
       }
-      const savedComment = response.data?.customer_comment || null;
-      setDetail((prev) => ({ ...prev!, customer_comment: savedComment }));
-      setAttendanceCommentDraft(savedComment || '');
-      setAttendanceCommentNotice('출석 코멘트를 저장했습니다.');
-    } catch (saveError: unknown) {
+      setThreadMessages((prev) => [...prev, response.data]);
+      setThreadMessageDraft('');
+    } catch (threadSaveError: unknown) {
       if (activeClassIdRef.current !== requestClassId) {
         return;
       }
-      console.error('Failed to save attendance comment:', saveError);
-      setError(parseApiError(saveError, '출석 코멘트 저장에 실패했습니다.'));
+      console.error('Failed to send my comment thread message:', threadSaveError);
+      setError(parseApiError(threadSaveError, '수업 후 코멘트 대화 전송에 실패했습니다.'));
     } finally {
       if (activeClassIdRef.current === requestClassId) {
-        setIsSavingAttendanceComment(false);
+        setIsThreadSaving(false);
       }
     }
   };
@@ -128,11 +159,6 @@ const CustomerClassDetail: React.FC = () => {
       </div>
 
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
-      {attendanceCommentNotice && (
-        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-          {attendanceCommentNotice}
-        </p>
-      )}
 
       <section className="card space-y-3">
         <h2 className="text-xl font-display font-semibold text-primary-800">나의 수업 정보</h2>
@@ -144,32 +170,59 @@ const CustomerClassDetail: React.FC = () => {
         <p className="text-warm-700">{detail.registration_comment?.trim() || '-'}</p>
       </section>
 
-      <section className="card space-y-3">
-        <h2 className="text-xl font-display font-semibold text-primary-800">수업 후 강사 코멘트</h2>
-        <p className="text-warm-700">{detail.instructor_comment?.trim() || '-'}</p>
-      </section>
-
       {detail.attendance_status === 'attended' && (
-        <section className="card space-y-3">
-          <h2 className="text-xl font-display font-semibold text-primary-800">수업 후 나의 코멘트</h2>
-          <label className="label" htmlFor="customer-attendance-comment">수업 후 나의 코멘트</label>
-          <textarea
-            id="customer-attendance-comment"
-            className="input-field min-h-[88px]"
-            maxLength={500}
-            placeholder="출석한 수업에 대한 메모를 남겨보세요."
-            value={attendanceCommentDraft}
-            onChange={(event) => setAttendanceCommentDraft(event.target.value)}
-          />
-          <div className="flex justify-end">
-            <button
-              type="button"
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isSavingAttendanceComment}
-              onClick={() => void handleSaveAttendanceComment()}
-            >
-              {isSavingAttendanceComment ? '저장 중...' : '출석 코멘트 저장'}
-            </button>
+        <section className="card space-y-4">
+          <h2 className="text-xl font-display font-semibold text-primary-800">수업 후 코멘트 대화</h2>
+          {isThreadLoading ? (
+            <p className="text-warm-600 text-sm">대화 불러오는 중...</p>
+          ) : threadMessages.length === 0 ? (
+            <p className="text-warm-600 text-sm">아직 대화가 없습니다.</p>
+          ) : (
+            <div className="space-y-2 rounded-2xl bg-warm-100/40 p-3">
+              {threadMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.author_role === 'customer' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className="max-w-[85%] space-y-1">
+                    <div
+                      className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                        message.author_role === 'customer'
+                          ? 'rounded-br-md bg-primary-500 text-white'
+                          : 'rounded-bl-md bg-white text-warm-800 border border-warm-200'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap break-words">{message.message}</p>
+                    </div>
+                    <p className={`text-[11px] text-warm-500 ${message.author_role === 'customer' ? 'text-right' : 'text-left'}`}>
+                      {new Date(message.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label className="label" htmlFor="customer-thread-message">수업 후 코멘트 대화 작성</label>
+            <textarea
+              id="customer-thread-message"
+              className="input-field min-h-[72px]"
+              placeholder="강사와 주고받을 코멘트를 입력하세요."
+              value={threadMessageDraft}
+              maxLength={1000}
+              onChange={(event) => setThreadMessageDraft(event.target.value)}
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isThreadSaving}
+                onClick={() => void handleSendThreadMessage()}
+              >
+                {isThreadSaving ? '전송 중...' : '대화 전송'}
+              </button>
+            </div>
           </div>
         </section>
       )}
