@@ -64,10 +64,18 @@ CREATE TABLE IF NOT EXISTS yoga_attendances (
     membership_id INTEGER REFERENCES yoga_memberships(id) ON DELETE CASCADE,
     class_id INTEGER REFERENCES yoga_classes(id) ON DELETE SET NULL,
     attendance_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    instructor_comment TEXT,
-    customer_comment TEXT,
     instructor_id INTEGER REFERENCES yoga_users(id),
     class_type VARCHAR(100),  -- 수업 종류
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 출석 코멘트 메시지 스레드 테이블
+CREATE TABLE IF NOT EXISTS yoga_attendance_messages (
+    id SERIAL PRIMARY KEY,
+    attendance_id INTEGER NOT NULL REFERENCES yoga_attendances(id) ON DELETE CASCADE,
+    author_role VARCHAR(20) NOT NULL CHECK (author_role IN ('admin', 'customer')),
+    author_user_id INTEGER NOT NULL REFERENCES yoga_users(id) ON DELETE RESTRICT,
+    message TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -90,6 +98,8 @@ CREATE INDEX IF NOT EXISTS idx_memberships_active ON yoga_memberships(is_active)
 CREATE INDEX IF NOT EXISTS idx_attendances_customer_id ON yoga_attendances(customer_id);
 CREATE INDEX IF NOT EXISTS idx_attendances_date ON yoga_attendances(attendance_date);
 CREATE INDEX IF NOT EXISTS idx_attendances_class_id ON yoga_attendances(class_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_messages_attendance_created
+    ON yoga_attendance_messages(attendance_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_classes_date ON yoga_classes(class_date);
 CREATE INDEX IF NOT EXISTS idx_classes_open ON yoga_classes(is_open);
 CREATE INDEX IF NOT EXISTS idx_class_registrations_class_id ON yoga_class_registrations(class_id);

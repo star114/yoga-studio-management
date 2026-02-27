@@ -63,7 +63,8 @@ docker-compose up -d
 
 참고:
 - 신규 볼륨(빈 DB)은 `database/schema.sql`이 자동 적용됩니다.
-- `npm run migrate`는 적용할 migration 파일이 없으면 그대로 종료됩니다.
+- `npm run migrate`는 `backend/migrations` 경로가 누락되면 실패하도록 동작합니다.
+- migration 파일이 누락된 배포 아티팩트인지 먼저 확인하세요.
 
 ### 4. "Permission denied" - 스크립트 실행 오류
 

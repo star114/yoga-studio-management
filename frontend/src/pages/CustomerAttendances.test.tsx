@@ -71,7 +71,6 @@ describe('CustomerAttendances page', () => {
               class_title: '아쉬탕가',
               class_date: '2026-02-10',
               class_start_time: '09:00:00',
-              instructor_comment: '호흡이 좋았습니다.',
             },
           ],
           pagination: {
@@ -91,7 +90,6 @@ describe('CustomerAttendances page', () => {
               class_title: '빈야사',
               class_date: '2026-02-11',
               class_start_time: '09:00:00',
-              instructor_comment: null,
             },
           ],
           pagination: {
@@ -215,7 +213,6 @@ describe('CustomerAttendances page', () => {
           class_type: '하타',
           class_date: null,
           class_start_time: null,
-          instructor_comment: ' ',
         },
       ],
     });
@@ -224,7 +221,6 @@ describe('CustomerAttendances page', () => {
 
     await waitFor(() => expect(screen.getByText('하타')).toBeTruthy());
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
-    expect(screen.getByText('수업 후 강사 코멘트: -')).toBeTruthy();
     expect(screen.getByText(/총 1건/)).toBeTruthy();
   });
 

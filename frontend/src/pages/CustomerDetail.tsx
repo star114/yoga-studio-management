@@ -34,8 +34,6 @@ interface Attendance {
   class_type?: string | null;
   class_date?: string | null;
   class_start_time?: string | null;
-  instructor_comment?: string | null;
-  customer_comment?: string | null;
 }
 
 interface EditCustomerForm {
@@ -406,7 +404,7 @@ const CustomerDetail: React.FC = () => {
 
       <section className="card">
         <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업 및 코멘트</h2>
+          <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
           <Link
             to={`/customers/${customerId}/attendances`}
             className="btn-secondary text-sm"
@@ -425,12 +423,6 @@ const CustomerDetail: React.FC = () => {
               {latestAttendance.class_date && latestAttendance.class_start_time
                 ? `수업일시: ${formatKoreanDateTime(latestAttendance.class_date, latestAttendance.class_start_time)}`
                 : '-'}
-            </p>
-            <p className="text-sm text-warm-700 mt-2">
-              수업 후 강사 코멘트: {latestAttendance.instructor_comment?.trim() || '-'}
-            </p>
-            <p className="text-sm text-warm-700 mt-1">
-              수업 후 수련생 코멘트: {latestAttendance.customer_comment?.trim() || '-'}
             </p>
           </div>
         )}

@@ -225,7 +225,6 @@ test('classes list/detail/registrations/comment/update/delete cover main branche
         {
           id: 9,
           customer_id: 3,
-          attendance_customer_comment: 'good focus',
         },
       ],
     }
@@ -238,7 +237,7 @@ test('classes list/detail/registrations/comment/update/delete cover main branche
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
-  assert.equal(res.body[0].attendance_customer_comment, 'good focus');
+  assert.equal(res.body[0].customer_id, 3);
 
   h.queryQueue.push(new Error('regs fail'));
   res = await h.runRoute({
@@ -758,7 +757,7 @@ test('registration status change reconciles attendance row and membership usage'
   );
 });
 
-test('customer endpoints include and update attendance customer comment', async () => {
+test('customer class detail endpoint covers main branches', async () => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createClassesHarness();
 
@@ -790,7 +789,7 @@ test('customer endpoints include and update attendance customer comment', async 
 
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
-    { rows: [{ id: 11, title: '빈야사', customer_comment: '좋아요' }] }
+    { rows: [{ id: 11, title: '빈야사' }] }
   );
   res = await h.runRoute({
     method: 'get',
@@ -799,7 +798,7 @@ test('customer endpoints include and update attendance customer comment', async 
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 200);
-  assert.equal(res.body.customer_comment, '좋아요');
+  assert.equal(res.body.title, '빈야사');
 
   h.queryQueue.push({ rows: [{ id: 7 }] }, new Error('my detail fail'));
   res = await h.runRoute({
@@ -809,89 +808,118 @@ test('customer endpoints include and update attendance customer comment', async 
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 500);
+});
 
-  res = await h.runRoute({
-    method: 'put',
-    routePath: '/:id/me/attendance-comment',
+test('attendance comment-thread routes cover customer/admin success and failures', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness();
+
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/me/comment-thread',
     params: { id: '11' },
-    body: { customer_comment: '메모' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
 
   h.queryQueue.push({ rows: [] });
   res = await h.runRoute({
-    method: 'put',
-    routePath: '/:id/me/attendance-comment',
+    method: 'get',
+    routePath: '/:id/me/comment-thread',
     params: { id: '11' },
-    body: { customer_comment: '메모' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 403);
 
   h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [] });
   res = await h.runRoute({
-    method: 'put',
-    routePath: '/:id/me/attendance-comment',
+    method: 'get',
+    routePath: '/:id/me/comment-thread',
     params: { id: '11' },
-    body: { customer_comment: '메모' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 404);
 
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
-    { rows: [{ id: 100, customer_comment: '메모 저장' }] }
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 1, message: 'hello' }] }
   );
   res = await h.runRoute({
-    method: 'put',
-    routePath: '/:id/me/attendance-comment',
+    method: 'get',
+    routePath: '/:id/me/comment-thread',
     params: { id: '11' },
-    body: { customer_comment: '  메모 저장  ' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 200);
-  assert.equal(res.body.customer_comment, '메모 저장');
-  assert.ok(
-    h.queryCalls.some(
-      ([sql, params]) =>
-        typeof sql === 'string'
-        && sql.includes('SET customer_comment = $3')
-        && Array.isArray(params)
-        && params[2] === '메모 저장'
-    )
-  );
+  assert.equal(res.body.attendance_id, 501);
+  assert.equal(res.body.messages.length, 1);
 
-  h.queryQueue.push(
-    { rows: [{ id: 7 }] },
-    { rows: [{ id: 101, customer_comment: null }] }
-  );
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [{ id: 501 }] }, new Error('thread fetch fail'));
   res = await h.runRoute({
-    method: 'put',
-    routePath: '/:id/me/attendance-comment',
+    method: 'get',
+    routePath: '/:id/me/comment-thread',
     params: { id: '11' },
-    body: { customer_comment: '   ' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.customer_comment, null);
-  assert.ok(
-    h.queryCalls.some(
-      ([sql, params]) =>
-        typeof sql === 'string'
-        && sql.includes('SET customer_comment = $3')
-        && Array.isArray(params)
-        && params[2] === null
-    )
-  );
+  assert.equal(res.status, 500);
 
-  h.queryQueue.push({ rows: [{ id: 7 }] }, new Error('attendance comment fail'));
   res = await h.runRoute({
-    method: 'put',
-    routePath: '/:id/me/attendance-comment',
+    method: 'post',
+    routePath: '/:id/me/comment-thread',
     params: { id: '11' },
-    body: { customer_comment: '메모' },
+    body: { message: '' },
     headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [{ id: 501 }] }, { rows: [{ id: 55, message: '메시지' }] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/me/comment-thread',
+    params: { id: '11' },
+    body: { message: ' 메시지 ' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.message, '메시지');
+
+  h.queryQueue.push({ rows: [{ id: 501 }] }, { rows: [{ id: 61, message: 'admin 메시지' }] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations/:customerId/comment-thread',
+    params: { id: '11', customerId: '7' },
+    body: { message: 'admin 메시지' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 201);
+
+  h.queryQueue.push({ rows: [{ id: 501 }] }, { rows: [{ id: 1, message: 'admin view' }] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/registrations/:customerId/comment-thread',
+    params: { id: '11', customerId: '7' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.messages.length, 1);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/registrations/:customerId/comment-thread',
+    params: { id: '11', customerId: '7' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push({ rows: [{ id: 501 }] }, new Error('admin thread write fail'));
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations/:customerId/comment-thread',
+    params: { id: '11', customerId: '7' },
+    body: { message: 'admin 메시지' },
+    headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);
 });

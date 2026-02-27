@@ -20,6 +20,27 @@ const getCustomerIdFromUser = async (userId: number): Promise<number | null> => 
   return result.rows[0].id;
 };
 
+const getLatestAttendanceIdByClassCustomer = async (
+  classId: number,
+  customerId: number
+): Promise<number | null> => {
+  const attendanceResult = await pool.query(
+    `SELECT id
+     FROM yoga_attendances
+     WHERE class_id = $1
+       AND customer_id = $2
+     ORDER BY attendance_date DESC, id DESC
+     LIMIT 1`,
+    [classId, customerId]
+  );
+
+  if (attendanceResult.rows.length === 0) {
+    return null;
+  }
+
+  return Number(attendanceResult.rows[0].id);
+};
+
 // 수업 목록 조회
 router.get('/',
   authenticate,
@@ -200,15 +221,13 @@ router.get('/:id/me',
            r.id AS registration_id,
            r.registration_comment,
            r.attendance_status,
-           a.id AS attendance_id,
-           a.instructor_comment AS instructor_comment,
-           a.customer_comment AS customer_comment
+           a.id AS attendance_id
          FROM yoga_classes c
          LEFT JOIN yoga_class_registrations r
            ON r.class_id = c.id
           AND r.customer_id = $2
          LEFT JOIN LATERAL (
-           SELECT id, instructor_comment, customer_comment
+           SELECT id
            FROM yoga_attendances
            WHERE class_id = c.id
              AND customer_id = $2
@@ -257,18 +276,16 @@ router.get('/:id/registrations',
            r.id,
            r.class_id,
            r.customer_id,
-           r.attendance_status,
+         r.attendance_status,
          r.registered_at,
          r.registration_comment,
          a.id AS attendance_id,
-         a.instructor_comment AS attendance_instructor_comment,
-         a.customer_comment AS attendance_customer_comment,
          c.name AS customer_name,
          c.phone AS customer_phone
          FROM yoga_class_registrations r
          INNER JOIN yoga_customers c ON r.customer_id = c.id
          LEFT JOIN LATERAL (
-           SELECT id, instructor_comment, customer_comment
+           SELECT id
            FROM yoga_attendances
            WHERE class_id = r.class_id
              AND customer_id = r.customer_id
@@ -288,22 +305,17 @@ router.get('/:id/registrations',
   }
 );
 
-// 출석 수련생 코멘트 저장 (고객 본인)
-router.put('/:id/me/attendance-comment',
+// 출석 코멘트 스레드 조회 (고객 본인)
+router.get('/:id/me/comment-thread',
   authenticate,
   param('id').isInt({ min: 1 }),
-  body('customer_comment').optional({ values: 'falsy' }).isString().isLength({ max: 500 }),
   validateRequest,
   async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
 
     if (req.user?.role === 'admin') {
-      return res.status(400).json({ error: 'Admin cannot update customer attendance comment' });
+      return res.status(400).json({ error: 'Admin cannot use customer comment thread endpoint' });
     }
-
-    const comment = typeof req.body.customer_comment === 'string'
-      ? req.body.customer_comment.trim()
-      : null;
 
     try {
       const customerId = await getCustomerIdFromUser(req.user!.id);
@@ -311,30 +323,150 @@ router.put('/:id/me/attendance-comment',
         return res.status(403).json({ error: 'Customer account not found' });
       }
 
-      const result = await pool.query(
-        `WITH latest_attendance AS (
-           SELECT id
-           FROM yoga_attendances
-           WHERE class_id = $1
-             AND customer_id = $2
-           ORDER BY attendance_date DESC, id DESC
-           LIMIT 1
-         )
-         UPDATE yoga_attendances a
-         SET customer_comment = $3
-         FROM latest_attendance la
-         WHERE a.id = la.id
-         RETURNING a.*`,
-        [classId, customerId, comment && comment.length > 0 ? comment : null]
-      );
-
-      if (result.rows.length === 0) {
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
         return res.status(404).json({ error: 'Attendance not found' });
       }
 
-      res.json(result.rows[0]);
+      const result = await pool.query(
+        `SELECT
+           m.id,
+           m.attendance_id,
+           m.author_role,
+           m.author_user_id,
+           m.message,
+           m.created_at
+         FROM yoga_attendance_messages m
+         WHERE m.attendance_id = $1
+         ORDER BY m.created_at ASC, m.id ASC`,
+        [attendanceId]
+      );
+
+      res.json({
+        attendance_id: attendanceId,
+        messages: result.rows,
+      });
     } catch (error) {
-      console.error('Update my attendance customer comment error:', error);
+      console.error('Get my attendance comment thread error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 코멘트 스레드 작성 (고객 본인)
+router.post('/:id/me/comment-thread',
+  authenticate,
+  param('id').isInt({ min: 1 }),
+  body('message').isString().trim().isLength({ min: 1, max: 1000 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin cannot use customer comment thread endpoint' });
+    }
+
+    const message = String(req.body.message).trim();
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO yoga_attendance_messages
+           (attendance_id, author_role, author_user_id, message)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, attendance_id, author_role, author_user_id, message, created_at`,
+        [attendanceId, 'customer', req.user!.id, message]
+      );
+
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error('Create my attendance comment thread message error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 코멘트 스레드 조회 (관리자)
+router.get('/:id/registrations/:customerId/comment-thread',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  param('customerId').isInt({ min: 1 }),
+  validateRequest,
+  async (req, res) => {
+    const classId = Number(req.params.id);
+    const customerId = Number(req.params.customerId);
+
+    try {
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      const result = await pool.query(
+        `SELECT
+           m.id,
+           m.attendance_id,
+           m.author_role,
+           m.author_user_id,
+           m.message,
+           m.created_at
+         FROM yoga_attendance_messages m
+         WHERE m.attendance_id = $1
+         ORDER BY m.created_at ASC, m.id ASC`,
+        [attendanceId]
+      );
+
+      res.json({
+        attendance_id: attendanceId,
+        messages: result.rows,
+      });
+    } catch (error) {
+      console.error('Get attendance comment thread (admin) error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 코멘트 스레드 작성 (관리자)
+router.post('/:id/registrations/:customerId/comment-thread',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  param('customerId').isInt({ min: 1 }),
+  body('message').isString().trim().isLength({ min: 1, max: 1000 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+    const customerId = Number(req.params.customerId);
+    const message = String(req.body.message).trim();
+
+    try {
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO yoga_attendance_messages
+           (attendance_id, author_role, author_user_id, message)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, attendance_id, author_role, author_user_id, message, created_at`,
+        [attendanceId, 'admin', req.user!.id, message]
+      );
+
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error('Create attendance comment thread message (admin) error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }

@@ -85,14 +85,24 @@ docker-compose down -v
 
 1. **관리자 비밀번호 변경** (보안 필수!)
 2. 회원권 관리 항목 추가 (1개월 무제한, 10회권 등)
-3. 회원 등록 시작
-4. 출석 체크 시작
+3. 수업 생성 후 수련생 등록/출석 체크 진행
+4. 고객 뷰에서 수련기록(다음 수업/코멘트)과 회원권 탭 캘린더 확인
 
 ## 문제 발생 시
 
 - 로그 확인: `docker-compose logs -f`
 - 상세 트러블슈팅: `TROUBLESHOOTING.md` 참고
 - 전체 재시작: `docker-compose down && docker-compose up -d`
+
+## 품질 게이트 확인 (선택)
+
+```bash
+cd backend
+npm run lint && npm run build && npm run test:unit && npm run test:e2e && npm run test:coverage
+
+cd ../frontend
+npm run lint && npm run test && npm run build && npm run test:coverage:all-src
+```
 
 ## 데이터 백업 (중요!)
 

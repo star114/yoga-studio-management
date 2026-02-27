@@ -174,7 +174,7 @@ test('attendances list/update/today routes cover success and errors', async () =
     routePath: '/:id',
     params: { id: '8' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { instructor_comment: 'x' },
+    body: { class_type: 'x' },
   });
   assert.equal(res.status, 404);
 
@@ -199,7 +199,7 @@ test('attendances list/update/today routes cover success and errors', async () =
   updateCommentOnlyClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 8, customer_id: 3, class_id: 1 }] },
-    { rows: [{ id: 8, instructor_comment: 'x2', class_id: 1, customer_id: 3 }] },
+    { rows: [{ id: 8, class_type: 'x2', class_id: 1, customer_id: 3 }] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(updateCommentOnlyClient);
@@ -208,7 +208,7 @@ test('attendances list/update/today routes cover success and errors', async () =
     routePath: '/:id',
     params: { id: '8' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { instructor_comment: 'x2' },
+    body: { class_type: 'x2' },
   });
   assert.equal(res.status, 200);
 
@@ -219,7 +219,7 @@ test('attendances list/update/today routes cover success and errors', async () =
     { rows: [{ id: 2, title: '빈야사' }] },
     { rows: [{ id: 900 }] },
     { rows: [] },
-    { rows: [{ id: 8, instructor_comment: 'x2', class_id: 2, class_type: '빈야사', customer_id: 3 }] },
+    { rows: [{ id: 8, class_id: 2, class_type: '빈야사', customer_id: 3 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
@@ -249,7 +249,7 @@ test('attendances list/update/today routes cover success and errors', async () =
     routePath: '/:id',
     params: { id: '8' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { instructor_comment: 'x3' },
+    body: { class_type: 'x3' },
   });
   assert.equal(res.status, 500);
 
@@ -432,7 +432,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3, class_id: 5, instructor_comment: 'ok' },
+    body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 201);
   assert.match(String(successClient.queryCalls[3][0]), /yoga_membership_types/i);

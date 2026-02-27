@@ -14,7 +14,8 @@
 - 수업 관리:
   - 단일 수업 생성/수정/삭제
   - 반복 수업 생성(프론트에서 여러 `yoga_classes` 레코드 생성)
-  - 수업 상세에서 수련생 등록/취소/출석 상태/강사 코멘트 관리
+  - 수업 상세에서 수련생 등록/취소/출석 상태 관리
+  - 수업 완료 후 강사/수련생 코멘트 대화 조회 및 작성
   - 수업 전체 내역(월별 그룹, 기간 필터, 페이지네이션)
 - 출석 관리:
   - 체크인 API 기반 출석 처리
@@ -22,8 +23,8 @@
   - 고객별 출석 전체 내역(기간 필터, 페이지네이션)
 
 ### 고객
-- 수련기록(캘린더): 월/주/일 뷰, 다음 수업, 수업 코멘트 작성
-- 회원권 탭: 활성 회원권, 잔여 횟수, 시작일, 예상 종료일 조회
+- 수련기록: 다음 수업 확인, 수업 전 코멘트 작성, 최근 출석 수업/수업 후 코멘트 대화 확인
+- 회원권 탭: 활성 회원권, 잔여 횟수, 시작일, 예상 종료일, 수업 캘린더(월/주/일) 조회
 - 내 정보 탭: 프로필/비밀번호 관리
 
 ## 로그인 정책
@@ -99,13 +100,15 @@ docker-compose up -d --build
 - `yoga_classes`
 - `yoga_class_registrations`
 - `yoga_attendances`
+- `yoga_attendance_messages`
 
 ### 마이그레이션
 ```bash
 docker-compose exec -T backend npm run migrate
 ```
 
-현재 `backend/migrations` 디렉터리는 비어 있으며, 신규 DB 기준은 `database/schema.sql`입니다.
+- migration 파일 위치: `backend/migrations/`
+- 신규 DB 기준 스키마: `database/schema.sql`
 
 ## 테스트/린트
 
@@ -116,6 +119,7 @@ npm run lint
 npm run build
 npm run test:unit
 npm run test:e2e
+npm run test:coverage
 ```
 
 ### Frontend
@@ -124,6 +128,7 @@ cd frontend
 npm run lint
 npm run test
 npm run build
+npm run test:coverage:all-src
 ```
 
 ## 운영 배포 방식

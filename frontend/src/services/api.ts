@@ -155,8 +155,17 @@ export const classAPI = {
   updateMyRegistrationComment: (classId: number, registration_comment: string) =>
     api.put(`/classes/${classId}/registrations/me/comment`, { registration_comment }),
 
-  updateMyAttendanceComment: (classId: number, customer_comment: string) =>
-    api.put(`/classes/${classId}/me/attendance-comment`, { customer_comment }),
+  getMyCommentThread: (classId: number) =>
+    api.get(`/classes/${classId}/me/comment-thread`),
+
+  postMyCommentThread: (classId: number, message: string) =>
+    api.post(`/classes/${classId}/me/comment-thread`, { message }),
+
+  getRegistrationCommentThread: (classId: number, customerId: number) =>
+    api.get(`/classes/${classId}/registrations/${customerId}/comment-thread`),
+
+  postRegistrationCommentThread: (classId: number, customerId: number, message: string) =>
+    api.post(`/classes/${classId}/registrations/${customerId}/comment-thread`, { message }),
 
   updateRegistrationStatus: (classId: number, customerId: number, attendance_status: 'reserved' | 'attended' | 'absent') =>
     api.put(`/classes/${classId}/registrations/${customerId}/status`, { attendance_status }),
