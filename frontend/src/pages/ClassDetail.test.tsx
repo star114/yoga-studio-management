@@ -367,7 +367,7 @@ describe('ClassDetail page', () => {
 
   it('renders registration comment as read-only customer-provided text', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText('수련생 코멘트')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수업 전 코멘트 (신청 시)')).toBeTruthy());
     expect(screen.getByText('기존 코멘트')).toBeTruthy();
   });
 
@@ -470,7 +470,7 @@ describe('ClassDetail page', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '출석 체크' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '출석 체크' }));
 
-    await waitFor(() => expect(promptSpy).toHaveBeenCalledWith('강사 코멘트(선택)를 입력하세요.', ''));
+    await waitFor(() => expect(promptSpy).toHaveBeenCalledWith('수업 후 강사 코멘트(선택)를 입력하세요.', ''));
     promptSpy.mockRestore();
   });
 
@@ -520,7 +520,7 @@ describe('ClassDetail page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('수련생 코멘트')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수업 전 코멘트 (신청 시)')).toBeTruthy());
     expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(2);
   });
 
@@ -555,17 +555,17 @@ describe('ClassDetail page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: '강사 코멘트 저장' }).length).toBe(2));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '수업 후 강사 코멘트 저장' }).length).toBe(2));
     expect(screen.getByText('출석 체크 후 입력할 수 있습니다.')).toBeTruthy();
-    expect((screen.getAllByRole('button', { name: '강사 코멘트 저장' })[1] as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getAllByRole('button', { name: '수업 후 강사 코멘트 저장' })[1] as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.change(screen.getAllByLabelText('강사 코멘트')[0], { target: { value: '  수업 후 안정적입니다  ' } });
-    fireEvent.click(screen.getAllByRole('button', { name: '강사 코멘트 저장' })[0]);
+    fireEvent.change(screen.getAllByLabelText('수업 후 강사 코멘트')[0], { target: { value: '  수업 후 안정적입니다  ' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '수업 후 강사 코멘트 저장' })[0]);
 
     await waitFor(() => expect(attendanceUpdateMock).toHaveBeenCalledWith(9001, {
       instructor_comment: '수업 후 안정적입니다',
     }));
-    await waitFor(() => expect(screen.getByText('강사 코멘트를 저장했습니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수업 후 강사 코멘트를 저장했습니다.')).toBeTruthy());
   });
 
   it('shows error when saving instructor comment fails', async () => {
@@ -573,8 +573,8 @@ describe('ClassDetail page', () => {
     attendanceUpdateMock.mockRejectedValueOnce(new Error('update failed'));
 
     renderPage();
-    await waitFor(() => expect(screen.getAllByRole('button', { name: '강사 코멘트 저장' }).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getAllByRole('button', { name: '강사 코멘트 저장' })[0]);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '수업 후 강사 코멘트 저장' }).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByRole('button', { name: '수업 후 강사 코멘트 저장' })[0]);
 
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(consoleSpy).toHaveBeenCalled();
@@ -600,8 +600,8 @@ describe('ClassDetail page', () => {
     });
 
     renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: '강사 코멘트 저장' })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: '강사 코멘트 저장' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '수업 후 강사 코멘트 저장' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '수업 후 강사 코멘트 저장' }));
 
     await waitFor(() => expect(attendanceUpdateMock).toHaveBeenCalledWith(9010, {
       instructor_comment: '',

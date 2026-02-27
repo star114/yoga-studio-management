@@ -133,19 +133,19 @@ const CustomerClassDetail: React.FC = () => {
       </section>
 
       <section className="card space-y-3">
-        <h2 className="text-xl font-display font-semibold text-primary-800">수련생 코멘트</h2>
+        <h2 className="text-xl font-display font-semibold text-primary-800">수업 전 코멘트 (신청 시)</h2>
         <p className="text-warm-700">{detail.registration_comment?.trim() || '-'}</p>
       </section>
 
       <section className="card space-y-3">
-        <h2 className="text-xl font-display font-semibold text-primary-800">강사 코멘트</h2>
+        <h2 className="text-xl font-display font-semibold text-primary-800">수업 후 강사 코멘트</h2>
         <p className="text-warm-700">{detail.instructor_comment?.trim() || '-'}</p>
       </section>
 
       {detail.attendance_status === 'attended' && (
         <section className="card space-y-3">
-          <h2 className="text-xl font-display font-semibold text-primary-800">나의 출석 코멘트</h2>
-          <label className="label" htmlFor="customer-attendance-comment">나의 출석 코멘트</label>
+          <h2 className="text-xl font-display font-semibold text-primary-800">수업 후 나의 코멘트</h2>
+          <label className="label" htmlFor="customer-attendance-comment">수업 후 나의 코멘트</label>
           <textarea
             id="customer-attendance-comment"
             className="input-field min-h-[88px]"

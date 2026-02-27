@@ -247,8 +247,8 @@ describe('CustomerDetail page', () => {
     await waitFor(() => expect(screen.getByText('최근 출석 수업 및 코멘트')).toBeTruthy());
     expect(screen.getByText('아쉬탕가')).toBeTruthy();
     expect(screen.queryByText('빈야사')).toBeNull();
-    expect(screen.getByText('강사 코멘트: 호흡이 좋습니다.')).toBeTruthy();
-    expect(screen.getByText('고객 출석 코멘트: 집중이 잘 됐어요.')).toBeTruthy();
+    expect(screen.getByText('수업 후 강사 코멘트: 호흡이 좋습니다.')).toBeTruthy();
+    expect(screen.getByText('수업 후 수련생 코멘트: 집중이 잘 됐어요.')).toBeTruthy();
     expect(screen.getByRole('link', { name: '전체 보기' })).toBeTruthy();
   });
 
@@ -277,7 +277,7 @@ describe('CustomerDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
     expect(screen.getByText('-')).toBeTruthy();
-    expect(screen.getByText('고객 출석 코멘트: -')).toBeTruthy();
+    expect(screen.getByText('수업 후 수련생 코멘트: -')).toBeTruthy();
   });
 
   it('renders fallback latest attendance title when class title/type are both missing', async () => {

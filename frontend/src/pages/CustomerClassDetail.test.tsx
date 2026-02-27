@@ -91,7 +91,7 @@ describe('CustomerClassDetail page', () => {
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('오늘 허리 뻐근함')).toBeTruthy();
     expect(screen.getByText('호흡 안정적')).toBeTruthy();
-    expect((screen.getByLabelText('나의 출석 코멘트') as HTMLTextAreaElement).value).toBe('오늘 컨디션 좋아요');
+    expect((screen.getByLabelText('수업 후 나의 코멘트') as HTMLTextAreaElement).value).toBe('오늘 컨디션 좋아요');
   });
 
   it('renders absent status and fallback comments', async () => {
@@ -141,7 +141,7 @@ describe('CustomerClassDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: '출석 코멘트 저장' })).toBeTruthy());
 
-    const textarea = screen.getByLabelText('나의 출석 코멘트') as HTMLTextAreaElement;
+    const textarea = screen.getByLabelText('수업 후 나의 코멘트') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: '업데이트 코멘트' } });
     fireEvent.click(screen.getByRole('button', { name: '출석 코멘트 저장' }));
 
@@ -157,11 +157,11 @@ describe('CustomerClassDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: '출석 코멘트 저장' })).toBeTruthy());
 
-    fireEvent.change(screen.getByLabelText('나의 출석 코멘트'), { target: { value: '임시 코멘트' } });
+    fireEvent.change(screen.getByLabelText('수업 후 나의 코멘트'), { target: { value: '임시 코멘트' } });
     fireEvent.click(screen.getByRole('button', { name: '출석 코멘트 저장' }));
 
     await waitFor(() => expect(classUpdateMyAttendanceCommentMock).toHaveBeenCalledWith(1, '임시 코멘트'));
-    await waitFor(() => expect((screen.getByLabelText('나의 출석 코멘트') as HTMLTextAreaElement).value).toBe(''));
+    await waitFor(() => expect((screen.getByLabelText('수업 후 나의 코멘트') as HTMLTextAreaElement).value).toBe(''));
   });
 
   it('shows save error when attendance comment update fails', async () => {
@@ -188,7 +188,7 @@ describe('CustomerClassDetail page', () => {
 
     const { rerender } = renderPage();
     await waitFor(() => expect(screen.getByText('수업 상세')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('나의 출석 코멘트'), { target: { value: '클래스1 저장값' } });
+    fireEvent.change(screen.getByLabelText('수업 후 나의 코멘트'), { target: { value: '클래스1 저장값' } });
     fireEvent.click(screen.getByRole('button', { name: '출석 코멘트 저장' }));
 
     routeId = '2';
@@ -213,7 +213,7 @@ describe('CustomerClassDetail page', () => {
     await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
 
     resolveSave({ data: { customer_comment: '늦게 온 클래스1 응답' } });
-    await waitFor(() => expect((screen.getByLabelText('나의 출석 코멘트') as HTMLTextAreaElement).value).toBe('클래스2 기존값'));
+    await waitFor(() => expect((screen.getByLabelText('수업 후 나의 코멘트') as HTMLTextAreaElement).value).toBe('클래스2 기존값'));
     expect(screen.queryByText('출석 코멘트를 저장했습니다.')).toBeNull();
   });
 

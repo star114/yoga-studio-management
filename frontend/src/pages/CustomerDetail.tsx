@@ -427,10 +427,10 @@ const CustomerDetail: React.FC = () => {
                 : '-'}
             </p>
             <p className="text-sm text-warm-700 mt-2">
-              강사 코멘트: {latestAttendance.instructor_comment?.trim() || '-'}
+              수업 후 강사 코멘트: {latestAttendance.instructor_comment?.trim() || '-'}
             </p>
             <p className="text-sm text-warm-700 mt-1">
-              고객 출석 코멘트: {latestAttendance.customer_comment?.trim() || '-'}
+              수업 후 수련생 코멘트: {latestAttendance.customer_comment?.trim() || '-'}
             </p>
           </div>
         )}
