@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
@@ -22,6 +22,7 @@ const CustomerClassDetail: React.FC = () => {
   const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const classId = Number(id);
+  const activeClassIdRef = useRef<number | null>(null);
   const [detail, setDetail] = useState<CustomerClassDetailData | null>(null);
   const [attendanceCommentDraft, setAttendanceCommentDraft] = useState('');
   const [isSavingAttendanceComment, setIsSavingAttendanceComment] = useState(false);
@@ -30,6 +31,8 @@ const CustomerClassDetail: React.FC = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    activeClassIdRef.current = classId;
+
     if (user?.role !== 'customer') {
       setIsLoading(false);
       return;
@@ -83,13 +86,18 @@ const CustomerClassDetail: React.FC = () => {
       : '예약';
 
   const handleSaveAttendanceComment = async () => {
+    const requestClassId = classId;
+
     try {
       setError('');
       setAttendanceCommentNotice('');
       setIsSavingAttendanceComment(true);
       const response = await classAPI.updateMyAttendanceComment(classId, attendanceCommentDraft);
+      if (activeClassIdRef.current !== requestClassId) {
+        return;
+      }
       const savedComment = response.data?.customer_comment || null;
-      setDetail({ ...detail, customer_comment: savedComment });
+      setDetail((prev) => ({ ...prev!, customer_comment: savedComment }));
       setAttendanceCommentDraft(savedComment || '');
       setAttendanceCommentNotice('출석 코멘트를 저장했습니다.');
     } catch (saveError: unknown) {

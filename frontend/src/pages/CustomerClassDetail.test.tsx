@@ -178,6 +178,45 @@ describe('CustomerClassDetail page', () => {
     consoleSpy.mockRestore();
   });
 
+  it('ignores late save response after route changed to another class', async () => {
+    let resolveSave: (value: { data: { customer_comment: string } }) => void = () => {};
+    classUpdateMyAttendanceCommentMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveSave = resolve as (value: { data: { customer_comment: string } }) => void;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('수업 상세')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('나의 출석 코멘트'), { target: { value: '클래스1 저장값' } });
+    fireEvent.click(screen.getByRole('button', { name: '출석 코멘트 저장' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'attended',
+        registration_comment: '두번째 수업',
+        instructor_comment: '좋습니다',
+        customer_comment: '클래스2 기존값',
+      },
+    });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    resolveSave({ data: { customer_comment: '늦게 온 클래스1 응답' } });
+    await waitFor(() => expect((screen.getByLabelText('나의 출석 코멘트') as HTMLTextAreaElement).value).toBe('클래스2 기존값'));
+    expect(screen.queryByText('출석 코멘트를 저장했습니다.')).toBeNull();
+  });
+
   it('shows API error fallback', async () => {
     classGetMyClassDetailMock.mockRejectedValueOnce(new Error('failed'));
     renderPage();
