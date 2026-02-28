@@ -138,6 +138,7 @@ npm run test:coverage:all-src
 ### 릴리즈/이미지 퍼블리시
 - Release PR 자동화: `.github/workflows/release-please.yml`
 - 이미지 빌드/푸시: `.github/workflows/docker-publish.yml`
+- Release bootstrap marker: initial major release trigger commit included.
 
 필수 GitHub Secrets:
 - `DOCKERHUB_USERNAME`
