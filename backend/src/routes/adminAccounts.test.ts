@@ -7,12 +7,19 @@ type QueryResult = { rows?: any[]; rowCount?: number };
 
 const createHarness = async () => {
   const dbModulePath = require.resolve('../config/database');
+  const authModulePath = require.resolve('../middleware/auth');
 
   const queryQueue: Array<QueryResult | Error> = [];
   const queryCalls: any[][] = [];
   const poolMock = {
     async query(...args: any[]) {
       queryCalls.push(args);
+      const queryText = typeof args[0] === 'string' ? args[0] : '';
+      const queryParams = Array.isArray(args[1]) ? args[1] : [];
+      if (queryText.includes('/* auth-admin-check */')) {
+        const userId = Number(queryParams[0]);
+        return userId > 0 ? { rows: [{ id: userId }], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
       const next = queryQueue.shift();
       if (next instanceof Error) throw next;
       return next ?? { rows: [], rowCount: 0 };
@@ -26,6 +33,7 @@ const createHarness = async () => {
     loaded: true,
     exports: { __esModule: true, default: poolMock },
   };
+  delete (require.cache as any)[authModulePath];
 
   const router = (await import('./adminAccounts')).default;
 

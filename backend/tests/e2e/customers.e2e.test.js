@@ -35,6 +35,12 @@ const createCustomersHarness = () => {
   const poolMock = {
     async query(...args) {
       queryCalls.push(args);
+      const queryText = typeof args[0] === 'string' ? args[0] : '';
+      const queryParams = Array.isArray(args[1]) ? args[1] : [];
+      if (queryText.includes('/* auth-admin-check */')) {
+        const userId = Number(queryParams[0]);
+        return userId > 0 ? { rows: [{ id: userId }], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
       const next = queryQueue.shift();
       if (next instanceof Error) throw next;
       return next ?? { rows: [], rowCount: 0 };

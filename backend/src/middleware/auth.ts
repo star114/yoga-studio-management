@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import pool from '../config/database';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -29,9 +30,29 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   }
 };
 
-export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required' });
   }
-  next();
+
+  try {
+    const result = await pool.query(
+      `/* auth-admin-check */
+       SELECT id
+       FROM yoga_users
+       WHERE id = $1
+         AND role = 'admin'
+       LIMIT 1`,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Require admin check error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
 };
