@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1](https://github.com/star114/yoga-studio-management/compare/v2.0.0...v2.0.1) (2026-02-28)
+
+
+### Bug Fixes
+
+* add explicit DB name to pg_isready checks ([850bcd2](https://github.com/star114/yoga-studio-management/commit/850bcd29386747543db1c0171d37094ba0e58c30))
+* add explicit DB name to pg_isready checks ([9a5bd13](https://github.com/star114/yoga-studio-management/commit/9a5bd13df50b3ff5f69643887b1a7d502d89d98b))
+
 ## [2.0.0](https://github.com/star114/yoga-studio-management/compare/v1.6.0...v2.0.0) (2026-02-28)
 
 
