@@ -261,7 +261,7 @@ describe('ClassManagement page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('filters list by search/open-only and shows status badges', async () => {
+  it('filters list by search/open-only and shows status dot legend', async () => {
     getAllMock.mockResolvedValueOnce({
       data: [
         {
@@ -320,10 +320,14 @@ describe('ClassManagement page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('오픈수업')).toBeTruthy());
 
-    expect(screen.getAllByText('오픈').length).toBeGreaterThan(0);
+    expect(screen.getByText('오픈')).toBeTruthy();
     expect(screen.getByText('완료')).toBeTruthy();
     expect(screen.getByText('진행중')).toBeTruthy();
     expect(screen.getByText('닫힘')).toBeTruthy();
+    expect(screen.getAllByLabelText('상태: 오픈').length).toBe(2);
+    expect(screen.getAllByLabelText('상태: 완료').length).toBe(1);
+    expect(screen.getAllByLabelText('상태: 진행중').length).toBe(1);
+    expect(screen.getAllByLabelText('상태: 닫힘').length).toBe(1);
     expect(screen.getByText('기본수업')).toBeTruthy();
     expect(screen.getByText('0자리')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '수정' })).toBeNull();
@@ -333,11 +337,15 @@ describe('ClassManagement page', () => {
     expect(screen.queryByText('오픈수업')).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText('수업명 검색'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: '오픈만 보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.click(screen.getByLabelText('오픈 수업만 보기'));
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
     expect(screen.queryByText('완료수업')).toBeNull();
     expect(screen.getByText('오픈수업')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: '전체 보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.click(screen.getByLabelText('오픈 수업만 보기'));
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
     expect(screen.getByText('완료수업')).toBeTruthy();
   });
 
@@ -405,6 +413,105 @@ describe('ClassManagement page', () => {
 
     confirmSpy2.mockRestore();
     consoleSpy.mockRestore();
+  });
+
+  it('supports date range filters and numbered pagination with ellipsis', async () => {
+    const manyClasses = Array.from({ length: 161 }, (_, index) => ({
+      id: index + 1,
+      title: `수업 ${index + 1}`,
+      class_date: '2026-02-12',
+      start_time: '09:00:00',
+      end_time: '10:00:00',
+      max_capacity: 10,
+      is_open: true,
+      class_status: 'open' as const,
+      current_enrollment: 0,
+      remaining_seats: 10,
+    }));
+    const fromDateFilteredClasses = Array.from({ length: 5 }, (_, index) => ({
+      id: 1000 + index,
+      title: `최근수업 ${index + 1}`,
+      class_date: '2026-02-20',
+      start_time: '09:00:00',
+      end_time: '10:00:00',
+      max_capacity: 10,
+      is_open: true,
+      class_status: 'open' as const,
+      current_enrollment: 0,
+      remaining_seats: 10,
+    }));
+    const dateRangeFilteredClasses = Array.from({ length: 3 }, (_, index) => ({
+      id: 2000 + index,
+      title: `반년수업 ${index + 1}`,
+      class_date: '2026-02-10',
+      start_time: '09:00:00',
+      end_time: '10:00:00',
+      max_capacity: 10,
+      is_open: true,
+      class_status: 'open' as const,
+      current_enrollment: 0,
+      remaining_seats: 10,
+    }));
+
+    getAllMock
+      .mockResolvedValueOnce({ data: manyClasses })
+      .mockResolvedValueOnce({ data: fromDateFilteredClasses })
+      .mockResolvedValueOnce({ data: dateRangeFilteredClasses })
+      .mockResolvedValueOnce({ data: manyClasses });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('수업 1')).toBeTruthy());
+    expect(screen.getByText('총 161건 · 1/17 페이지')).toBeTruthy();
+    expect(screen.getAllByText('...').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(screen.getByText('총 161건 · 2/17 페이지')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
+    await waitFor(() => expect(screen.getByText('총 161건 · 1/17 페이지')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '17' }));
+    await waitFor(() => expect(screen.getByText('총 161건 · 17/17 페이지')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-02-01' } });
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+    await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(2));
+    const secondCallArg = getAllMock.mock.calls[1][0];
+    expect(secondCallArg).toBeTruthy();
+    expect(secondCallArg).toEqual({ date_from: '2026-02-01' });
+
+    await waitFor(() => expect(screen.getByText('총 5건 · 1/1 페이지')).toBeTruthy());
+    expect(screen.getByText('최근수업 1')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-02-28' } });
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+    await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(3));
+    const thirdCallArg = getAllMock.mock.calls[2][0];
+    expect(thirdCallArg).toEqual({ date_from: '2026-02-01', date_to: '2026-02-28' });
+    await waitFor(() => expect(screen.getByText('총 3건 · 1/1 페이지')).toBeTruthy());
+    expect(screen.getByText('반년수업 1')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+    await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(screen.getByText('총 161건 · 1/17 페이지')).toBeTruthy());
+  });
+
+  it('shows validation error when date range is invalid', async () => {
+    getAllMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-10' } });
+    fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-03-01' } });
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+
+    await waitFor(() => expect(screen.getByText('기간 필터를 확인하세요. 시작일은 종료일보다 늦을 수 없습니다.')).toBeTruthy());
+    expect(getAllMock).toHaveBeenCalledTimes(1);
   });
 
 });

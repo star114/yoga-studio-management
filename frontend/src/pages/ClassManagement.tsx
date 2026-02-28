@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { addMonths, format, subMonths } from 'date-fns';
+import { format } from 'date-fns';
 import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
@@ -48,6 +48,7 @@ const WEEKDAY_OPTIONS = [
   { value: 5, label: '금' },
   { value: 6, label: '토' },
 ];
+const PAGE_SIZE = 10;
 
 export const buildRecurringDates = (startDate: string, endDate: string, weekdays: number[]): string[] => {
   const start = new Date(`${startDate}T00:00:00`);
@@ -70,24 +71,38 @@ export const buildRecurringDates = (startDate: string, endDate: string, weekdays
   return dates;
 };
 
-const getClassStatusBadge = (item: YogaClass) => {
+const getClassStatusIndicator = (item: YogaClass) => {
   switch (item.class_status) {
     case 'completed':
-      return { label: '완료', className: 'bg-slate-200 text-slate-700' };
+      return { label: '완료', dotClassName: 'bg-slate-500' };
     case 'in_progress':
-      return { label: '진행중', className: 'bg-blue-100 text-blue-700' };
+      return { label: '진행중', dotClassName: 'bg-blue-500' };
     case 'closed':
-      return { label: '닫힘', className: 'bg-gray-200 text-gray-700' };
+      return { label: '닫힘', dotClassName: 'bg-gray-500' };
     default:
-      return { label: '오픈', className: 'bg-green-100 text-green-700' };
+      return { label: '오픈', dotClassName: 'bg-green-500' };
   }
 };
+
+const STATUS_LEGEND = [
+  { key: 'open', label: '오픈', dotClassName: 'bg-green-500' },
+  { key: 'in_progress', label: '진행중', dotClassName: 'bg-blue-500' },
+  { key: 'completed', label: '완료', dotClassName: 'bg-slate-500' },
+  { key: 'closed', label: '닫힘', dotClassName: 'bg-gray-500' },
+] as const;
 
 const ClassManagement: React.FC = () => {
   const [classes, setClasses] = useState<YogaClass[]>([]);
   const [form, setForm] = useState<ClassForm>(INITIAL_FORM);
   const [search, setSearch] = useState('');
   const [showOpenOnly, setShowOpenOnly] = useState(false);
+  const [dateFromFilter, setDateFromFilter] = useState('');
+  const [dateToFilter, setDateToFilter] = useState('');
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [draftShowOpenOnly, setDraftShowOpenOnly] = useState(false);
+  const [draftDateFromFilter, setDraftDateFromFilter] = useState('');
+  const [draftDateToFilter, setDraftDateToFilter] = useState('');
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -96,9 +111,6 @@ const ClassManagement: React.FC = () => {
   const [isRecurringCreate, setIsRecurringCreate] = useState(false);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(INITIAL_FORM.class_date);
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
-  const defaultDateFrom = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
-  const defaultDateTo = format(addMonths(new Date(), 2), 'yyyy-MM-dd');
-
   const filteredClasses = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return classes.filter((item) => {
@@ -114,20 +126,60 @@ const ClassManagement: React.FC = () => {
     });
   }, [classes, search, showOpenOnly]);
 
-  useEffect(() => {
-    void loadClasses(true);
-  }, []);
+  const totalClasses = filteredClasses.length;
+  const totalPages = Math.max(1, Math.ceil(totalClasses / PAGE_SIZE));
+  const pagedClasses = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredClasses.slice(start, start + PAGE_SIZE);
+  }, [filteredClasses, page]);
 
-  const loadClasses = async (showLoading = false) => {
+  const pageItems = useMemo(() => {
+    const pages: Array<number | 'ellipsis'> = [];
+    if (totalPages <= 7) {
+      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+        pages.push(pageNumber);
+      }
+      return pages;
+    }
+
+    pages.push(1);
+    if (page > 4) {
+      pages.push('ellipsis');
+    }
+    const start = Math.max(2, page - 1);
+    const end = Math.min(totalPages - 1, page + 1);
+    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+      pages.push(pageNumber);
+    }
+    if (page < totalPages - 3) {
+      pages.push('ellipsis');
+    }
+    pages.push(totalPages);
+    return pages;
+  }, [page, totalPages]);
+
+  const loadClasses = useCallback(async (showLoading = false) => {
     try {
       setError('');
       if (showLoading) {
         setIsLoading(true);
       }
-      const response = await classAPI.getAll({
-        date_from: defaultDateFrom,
-        date_to: defaultDateTo,
-      });
+
+      if (dateFromFilter && dateToFilter && dateFromFilter > dateToFilter) {
+        setError('기간 필터를 확인하세요. 시작일은 종료일보다 늦을 수 없습니다.');
+        setClasses([]);
+        return;
+      }
+
+      const params: Record<string, string> = {};
+      if (dateFromFilter) {
+        params.date_from = dateFromFilter;
+      }
+      if (dateToFilter) {
+        params.date_to = dateToFilter;
+      }
+
+      const response = await classAPI.getAll(Object.keys(params).length > 0 ? params : undefined);
       setClasses(response.data);
     } catch (loadError) {
       console.error('Failed to load classes:', loadError);
@@ -137,7 +189,21 @@ const ClassManagement: React.FC = () => {
         setIsLoading(false);
       }
     }
-  };
+  }, [dateFromFilter, dateToFilter]);
+
+  useEffect(() => {
+    void loadClasses(true);
+  }, [loadClasses]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, showOpenOnly]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const handleFormChange = (key: keyof ClassForm, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value } as ClassForm));
@@ -245,11 +311,25 @@ const ClassManagement: React.FC = () => {
     }
   };
 
+  const openFilterModal = () => {
+    setDraftShowOpenOnly(showOpenOnly);
+    setDraftDateFromFilter(dateFromFilter);
+    setDraftDateToFilter(dateToFilter);
+    setIsFilterModalOpen(true);
+  };
+
+  const applyFilterModal = () => {
+    setShowOpenOnly(draftShowOpenOnly);
+    setDateFromFilter(draftDateFromFilter);
+    setDateToFilter(draftDateToFilter);
+    setIsFilterModalOpen(false);
+  };
+
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-display font-bold text-primary-800">수업 관리</h1>
-        <p className="text-warm-600">수업 생성/삭제와 상세 페이지 이동을 관리합니다.</p>
+        <p className="text-warm-600">수업 생성/삭제와 전체 목록 필터링을 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
@@ -421,30 +501,121 @@ const ClassManagement: React.FC = () => {
         </section>
 
         <section className="card xl:col-span-3">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <div className="space-y-3 mb-4">
             <div className="space-y-1">
               <h2 className="text-xl font-display font-semibold text-primary-800">전체 수업 목록</h2>
-              <p className="text-sm text-warm-600">기본 표시 범위: {defaultDateFrom} ~ {defaultDateTo}</p>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-warm-700">
+                {STATUS_LEGEND.map((status) => (
+                  <span key={status.key} className="inline-flex items-center gap-1.5">
+                    <span
+                      className={`inline-block h-2.5 w-2.5 rounded-full ${status.dotClassName}`}
+                      aria-hidden="true"
+                    />
+                    {status.label}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Link to="/classes/history" className="btn-secondary whitespace-nowrap">
-                수업 전체 내역
-              </Link>
-              <input
-                className="input-field md:max-w-xs"
-                placeholder="수업명 검색"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <button
-                type="button"
-                className="btn-secondary whitespace-nowrap"
-                onClick={() => setShowOpenOnly((prev) => !prev)}
-              >
-                {showOpenOnly ? '전체 보기' : '오픈만 보기'}
-              </button>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  onClick={openFilterModal}
+                >
+                  필터
+                </button>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <input
+                  className="input-field w-full sm:w-64 md:w-72"
+                  placeholder="수업명 검색"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <p className="text-sm text-warm-600 whitespace-nowrap">
+                  총 {totalClasses}건 · {page}/{totalPages} 페이지
+                </p>
+              </div>
             </div>
           </div>
+
+          {isFilterModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-md rounded-xl border border-warm-200 bg-white p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-display font-semibold text-primary-800">필터 설정</h3>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setIsFilterModalOpen(false)}
+                  >
+                    닫기
+                  </button>
+                </div>
+
+                <label className="inline-flex items-center gap-2 text-sm text-warm-700">
+                  <input
+                    type="checkbox"
+                    checked={draftShowOpenOnly}
+                    onChange={(e) => setDraftShowOpenOnly(e.target.checked)}
+                  />
+                  오픈 수업만 보기
+                </label>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="label" htmlFor="filter-date-from">시작일</label>
+                    <input
+                      id="filter-date-from"
+                      type="date"
+                      className="input-field"
+                      value={draftDateFromFilter}
+                      onChange={(e) => setDraftDateFromFilter(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="filter-date-to">종료일</label>
+                    <input
+                      id="filter-date-to"
+                      type="date"
+                      className="input-field"
+                      value={draftDateToFilter}
+                      onChange={(e) => setDraftDateToFilter(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary whitespace-nowrap"
+                    onClick={() => {
+                      setDraftShowOpenOnly(false);
+                      setDraftDateFromFilter('');
+                      setDraftDateToFilter('');
+                    }}
+                  >
+                    초기화
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary whitespace-nowrap"
+                    onClick={() => setIsFilterModalOpen(false)}
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary whitespace-nowrap"
+                    onClick={applyFilterModal}
+                  >
+                    적용
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {error && (
             <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
@@ -457,60 +628,98 @@ const ClassManagement: React.FC = () => {
           ) : filteredClasses.length === 0 ? (
             <p className="text-warm-600 py-8 text-center">표시할 수업이 없습니다.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-warm-200 text-left text-warm-600">
-                    <th className="py-2 pr-4">수업명</th>
-                    <th className="py-2 pr-4">일정</th>
-                    <th className="py-2 pr-4">제한 인원</th>
-                    <th className="py-2 pr-4">신청 인원</th>
-                    <th className="py-2 pr-4">잔여 자리</th>
-                    <th className="py-2 pr-4">상태</th>
-                    <th className="py-2 pr-0 text-right">작업</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClasses.map((item) => {
-                    const status = getClassStatusBadge(item);
-                    return (
-                    <tr key={item.id} className="border-b border-warm-100">
-                      <td className="py-3 pr-4 font-medium text-primary-800">{item.title}</td>
-                      <td className="py-3 pr-4">{formatKoreanDateTime(item.class_date, item.start_time)} ~ {formatKoreanTime(item.end_time)}</td>
-                      <td className="py-3 pr-4">{item.max_capacity}명</td>
-                      <td className="py-3 pr-4">{item.current_enrollment ?? 0}명</td>
-                      <td className="py-3 pr-4">
-                        <span className={`${(item.remaining_seats ?? item.max_capacity) === 0 ? 'text-red-700 font-semibold' : ''}`}>
-                          {item.remaining_seats ?? item.max_capacity}자리
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className={`px-2 py-1 rounded-full text-xs ${status.className}`}>
-                          {status.label}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-0">
-                        <div className="flex justify-end gap-2">
-                          <Link
-                            to={`/classes/${item.id}`}
-                            className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
-                          >
-                            상세
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => void handleDelete(item)}
-                            className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
-                          >
-                            삭제
-                          </button>
-                        </div>
-                      </td>
+            <div className="space-y-4">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-warm-200 text-left text-warm-600">
+                      <th className="py-2 pr-4">수업명</th>
+                      <th className="py-2 pr-4">일정</th>
+                      <th className="py-2 pr-4">제한 인원</th>
+                      <th className="py-2 pr-4">신청 인원</th>
+                      <th className="py-2 pr-4">잔여 자리</th>
+                      <th className="py-2 pr-4">상태</th>
+                      <th className="py-2 pr-0 text-right">작업</th>
                     </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {pagedClasses.map((item) => {
+                      const status = getClassStatusIndicator(item);
+                      return (
+                        <tr key={item.id} className="border-b border-warm-100">
+                          <td className="py-3 pr-4 font-medium text-primary-800">{item.title}</td>
+                          <td className="py-3 pr-4">{formatKoreanDateTime(item.class_date, item.start_time)} ~ {formatKoreanTime(item.end_time)}</td>
+                          <td className="py-3 pr-4">{item.max_capacity}명</td>
+                          <td className="py-3 pr-4">{item.current_enrollment ?? 0}명</td>
+                          <td className="py-3 pr-4">
+                            <span className={`${(item.remaining_seats ?? item.max_capacity) === 0 ? 'text-red-700 font-semibold' : ''}`}>
+                              {item.remaining_seats ?? item.max_capacity}자리
+                            </span>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span
+                              className={`inline-block h-3 w-3 rounded-full ${status.dotClassName}`}
+                              role="img"
+                              aria-label={`상태: ${status.label}`}
+                              title={status.label}
+                            />
+                          </td>
+                          <td className="py-3 pr-0">
+                            <div className="flex justify-end gap-2">
+                              <Link
+                                to={`/classes/${item.id}`}
+                                className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
+                              >
+                                상세
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => void handleDelete(item)}
+                                className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  disabled={page <= 1}
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                >
+                  이전
+                </button>
+                {pageItems.map((item, index) => (
+                  item === 'ellipsis' ? (
+                    <span key={`ellipsis-${index}`} className="px-2 text-warm-500">...</span>
+                  ) : (
+                    <button
+                      key={`page-${item}`}
+                      type="button"
+                      className={item === page ? 'btn-primary min-w-[36px]' : 'btn-secondary min-w-[36px]'}
+                      onClick={() => setPage(item)}
+                    >
+                      {item}
+                    </button>
+                  )
+                ))}
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                >
+                  다음
+                </button>
+              </div>
             </div>
           )}
         </section>
