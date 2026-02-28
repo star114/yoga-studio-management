@@ -514,4 +514,37 @@ describe('ClassManagement page', () => {
     expect(getAllMock).toHaveBeenCalledTimes(1);
   });
 
+  it('closes filter modal with close/cancel without applying draft changes', async () => {
+    getAllMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          title: '완료수업',
+          class_date: '2026-03-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          max_capacity: 10,
+          is_open: true,
+          class_status: 'completed',
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('완료수업')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.click(screen.getByLabelText('오픈 수업만 보기'));
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+    expect(screen.queryByText('필터 설정')).toBeNull();
+    expect(screen.getByText('완료수업')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-01' } });
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByText('필터 설정')).toBeNull();
+    expect(screen.getByText('완료수업')).toBeTruthy();
+    expect(getAllMock).toHaveBeenCalledTimes(1);
+  });
+
 });
