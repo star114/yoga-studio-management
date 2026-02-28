@@ -106,26 +106,42 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res) 
   }
 
   try {
-    const countResult = await pool.query(
-      `SELECT COUNT(*)::int AS admin_count
-       FROM yoga_users
-       WHERE role = 'admin'`
+    const guardResult = await pool.query(
+      `WITH locked_admins AS (
+         SELECT id
+         FROM yoga_users
+         WHERE role = 'admin'
+         FOR UPDATE
+       ),
+       admin_guard AS (
+         SELECT COUNT(*)::int AS admin_count FROM locked_admins
+       ),
+       deleted AS (
+         DELETE FROM yoga_users
+         WHERE id = $1
+           AND role = 'admin'
+           AND (SELECT admin_count FROM admin_guard) > 1
+         RETURNING id
+       )
+       SELECT
+         (SELECT admin_count FROM admin_guard) AS admin_count,
+         (SELECT COUNT(*)::int FROM locked_admins WHERE id = $1) AS target_exists,
+         (SELECT COUNT(*)::int FROM deleted) AS deleted_count`,
+      [targetId]
     );
-    const adminCount = Number(countResult.rows[0].admin_count);
+
+    const row = guardResult.rows[0];
+    const adminCount = Number(row.admin_count);
     if (adminCount <= 1) {
       return res.status(400).json({ error: 'At least one admin account must remain' });
     }
 
-    const result = await pool.query(
-      `DELETE FROM yoga_users
-       WHERE id = $1
-         AND role = 'admin'
-       RETURNING id`,
-      [targetId]
-    );
-
-    if (result.rows.length === 0) {
+    if (Number(row.target_exists) === 0) {
       return res.status(404).json({ error: 'Admin account not found' });
+    }
+
+    if (Number(row.deleted_count) === 0) {
+      return res.status(409).json({ error: 'Admin account delete conflict' });
     }
 
     res.json({ message: 'Admin account deleted successfully' });

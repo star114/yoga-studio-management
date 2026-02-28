@@ -251,7 +251,7 @@ test('admin account routes cover all branches', async (t) => {
   });
   assert.equal(res.status, 400);
 
-  h.queryQueue.push({ rows: [{ admin_count: 1 }] });
+  h.queryQueue.push({ rows: [{ admin_count: 1, target_exists: 1, deleted_count: 0 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -260,10 +260,7 @@ test('admin account routes cover all branches', async (t) => {
   });
   assert.equal(res.status, 400);
 
-  h.queryQueue.push(
-    { rows: [{ admin_count: 3 }] },
-    { rows: [] }
-  );
+  h.queryQueue.push({ rows: [{ admin_count: 3, target_exists: 0, deleted_count: 0 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -272,10 +269,7 @@ test('admin account routes cover all branches', async (t) => {
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push(
-    { rows: [{ admin_count: 3 }] },
-    { rows: [{ id: 2 }] }
-  );
+  h.queryQueue.push({ rows: [{ admin_count: 3, target_exists: 1, deleted_count: 1 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -283,6 +277,16 @@ test('admin account routes cover all branches', async (t) => {
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
+
+  h.queryQueue.push({ rows: [{ admin_count: 3, target_exists: 1, deleted_count: 0 }] });
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Admin account delete conflict');
 
   h.queryQueue.push(Object.assign(new Error('fk-fail'), { code: '23503' }));
   res = await h.runRoute({

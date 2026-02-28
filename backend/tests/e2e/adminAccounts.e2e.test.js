@@ -267,7 +267,7 @@ test('DELETE /:id covers invalid id, self-delete, remaining-admin guard, success
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'Cannot delete your own admin account');
 
-  h.queryQueue.push({ rows: [{ admin_count: 1 }] });
+  h.queryQueue.push({ rows: [{ admin_count: 1, target_exists: 1, deleted_count: 0 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -277,10 +277,7 @@ test('DELETE /:id covers invalid id, self-delete, remaining-admin guard, success
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'At least one admin account must remain');
 
-  h.queryQueue.push(
-    { rows: [{ admin_count: 3 }] },
-    { rows: [] }
-  );
+  h.queryQueue.push({ rows: [{ admin_count: 3, target_exists: 0, deleted_count: 0 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -289,10 +286,7 @@ test('DELETE /:id covers invalid id, self-delete, remaining-admin guard, success
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push(
-    { rows: [{ admin_count: 3 }] },
-    { rows: [{ id: 2 }] }
-  );
+  h.queryQueue.push({ rows: [{ admin_count: 3, target_exists: 1, deleted_count: 1 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -301,6 +295,16 @@ test('DELETE /:id covers invalid id, self-delete, remaining-admin guard, success
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.message, 'Admin account deleted successfully');
+
+  h.queryQueue.push({ rows: [{ admin_count: 3, target_exists: 1, deleted_count: 0 }] });
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Admin account delete conflict');
 
   h.queryQueue.push(Object.assign(new Error('fk-fail'), { code: '23503' }));
   res = await h.runRoute({
