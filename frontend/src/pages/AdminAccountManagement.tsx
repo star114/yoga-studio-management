@@ -31,9 +31,13 @@ const AdminAccountManagement: React.FC = () => {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResetSubmitting, setIsResetSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
+  const [resetFormError, setResetFormError] = useState('');
+  const [resetTarget, setResetTarget] = useState<AdminAccount | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
   const [form, setForm] = useState<AdminAccountForm>(INITIAL_FORM);
 
   const filteredAccounts = useMemo(() => {
@@ -98,21 +102,40 @@ const AdminAccountManagement: React.FC = () => {
     }
   };
 
-  const handleResetPassword = async (account: AdminAccount) => {
-    const nextPassword = window.prompt(`"${account.login_id}" 새 비밀번호를 입력하세요.`);
-    if (nextPassword == null) return;
-    if (!nextPassword.trim()) {
-      setError('비밀번호는 비워둘 수 없습니다.');
+  const openResetDialog = (account: AdminAccount) => {
+    setResetTarget(account);
+    setResetPassword('');
+    setResetFormError('');
+  };
+
+  const closeResetDialog = () => {
+    setResetTarget(null);
+    setResetPassword('');
+    setResetFormError('');
+  };
+
+  const handleResetPasswordSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const target = resetTarget as AdminAccount;
+
+    const nextPassword = resetPassword.trim();
+    if (!nextPassword) {
+      setResetFormError('비밀번호는 비워둘 수 없습니다.');
       return;
     }
 
+    setIsResetSubmitting(true);
+    setResetFormError('');
     try {
-      await adminAccountAPI.resetPassword(account.id, nextPassword.trim());
+      await adminAccountAPI.resetPassword(target.id, nextPassword);
       setError('');
-      window.alert(`"${account.login_id}" 비밀번호를 재설정했습니다.`);
+      closeResetDialog();
+      window.alert(`"${target.login_id}" 비밀번호를 재설정했습니다.`);
     } catch (resetError: unknown) {
       console.error('Failed to reset admin password:', resetError);
       setError(parseApiError(resetError));
+    } finally {
+      setIsResetSubmitting(false);
     }
   };
 
@@ -227,7 +250,7 @@ const AdminAccountManagement: React.FC = () => {
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
-                              onClick={() => handleResetPassword(account)}
+                              onClick={() => openResetDialog(account)}
                               className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
                             >
                               비밀번호 재설정
@@ -251,6 +274,56 @@ const AdminAccountManagement: React.FC = () => {
           )}
         </section>
       </div>
+
+      {resetTarget && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4">
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-display font-semibold text-primary-800">비밀번호 재설정</h3>
+            <p className="mt-1 text-sm text-warm-600">
+              &quot;{resetTarget.login_id}&quot; 계정의 새 비밀번호를 입력하세요.
+            </p>
+
+            <form className="mt-4 space-y-3" onSubmit={handleResetPasswordSubmit}>
+              <div>
+                <label className="label" htmlFor="reset-admin-password">새 비밀번호</label>
+                <input
+                  id="reset-admin-password"
+                  type="password"
+                  className="input-field"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              {resetFormError && (
+                <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {resetFormError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeResetDialog}
+                  disabled={isResetSubmitting}
+                  className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResetSubmitting}
+                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isResetSubmitting ? '재설정 중...' : '재설정'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

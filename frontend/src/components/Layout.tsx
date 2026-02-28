@@ -17,8 +17,8 @@ const Layout: React.FC = () => {
       ? [
           { to: '/customers', label: '고객 관리' },
           { to: '/membership-types', label: '회원권 관리' },
-          { to: '/admin-accounts', label: '관리자 계정' },
           { to: '/classes', label: '수업 관리' },
+          { to: '/admin-accounts', label: '관리자 계정' },
         ]
       : [
           { to: '/memberships', label: '🎟️ 회원권' },

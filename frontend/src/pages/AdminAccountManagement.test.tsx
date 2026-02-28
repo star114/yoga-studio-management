@@ -125,43 +125,50 @@ describe('AdminAccountManagement page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('resets password with prompt flow', async () => {
-    const promptSpy = vi.spyOn(window, 'prompt');
+  it('resets password with password dialog flow', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    promptSpy.mockReturnValueOnce(null).mockReturnValueOnce('   ').mockReturnValueOnce('new-pass');
     resetPasswordMock.mockResolvedValueOnce(undefined);
 
     renderPage();
     await waitFor(() => expect(screen.getByText('manager')).toBeTruthy());
 
     fireEvent.click(screen.getAllByRole('button', { name: '비밀번호 재설정' })[1]);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    const passwordInput = screen.getByLabelText('새 비밀번호') as HTMLInputElement;
+    expect(passwordInput.type).toBe('password');
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(resetPasswordMock).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getAllByRole('button', { name: '비밀번호 재설정' })[1]);
+    fireEvent.change(screen.getByLabelText('새 비밀번호'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: '재설정' }));
     await waitFor(() => expect(screen.getByText('비밀번호는 비워둘 수 없습니다.')).toBeTruthy());
 
     fireEvent.click(screen.getAllByRole('button', { name: '비밀번호 재설정' })[1]);
+    fireEvent.change(screen.getByLabelText('새 비밀번호'), { target: { value: 'new-pass' } });
+    fireEvent.click(screen.getByRole('button', { name: '재설정' }));
+
     await waitFor(() => expect(resetPasswordMock).toHaveBeenCalledWith(2, 'new-pass'));
     expect(alertSpy).toHaveBeenCalled();
 
-    promptSpy.mockRestore();
     alertSpy.mockRestore();
   });
 
   it('shows parsed error when password reset fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce('new-pass');
     resetPasswordMock.mockRejectedValueOnce(new Error('reset fail'));
 
     renderPage();
     await waitFor(() => expect(screen.getByText('manager')).toBeTruthy());
 
     fireEvent.click(screen.getAllByRole('button', { name: '비밀번호 재설정' })[1]);
+    fireEvent.change(screen.getByLabelText('새 비밀번호'), { target: { value: 'new-pass' } });
+    fireEvent.click(screen.getByRole('button', { name: '재설정' }));
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(parseApiErrorMock).toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalled();
 
-    promptSpy.mockRestore();
     consoleSpy.mockRestore();
   });
 
