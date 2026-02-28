@@ -108,6 +108,7 @@ describe('api service', () => {
     const {
       authAPI,
       customerAPI,
+      adminAccountAPI,
       membershipAPI,
       attendanceAPI,
       classAPI,
@@ -127,6 +128,11 @@ describe('api service', () => {
     customerAPI.update(1, payload);
     customerAPI.resetPassword(1);
     customerAPI.delete(1);
+
+    adminAccountAPI.getAll();
+    adminAccountAPI.create(payload);
+    adminAccountAPI.resetPassword(5, 'new-pass');
+    adminAccountAPI.delete(5);
 
     membershipAPI.getTypes();
     membershipAPI.createType(payload);
@@ -177,6 +183,11 @@ describe('api service', () => {
     expect(putMock).toHaveBeenCalledWith('/customers/1', payload);
     expect(putMock).toHaveBeenCalledWith('/customers/1/password');
     expect(deleteMock).toHaveBeenCalledWith('/customers/1');
+
+    expect(getMock).toHaveBeenCalledWith('/admin-accounts');
+    expect(postMock).toHaveBeenCalledWith('/admin-accounts', payload);
+    expect(putMock).toHaveBeenCalledWith('/admin-accounts/5/password', { password: 'new-pass' });
+    expect(deleteMock).toHaveBeenCalledWith('/admin-accounts/5');
 
     expect(getMock).toHaveBeenCalledWith('/memberships/types');
     expect(postMock).toHaveBeenCalledWith('/memberships/types', payload);

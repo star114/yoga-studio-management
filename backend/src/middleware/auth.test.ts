@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
+import pool from '../config/database';
 import { authenticate, requireAdmin, type AuthRequest } from './auth';
 
 const createResponse = () => {
@@ -77,7 +78,7 @@ test('authenticate sets user and calls next on valid token', (t) => {
   assert.equal(payload.status, undefined);
 });
 
-test('requireAdmin blocks non-admin users', () => {
+test('requireAdmin blocks non-admin users', async () => {
   const { res, payload } = createResponse();
   const req = { user: { id: 1, login_id: 'user@example.com', role: 'customer' } } as AuthRequest;
   let called = false;
@@ -85,14 +86,15 @@ test('requireAdmin blocks non-admin users', () => {
     called = true;
   };
 
-  requireAdmin(req, res as any, next);
+  await requireAdmin(req, res as any, next);
 
   assert.equal(called, false);
   assert.equal(payload.status, 403);
   assert.deepEqual(payload.body, { error: 'Admin access required' });
 });
 
-test('requireAdmin allows admin user', () => {
+test('requireAdmin allows admin user', async (t) => {
+  const queryMock = t.mock.method(pool, 'query', async () => ({ rows: [{ id: 9 }] }));
   const { res } = createResponse();
   const req = { user: { id: 9, login_id: 'root@example.com', role: 'admin' } } as AuthRequest;
   let called = false;
@@ -100,7 +102,42 @@ test('requireAdmin allows admin user', () => {
     called = true;
   };
 
-  requireAdmin(req, res as any, next);
+  await requireAdmin(req, res as any, next);
 
   assert.equal(called, true);
+  assert.equal(queryMock.mock.calls.length, 1);
+});
+
+test('requireAdmin blocks deleted admin user', async (t) => {
+  t.mock.method(pool, 'query', async () => ({ rows: [] }));
+  const { res, payload } = createResponse();
+  const req = { user: { id: 9, login_id: 'root@example.com', role: 'admin' } } as AuthRequest;
+  let called = false;
+  const next = () => {
+    called = true;
+  };
+
+  await requireAdmin(req, res as any, next);
+
+  assert.equal(called, false);
+  assert.equal(payload.status, 403);
+  assert.deepEqual(payload.body, { error: 'Admin access required' });
+});
+
+test('requireAdmin returns 500 when admin check query fails', async (t) => {
+  t.mock.method(pool, 'query', async () => {
+    throw new Error('db fail');
+  });
+  const { res, payload } = createResponse();
+  const req = { user: { id: 9, login_id: 'root@example.com', role: 'admin' } } as AuthRequest;
+  let called = false;
+  const next = () => {
+    called = true;
+  };
+
+  await requireAdmin(req, res as any, next);
+
+  assert.equal(called, false);
+  assert.equal(payload.status, 500);
+  assert.deepEqual(payload.body, { error: 'Server error' });
 });

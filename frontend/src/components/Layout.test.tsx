@@ -47,6 +47,7 @@ describe('Layout', () => {
     renderLayout();
     expect(screen.getAllByText('고객 관리').length).toBeGreaterThan(0);
     expect(screen.getAllByText('회원권 관리').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('관리자 계정').length).toBeGreaterThan(0);
     expect(screen.getAllByText('수업 관리').length).toBeGreaterThan(0);
     expect(screen.getByText('관리자')).toBeTruthy();
     expect(screen.getByText('Outlet Content')).toBeTruthy();

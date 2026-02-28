@@ -8,6 +8,7 @@ import customerRoutes from './routes/customers';
 import membershipRoutes from './routes/memberships';
 import attendanceRoutes from './routes/attendances';
 import classRoutes from './routes/classes';
+import adminAccountRoutes from './routes/adminAccounts';
 import { errorHandler } from './middleware/errorHandler';
 import { ensureAdminUser } from './bootstrap/admin';
 import { startClassAutoCloseWorker } from './worker/classAutoCloseWorker';
@@ -31,6 +32,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/memberships', membershipRoutes);
 app.use('/api/attendances', attendanceRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/admin-accounts', adminAccountRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
