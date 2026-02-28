@@ -13,7 +13,6 @@ import CustomerProfile from './pages/CustomerProfile';
 import MembershipTypeManagement from './pages/MembershipTypeManagement';
 import AdminAccountManagement from './pages/AdminAccountManagement';
 import ClassManagement from './pages/ClassManagement';
-import ClassHistory from './pages/ClassHistory';
 import ClassDetail from './pages/ClassDetail';
 import Layout from './components/Layout';
 
@@ -100,11 +99,6 @@ const AppRoutes: React.FC = () => {
         <Route path="classes" element={
           <ProtectedRoute adminOnly>
             <ClassManagement />
-          </ProtectedRoute>
-        } />
-        <Route path="classes/history" element={
-          <ProtectedRoute adminOnly>
-            <ClassHistory />
           </ProtectedRoute>
         } />
         <Route path="classes/:id" element={
