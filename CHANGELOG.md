@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.1.0](https://github.com/star114/yoga-studio-management/compare/v2.0.1...v2.1.0) (2026-02-28)
+
+
+### Features
+
+* add admin account management interface ([cb3fb79](https://github.com/star114/yoga-studio-management/commit/cb3fb79a203367f3957dcc77d5f7cb0e4ab64683))
+* add admin account management interface ([89aa424](https://github.com/star114/yoga-studio-management/commit/89aa4249420f269f6beea648f57264dcf76837de))
+
+
+### Bug Fixes
+
+* handle referenced admin delete conflicts ([771099b](https://github.com/star114/yoga-studio-management/commit/771099b23f9847e84e91826d8aace0031179807a))
+* make admin deletion guard atomic ([662c162](https://github.com/star114/yoga-studio-management/commit/662c16235e720d6a8ff4b0b4e6b097776c4b1523))
+* revoke deleted admin access immediately ([51db7a3](https://github.com/star114/yoga-studio-management/commit/51db7a3a54435c824c665bb11aa94ad6bc592f01))
+* validate admin password reset target id ([6800d27](https://github.com/star114/yoga-studio-management/commit/6800d27ea3036a7465e2af8123dd841e84650400))
+
 ## [2.0.1](https://github.com/star114/yoga-studio-management/compare/v2.0.0...v2.0.1) (2026-02-28)
 
 
