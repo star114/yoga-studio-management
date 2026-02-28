@@ -284,6 +284,16 @@ test('admin account routes cover all branches', async (t) => {
   });
   assert.equal(res.status, 200);
 
+  h.queryQueue.push(Object.assign(new Error('fk-fail'), { code: '23503' }));
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Admin account is referenced by existing attendance records');
+
   h.queryQueue.push(new Error('delete-fail'));
   res = await h.runRoute({
     method: 'delete',

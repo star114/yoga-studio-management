@@ -246,7 +246,7 @@ test('PUT /:id/password covers validation, not found, success, and error', async
   assert.equal(res.status, 500);
 });
 
-test('DELETE /:id covers invalid id, self-delete, remaining-admin guard, success, not found, and error', async () => {
+test('DELETE /:id covers invalid id, self-delete, remaining-admin guard, success, fk-violation, not found, and error', async () => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createAdminAccountsHarness();
 
@@ -301,6 +301,16 @@ test('DELETE /:id covers invalid id, self-delete, remaining-admin guard, success
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.message, 'Admin account deleted successfully');
+
+  h.queryQueue.push(Object.assign(new Error('fk-fail'), { code: '23503' }));
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Admin account is referenced by existing attendance records');
 
   h.queryQueue.push(new Error('delete-fail'));
   res = await h.runRoute({

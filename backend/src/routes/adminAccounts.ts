@@ -129,7 +129,12 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res) 
     }
 
     res.json({ message: 'Admin account deleted successfully' });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === '23503') {
+      return res.status(400).json({
+        error: 'Admin account is referenced by existing attendance records',
+      });
+    }
     console.error('Delete admin account error:', error);
     res.status(500).json({ error: 'Server error' });
   }
