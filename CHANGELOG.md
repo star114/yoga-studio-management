@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.0](https://github.com/star114/yoga-studio-management/compare/v2.1.0...v2.2.0) (2026-02-28)
+
+
+### Features
+
+* admin account management hardening and UX improvements ([b90a335](https://github.com/star114/yoga-studio-management/commit/b90a335c1e8529d3ad9cffd5c7c87c82f42a5102))
+
+
+### Bug Fixes
+
+* improve admin account navigation and password reset UX ([3092404](https://github.com/star114/yoga-studio-management/commit/30924049e72eb8d612522da561dca1ac704c9c64))
+
 ## [2.1.0](https://github.com/star114/yoga-studio-management/compare/v2.0.1...v2.1.0) (2026-02-28)
 
 
