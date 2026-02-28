@@ -142,6 +142,7 @@ npm run test:coverage:all-src
 필수 GitHub Secrets:
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
+- `RELEASE_PLEASE_TOKEN` (PAT, `repo` + `workflow` 권한)
 
 ### 서버 배포
 서버 `.env`에 아래 값 설정:
