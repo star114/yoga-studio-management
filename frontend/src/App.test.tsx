@@ -36,6 +36,7 @@ vi.mock('./pages/CustomerDetail', () => ({ default: () => <div>Customer Detail</
 vi.mock('./pages/CustomerAttendances', () => ({ default: () => <div>Customer Attendances</div> }));
 vi.mock('./pages/CustomerProfile', () => ({ default: () => <div>Customer Profile</div> }));
 vi.mock('./pages/MembershipTypeManagement', () => ({ default: () => <div>Membership Types</div> }));
+vi.mock('./pages/AdminAccountManagement', () => ({ default: () => <div>Admin Accounts</div> }));
 vi.mock('./pages/ClassManagement', () => ({ default: () => <div>Class Management</div> }));
 vi.mock('./pages/ClassHistory', () => ({ default: () => <div>Class History</div> }));
 vi.mock('./pages/ClassDetail', () => ({ default: () => <div>Class Detail</div> }));
@@ -96,6 +97,12 @@ describe('App routing shell', () => {
     authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
     await renderAt('/classes/history');
     expect(screen.getByText('Class History')).toBeTruthy();
+  });
+
+  it('renders admin account management route for admin users', async () => {
+    authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
+    await renderAt('/admin-accounts');
+    expect(screen.getByText('Admin Accounts')).toBeTruthy();
   });
 
   it('renders customer attendance history route for admin users', async () => {

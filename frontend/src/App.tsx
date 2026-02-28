@@ -11,6 +11,7 @@ import CustomerDetail from './pages/CustomerDetail';
 import CustomerAttendances from './pages/CustomerAttendances';
 import CustomerProfile from './pages/CustomerProfile';
 import MembershipTypeManagement from './pages/MembershipTypeManagement';
+import AdminAccountManagement from './pages/AdminAccountManagement';
 import ClassManagement from './pages/ClassManagement';
 import ClassHistory from './pages/ClassHistory';
 import ClassDetail from './pages/ClassDetail';
@@ -89,6 +90,11 @@ const AppRoutes: React.FC = () => {
         <Route path="membership-types" element={
           <ProtectedRoute adminOnly>
             <MembershipTypeManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="admin-accounts" element={
+          <ProtectedRoute adminOnly>
+            <AdminAccountManagement />
           </ProtectedRoute>
         } />
         <Route path="classes" element={

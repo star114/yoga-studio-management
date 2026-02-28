@@ -51,6 +51,7 @@ const loadIndexWithMocks = ({
     if (request === './routes/memberships') return { __esModule: true, default: {} };
     if (request === './routes/attendances') return { __esModule: true, default: {} };
     if (request === './routes/classes') return { __esModule: true, default: {} };
+    if (request === './routes/adminAccounts') return { __esModule: true, default: {} };
     if (request === './middleware/errorHandler') {
       return { __esModule: true, errorHandler: () => {} };
     }

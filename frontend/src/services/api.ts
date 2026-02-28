@@ -75,6 +75,21 @@ export const customerAPI = {
     api.delete(`/customers/${id}`),
 };
 
+// Admin Account API
+export const adminAccountAPI = {
+  getAll: () =>
+    api.get('/admin-accounts'),
+
+  create: (data: unknown) =>
+    api.post('/admin-accounts', data),
+
+  resetPassword: (id: number, password: string) =>
+    api.put(`/admin-accounts/${id}/password`, { password }),
+
+  delete: (id: number) =>
+    api.delete(`/admin-accounts/${id}`),
+};
+
 // Membership API
 export const membershipAPI = {
   getTypes: () => 
