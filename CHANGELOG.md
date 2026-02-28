@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/star114/yoga-studio-management/compare/v1.6.0...v2.0.0) (2026-02-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* release bootstrap marker commit to force initial major version bump.
+
+### Features
+
+* bootstrap initial major release versioning ([f12ef75](https://github.com/star114/yoga-studio-management/commit/f12ef75f6670dc2033248ba47482795cefdd7676))
+
 ## [1.6.0](https://github.com/star114/yoga-studio-management/compare/v1.5.0...v1.6.0) (2026-02-27)
 
 
