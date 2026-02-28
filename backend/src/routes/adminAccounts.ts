@@ -68,7 +68,12 @@ router.put(
     }
 
     const { id } = req.params;
+    const targetId = Number(id);
     const password = String(req.body.password);
+
+    if (!Number.isFinite(targetId) || targetId <= 0) {
+      return res.status(400).json({ error: 'Invalid admin id' });
+    }
 
     try {
       const passwordHash = await bcrypt.hash(password, 10);
@@ -78,7 +83,7 @@ router.put(
          WHERE id = $2
            AND role = 'admin'
          RETURNING id`,
-        [passwordHash, id]
+        [passwordHash, targetId]
       );
 
       if (result.rows.length === 0) {

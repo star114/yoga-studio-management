@@ -200,7 +200,7 @@ test('POST / covers validation, duplicate, success, and server error', async (t)
   assert.equal(res.status, 500);
 });
 
-test('PUT /:id/password covers validation, not found, success, and error', async (t) => {
+test('PUT /:id/password covers validation, invalid id, not found, success, and error', async (t) => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createAdminAccountsHarness();
 
@@ -212,6 +212,16 @@ test('PUT /:id/password covers validation, not found, success, and error', async
     body: { password: '' },
   });
   assert.equal(res.status, 400);
+
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/password',
+    params: { id: 'abc' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { password: '1234' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid admin id');
 
   t.mock.method(bcrypt, 'hash', async () => 'hashed-pass');
   h.queryQueue.push({ rows: [] });

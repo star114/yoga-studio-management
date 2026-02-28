@@ -205,6 +205,16 @@ test('admin account routes cover all branches', async (t) => {
   });
   assert.equal(res.status, 400);
 
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/password',
+    params: { id: 'abc' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { password: 'abcd' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid admin id');
+
   h.queryQueue.push({ rows: [] });
   res = await h.runRoute({
     method: 'put',
