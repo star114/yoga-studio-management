@@ -47,7 +47,7 @@ const createHarness = async () => {
         && layer.route.path === routePath
         && layer.route.methods[method.toLowerCase()]
     );
-    if (!routeLayer) throw new Error(`Route not found: ${method.toUpperCase()} ${routePath}`);
+    if (!routeLayer?.route) throw new Error(`Route not found: ${method.toUpperCase()} ${routePath}`);
 
     const reqHeaders: Record<string, string> = {};
     Object.entries(headers).forEach(([k, v]) => {
