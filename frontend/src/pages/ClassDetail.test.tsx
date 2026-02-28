@@ -9,6 +9,7 @@ const {
   classGetRegistrationsMock,
   classRegisterMock,
   classUpdateMock,
+  classDeleteMock,
   classCancelRegistrationMock,
   classUpdateRegistrationStatusMock,
   classGetRegistrationCommentThreadMock,
@@ -21,6 +22,7 @@ const {
   classGetRegistrationsMock: vi.fn(),
   classRegisterMock: vi.fn(),
   classUpdateMock: vi.fn(),
+  classDeleteMock: vi.fn(),
   classCancelRegistrationMock: vi.fn(),
   classUpdateRegistrationStatusMock: vi.fn(),
   classGetRegistrationCommentThreadMock: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock('../services/api', () => ({
     getRegistrations: classGetRegistrationsMock,
     register: classRegisterMock,
     update: classUpdateMock,
+    delete: classDeleteMock,
     cancelRegistration: classCancelRegistrationMock,
     updateRegistrationStatus: classUpdateRegistrationStatusMock,
     getRegistrationCommentThread: classGetRegistrationCommentThreadMock,
@@ -229,6 +232,34 @@ describe('ClassDetail page', () => {
       is_open: false,
     })));
     await waitFor(() => expect(screen.getByText('수업 기본정보를 수정했습니다.')).toBeTruthy());
+  });
+
+  it('deletes class from detail page with confirm cancel/success and handles failure', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true);
+
+    classDeleteMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '수업 삭제' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '수업 삭제' }));
+    expect(classDeleteMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '수업 삭제' }));
+    await waitFor(() => expect(classDeleteMock).toHaveBeenCalledWith(1));
+    expect(navigateMock).toHaveBeenCalledWith('/classes');
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classDeleteMock.mockRejectedValueOnce(new Error('delete failed'));
+    fireEvent.click(screen.getByRole('button', { name: '수업 삭제' }));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    consoleSpy.mockRestore();
   });
 
   it('shows validation error when class basic info is invalid', async () => {

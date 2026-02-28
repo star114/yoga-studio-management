@@ -80,6 +80,7 @@ const ClassDetail: React.FC = () => {
   const [isEditingClass, setIsEditingClass] = useState(false);
   const [classEditForm, setClassEditForm] = useState<ClassEditForm | null>(null);
   const [isClassSaving, setIsClassSaving] = useState(false);
+  const [isClassDeleting, setIsClassDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -437,6 +438,24 @@ const ClassDetail: React.FC = () => {
     }
   };
 
+  const handleDeleteClass = async () => {
+    const ok = window.confirm(`"${classDetail.title}" 수업을 삭제할까요?`);
+    if (!ok) return;
+
+    try {
+      setError('');
+      setNotice('');
+      setIsClassDeleting(true);
+      await classAPI.delete(classId);
+      navigate('/classes');
+    } catch (deleteError: unknown) {
+      console.error('Failed to delete class:', deleteError);
+      setError(parseApiError(deleteError, '수업 삭제에 실패했습니다.'));
+    } finally {
+      setIsClassDeleting(false);
+    }
+  };
+
   if (isLoading) {
     return <p className="text-warm-600 py-8">수업 상세 로딩 중...</p>;
   }
@@ -474,15 +493,25 @@ const ClassDetail: React.FC = () => {
       <section className="card">
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-xl font-display font-semibold text-primary-800">수업 정보</h2>
-          {!isEditingClass && (
+          <div className="flex items-center gap-2">
+            {!isEditingClass && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setIsEditingClass(true)}
+              >
+                기본정보 수정
+              </button>
+            )}
             <button
               type="button"
-              className="btn-secondary"
-              onClick={() => setIsEditingClass(true)}
+              className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => void handleDeleteClass()}
+              disabled={isClassDeleting || isClassSaving}
             >
-              기본정보 수정
+              {isClassDeleting ? '삭제 중...' : '수업 삭제'}
             </button>
-          )}
+          </div>
         </div>
         {isEditingClass && classEditForm ? (
           <form className="space-y-4" onSubmit={handleSaveClassInfo}>
