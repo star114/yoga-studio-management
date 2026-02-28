@@ -5,9 +5,8 @@ import jwt from 'jsonwebtoken';
 
 type QueryResult = { rows?: any[]; rowCount?: number };
 
-const createHarness = () => {
+const createHarness = async () => {
   const dbModulePath = require.resolve('../config/database');
-  const routerModulePath = require.resolve('./adminAccounts');
 
   const queryQueue: Array<QueryResult | Error> = [];
   const queryCalls: any[][] = [];
@@ -28,8 +27,7 @@ const createHarness = () => {
     exports: { __esModule: true, default: poolMock },
   };
 
-  delete (require.cache as any)[routerModulePath];
-  const router = require('./adminAccounts').default;
+  const router = (await import('./adminAccounts')).default;
 
   const runRoute = async ({
     method,
@@ -130,7 +128,7 @@ const customerToken = () => jwt.sign(
 
 test('admin account routes cover all branches', async (t) => {
   process.env.JWT_SECRET = 'test-secret';
-  const h = createHarness();
+  const h = await createHarness();
 
   let res = await h.runRoute({ method: 'get', routePath: '/' });
   assert.equal(res.status, 401);
