@@ -38,7 +38,7 @@ $DOCKER_COMPOSE -f docker-compose.prod.yml up -d
 echo "[3/4] Waiting for database..."
 MAX_RETRIES=30
 COUNT=0
-until $DOCKER_COMPOSE -f docker-compose.prod.yml exec -T db pg_isready -U "${DB_USER:-yoga_admin}" >/dev/null 2>&1; do
+until $DOCKER_COMPOSE -f docker-compose.prod.yml exec -T db pg_isready -U "${DB_USER:-yoga_admin}" -d "${DB_NAME:-yoga_studio}" >/dev/null 2>&1; do
   COUNT=$((COUNT + 1))
   if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
     echo "ERROR: database did not become ready in time"

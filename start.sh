@@ -63,13 +63,15 @@ echo "⏳ 데이터베이스 초기화 대기 중..."
 # .env에서 DB_USER 읽기 (없으면 기본값 yoga_admin)
 DB_USER=$(grep "^DB_USER=" .env | cut -d '=' -f2 | awk '{print $1}' | tr -d '\r\n"')
 DB_USER=${DB_USER:-yoga_admin}
+DB_NAME=$(grep "^DB_NAME=" .env | cut -d '=' -f2 | awk '{print $1}' | tr -d '\r\n"')
+DB_NAME=${DB_NAME:-yoga_studio}
 
 # 최대 30초 대기
 MAX_RETRIES=30
 COUNT=0
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
-    if $DOCKER_COMPOSE exec -T db pg_isready -U "$DB_USER" > /dev/null 2>&1; then
+    if $DOCKER_COMPOSE exec -T db pg_isready -U "$DB_USER" -d "$DB_NAME" > /dev/null 2>&1; then
         echo "✅ 데이터베이스 준비 완료"
         break
     fi

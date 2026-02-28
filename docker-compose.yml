@@ -16,7 +16,7 @@ services:
     networks:
       - studio-mgmt-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-yoga_admin}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-yoga_admin} -d ${DB_NAME:-yoga_studio}"]
       interval: 10s
       timeout: 5s
       retries: 5
