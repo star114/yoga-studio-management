@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.3.0](https://github.com/star114/yoga-studio-management/compare/v2.2.0...v2.3.0) (2026-02-28)
+
+
+### Features
+
+* add class delete action on admin class detail ([64fb642](https://github.com/star114/yoga-studio-management/commit/64fb642d3c03f8b53fd2819da06c983286d8234e))
+* improve admin class management list filtering and detail actions ([299dc03](https://github.com/star114/yoga-studio-management/commit/299dc03afc194fa34c59a29270f4b7b2b47fa6a1))
+* redesign class list filters and pagination ([38a6e75](https://github.com/star114/yoga-studio-management/commit/38a6e75699330cd758fa5b4470a72c12abe467db))
+
 ## [2.2.0](https://github.com/star114/yoga-studio-management/compare/v2.1.0...v2.2.0) (2026-02-28)
 
 
