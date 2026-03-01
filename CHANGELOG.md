@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.1](https://github.com/star114/yoga-studio-management/compare/v2.3.0...v2.3.1) (2026-03-01)
+
+
+### Bug Fixes
+
+* prevent iOS Safari input auto-zoom on mobile ([197b000](https://github.com/star114/yoga-studio-management/commit/197b000213f3cf24b8af3cfb23ffeef5c456908b))
+* prevent iOS Safari login input auto-zoom ([a4be69c](https://github.com/star114/yoga-studio-management/commit/a4be69cfbc47d432fdc65b7f3a474d3e2cacdfd9))
+
 ## [2.3.0](https://github.com/star114/yoga-studio-management/compare/v2.2.0...v2.3.0) (2026-02-28)
 
 
