@@ -12,15 +12,29 @@ export const ensureAdminUser = async (): Promise<void> => {
 
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 
-  const result = await pool.query(
+  const insertResult = await pool.query(
     `INSERT INTO yoga_users (login_id, password_hash, role)
      VALUES ($1, $2, 'admin')
      ON CONFLICT (login_id) DO NOTHING`,
     [adminLoginId, passwordHash]
   );
 
-  if (result.rowCount === 1) {
+  if (insertResult.rowCount === 1) {
     console.log(`✅ Admin account ensured: ${adminLoginId}`);
+    return;
+  }
+
+  const promoteResult = await pool.query(
+    `UPDATE yoga_users
+     SET role = 'admin',
+         updated_at = CURRENT_TIMESTAMP
+     WHERE login_id = $1
+       AND role <> 'admin'`,
+    [adminLoginId]
+  );
+
+  if (promoteResult.rowCount === 1) {
+    console.log(`✅ Admin account role promoted: ${adminLoginId}`);
     return;
   }
 
