@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.2](https://github.com/star114/yoga-studio-management/compare/v2.3.1...v2.3.2) (2026-03-01)
+
+
+### Bug Fixes
+
+* keep admin password unchanged across redeploys ([#31](https://github.com/star114/yoga-studio-management/issues/31)) ([34d6604](https://github.com/star114/yoga-studio-management/commit/34d660482ac55525506427187eec5c49da9a9984))
+
 ## [2.3.1](https://github.com/star114/yoga-studio-management/compare/v2.3.0...v2.3.1) (2026-03-01)
 
 
