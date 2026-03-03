@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { customerAPI, membershipAPI } from '../services/api';
+import { classAPI, customerAPI, membershipAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 import { formatKoreanDate, formatKoreanDateTime } from '../utils/dateFormat';
 
@@ -25,6 +25,17 @@ interface Membership {
   notes?: string | null;
   start_date?: string | null;
   expected_end_date?: string | null;
+}
+
+interface RecommendedClass {
+  id: number;
+  title: string;
+  class_date: string;
+  start_time: string;
+  end_time: string;
+  remaining_seats: number;
+  current_enrollment: number;
+  is_registered: boolean;
 }
 
 type ActivityTypeFilter = 'all' | 'attended' | 'reserved';
@@ -82,9 +93,15 @@ const CustomerDetail: React.FC = () => {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [membershipTypes, setMembershipTypes] = useState<MembershipType[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [membershipRecommendedClasses, setMembershipRecommendedClasses] = useState<Record<number, RecommendedClass[]>>({});
+  const [membershipRecommendationsLoading, setMembershipRecommendationsLoading] = useState<Record<number, boolean>>({});
+  const [membershipRecommendationsError, setMembershipRecommendationsError] = useState<Record<number, string>>({});
+  const [classReservationLoading, setClassReservationLoading] = useState<Record<number, boolean>>({});
   const [classActivities, setClassActivities] = useState<ClassActivity[]>([]);
   const [isActivityLoading, setIsActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState('');
+  const [activityReloadToken, setActivityReloadToken] = useState(0);
+  const [activityActionLoading, setActivityActionLoading] = useState<Record<string, boolean>>({});
   const [activityPage, setActivityPage] = useState(1);
   const [activityTotal, setActivityTotal] = useState(0);
   const [activityTotalPages, setActivityTotalPages] = useState(1);
@@ -222,12 +239,48 @@ const CustomerDetail: React.FC = () => {
   }, [
     customerId,
     hasValidCustomerId,
+    activityReloadToken,
     activityPage,
     activityTypeFilter,
     activitySearch,
     activityDateFrom,
     activityDateTo,
   ]);
+
+  const handleCancelReservedClass = async (item: ClassActivity) => {
+    if (!item.class_id) return;
+    const actionKey = `reserved-${item.activity_id}`;
+    setActivityActionLoading((prev) => ({ ...prev, [actionKey]: true }));
+    setError('');
+    try {
+      await classAPI.cancelRegistration(item.class_id, customerId);
+      setActivityReloadToken((prev) => prev + 1);
+      showNotice('예약을 취소했습니다.');
+    } catch (cancelError: unknown) {
+      console.error('Failed to cancel reserved class from activity list:', cancelError);
+      setError(parseApiError(cancelError));
+    } finally {
+      setActivityActionLoading((prev) => ({ ...prev, [actionKey]: false }));
+    }
+  };
+
+  const handleMarkAttendedAsAbsent = async (item: ClassActivity) => {
+    if (!item.class_id) return;
+    const actionKey = `attended-${item.activity_id}`;
+    setActivityActionLoading((prev) => ({ ...prev, [actionKey]: true }));
+    setError('');
+    try {
+      await classAPI.updateRegistrationStatus(item.class_id, customerId, 'absent');
+      await loadMemberships();
+      setActivityReloadToken((prev) => prev + 1);
+      showNotice('출석을 결석으로 변경했습니다.');
+    } catch (updateError: unknown) {
+      console.error('Failed to mark attended class as absent from activity list:', updateError);
+      setError(parseApiError(updateError));
+    } finally {
+      setActivityActionLoading((prev) => ({ ...prev, [actionKey]: false }));
+    }
+  };
 
   const showNotice = (message: string) => {
     setNotice(message);
@@ -267,6 +320,60 @@ const CustomerDetail: React.FC = () => {
   const loadMemberships = async () => {
     const response = await membershipAPI.getByCustomer(customerId);
     setMemberships(response.data);
+  };
+
+  const loadRecommendedClassesForMembership = async (membership: Membership) => {
+    const membershipId = membership.id;
+    setMembershipRecommendationsLoading((prev) => ({ ...prev, [membershipId]: true }));
+    setMembershipRecommendationsError((prev) => ({ ...prev, [membershipId]: '' }));
+
+    try {
+      const response = await customerAPI.getRecommendedClasses(customerId, {
+        membership_name: membership.membership_type_name,
+        limit: 10,
+      });
+      setMembershipRecommendedClasses((prev) => ({
+        ...prev,
+        [membershipId]: response.data as RecommendedClass[],
+      }));
+    } catch (loadError: unknown) {
+      console.error('Failed to load recommended classes for membership:', loadError);
+      setMembershipRecommendationsError((prev) => ({
+        ...prev,
+        [membershipId]: parseApiError(loadError),
+      }));
+    } finally {
+      setMembershipRecommendationsLoading((prev) => ({ ...prev, [membershipId]: false }));
+    }
+  };
+
+  const handleQuickReserveClass = async (membershipId: number, classId: number) => {
+    setClassReservationLoading((prev) => ({ ...prev, [classId]: true }));
+    setError('');
+    try {
+      await classAPI.register(classId, { customer_id: customerId });
+      setMembershipRecommendedClasses((prev) => {
+        const classes = prev[membershipId] || [];
+        return {
+          ...prev,
+          [membershipId]: classes.map((item) => {
+            if (item.id !== classId) return item;
+            return {
+              ...item,
+              is_registered: true,
+              remaining_seats: Math.max(0, Number(item.remaining_seats ?? 0) - 1),
+              current_enrollment: Number(item.current_enrollment ?? 0) + 1,
+            };
+          }),
+        };
+      });
+      showNotice('수업을 예약했습니다.');
+    } catch (reserveError: unknown) {
+      console.error('Failed to reserve class from membership card:', reserveError);
+      setError(parseApiError(reserveError));
+    } finally {
+      setClassReservationLoading((prev) => ({ ...prev, [classId]: false }));
+    }
   };
 
   const startEditCustomer = () => {
@@ -624,6 +731,52 @@ const CustomerDetail: React.FC = () => {
                         예상 종료일: {membership.expected_end_date ? formatKoreanDate(membership.expected_end_date, false) : '-'}
                       </p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
+                      <div className="mt-3 space-y-2 rounded-md border border-warm-200 bg-white p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-primary-800">예약 가능한 수업</p>
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs"
+                            onClick={() => void loadRecommendedClassesForMembership(membership)}
+                          >
+                            불러오기
+                          </button>
+                        </div>
+                        {membershipRecommendationsLoading[membership.id] ? (
+                          <p className="text-xs text-warm-600">예정 수업 조회 중...</p>
+                        ) : membershipRecommendationsError[membership.id] ? (
+                          <p className="text-xs text-red-700">{membershipRecommendationsError[membership.id]}</p>
+                        ) : (membershipRecommendedClasses[membership.id] || []).length === 0 ? (
+                          <p className="text-xs text-warm-600">예정된 같은 이름 수업이 없습니다.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {(membershipRecommendedClasses[membership.id] || []).map((item) => (
+                              <div key={item.id} className="flex flex-col gap-1 rounded border border-warm-100 p-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <p className="text-sm text-primary-800">{item.title}</p>
+                                  <p className="text-xs text-warm-600">
+                                    {formatKoreanDateTime(item.class_date, item.start_time)} · 잔여 {item.remaining_seats}자리
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={
+                                    item.is_registered
+                                    || classReservationLoading[item.id]
+                                    || !membership.is_active
+                                    || (membership.remaining_sessions !== null && (membership.remaining_sessions ?? 0) <= 0)
+                                    || Number(item.remaining_seats ?? 0) <= 0
+                                  }
+                                  onClick={() => void handleQuickReserveClass(membership.id, item.id)}
+                                >
+                                  {item.is_registered ? '예약됨' : classReservationLoading[item.id] ? '예약 중...' : '바로 예약'}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>
                         <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDeleteMembership(membership)}>삭제</button>
@@ -757,20 +910,56 @@ const CustomerDetail: React.FC = () => {
         ) : (
           <div className="space-y-3">
             {classActivities.map((item) => (
-              <div key={`${item.activity_type}-${item.activity_id}`} className="rounded-lg border border-warm-200 bg-warm-50 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`px-2 py-0.5 text-xs rounded-full ${item.activity_type === 'reserved' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                    {item.activity_type === 'reserved' ? '예약' : '출석'}
-                  </span>
-                  <p className="text-primary-800 font-medium">
-                    {item.class_title || item.class_type || '수업 정보 없음'}
-                  </p>
+              <div key={`${item.activity_type}-${item.activity_id}`} className="rounded-lg border border-warm-200 bg-warm-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${item.activity_type === 'reserved' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                        {item.activity_type === 'reserved' ? '예약' : '출석'}
+                      </span>
+                      {item.class_id ? (
+                        <Link
+                          to={`/classes/${item.class_id}`}
+                          className="text-sm text-primary-800 font-medium hover:text-primary-900 hover:underline"
+                        >
+                          {item.class_title || item.class_type || '수업 정보 없음'}
+                        </Link>
+                      ) : (
+                        <p className="text-sm text-primary-800 font-medium">
+                          {item.class_title || item.class_type || '수업 정보 없음'}
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-xs text-warm-700">
+                      {item.class_date && item.class_start_time
+                        ? `수업일시: ${formatKoreanDateTime(item.class_date, item.class_start_time)}`
+                        : '-'}
+                    </p>
+                  </div>
+                  {item.class_id && (
+                    <div className="shrink-0">
+                      {item.activity_type === 'reserved' ? (
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={activityActionLoading[`reserved-${item.activity_id}`]}
+                          onClick={() => void handleCancelReservedClass(item)}
+                        >
+                          {activityActionLoading[`reserved-${item.activity_id}`] ? '처리 중...' : '예약 취소'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={activityActionLoading[`attended-${item.activity_id}`]}
+                          onClick={() => void handleMarkAttendedAsAbsent(item)}
+                        >
+                          {activityActionLoading[`attended-${item.activity_id}`] ? '처리 중...' : '결석 처리'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm text-warm-700 mt-1">
-                  {item.class_date && item.class_start_time
-                    ? `수업일시: ${formatKoreanDateTime(item.class_date, item.class_start_time)}`
-                    : '-'}
-                </p>
               </div>
             ))}
 

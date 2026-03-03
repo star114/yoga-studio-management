@@ -300,6 +300,55 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
   assert.equal(res.status, 500);
 });
 
+test('GET /:id/recommended-classes covers validation, forbidden, success, and error', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createCustomersHarness();
+
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: {},
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    { rows: [{ id: 9, title: '아쉬탕가' }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가', limit: '10' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].title, '아쉬탕가');
+
+  h.queryQueue.push(new Error('recommended fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
 test('POST / covers validation/missing id/duplicate/success/error', async (t) => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createCustomersHarness();

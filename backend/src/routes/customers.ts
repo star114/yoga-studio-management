@@ -263,6 +263,76 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
   }
 });
 
+// 특정 고객의 회원권명 기준 예정 수업 추천 조회
+router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const rawMembershipName = typeof req.query.membership_name === 'string'
+    ? req.query.membership_name
+    : '';
+  const rawLimit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
+  const membershipName = rawMembershipName.trim();
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(Math.floor(rawLimit), 100)
+    : 20;
+
+  if (!membershipName) {
+    return res.status(400).json({ error: 'membership_name is required' });
+  }
+
+  if (req.user!.role !== 'admin') {
+    const hasAccess = await hasCustomerAccess(id, req.user!.id);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT
+         c.id,
+         c.title,
+         c.class_date,
+         c.start_time,
+         c.end_time,
+         c.max_capacity,
+         c.is_open,
+         COUNT(r.id)::int AS current_enrollment,
+         GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats,
+         EXISTS (
+           SELECT 1
+           FROM yoga_class_registrations mine
+           WHERE mine.class_id = c.id
+             AND mine.customer_id = $1
+             AND mine.attendance_status = 'reserved'
+         ) AS is_registered
+       FROM yoga_classes c
+       LEFT JOIN yoga_class_registrations r ON r.class_id = c.id
+       WHERE c.is_open = TRUE
+         AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
+         AND regexp_replace(
+               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
+               '[[:space:]]+',
+               ' ',
+               'g'
+             ) = regexp_replace(
+               trim(replace($2::text, chr(160), ' ')),
+               '[[:space:]]+',
+               ' ',
+               'g'
+             )
+       GROUP BY c.id
+       ORDER BY c.class_date ASC, c.start_time ASC
+       LIMIT $3`,
+      [id, membershipName, limit]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get recommended classes error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // 특정 고객 전체 출석 조회
 router.get('/:id/attendances', authenticate, async (req: AuthRequest, res) => {
   const { id } = req.params;

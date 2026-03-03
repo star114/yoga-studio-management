@@ -7,10 +7,14 @@ import CustomerDetail from './CustomerDetail';
 const {
   getByIdMock,
   getClassActivitiesMock,
+  getRecommendedClassesMock,
+  classCancelRegistrationMock,
+  classUpdateRegistrationStatusMock,
   updateCustomerMock,
   resetPasswordMock,
   getTypesMock,
   getByCustomerMock,
+  classRegisterMock,
   createMembershipMock,
   updateMembershipMock,
   deleteMembershipMock,
@@ -18,10 +22,14 @@ const {
 } = vi.hoisted(() => ({
   getByIdMock: vi.fn(),
   getClassActivitiesMock: vi.fn(),
+  getRecommendedClassesMock: vi.fn(),
+  classCancelRegistrationMock: vi.fn(),
+  classUpdateRegistrationStatusMock: vi.fn(),
   updateCustomerMock: vi.fn(),
   resetPasswordMock: vi.fn(),
   getTypesMock: vi.fn(),
   getByCustomerMock: vi.fn(),
+  classRegisterMock: vi.fn(),
   createMembershipMock: vi.fn(),
   updateMembershipMock: vi.fn(),
   deleteMembershipMock: vi.fn(),
@@ -42,8 +50,14 @@ vi.mock('../services/api', () => ({
   customerAPI: {
     getById: getByIdMock,
     getClassActivities: getClassActivitiesMock,
+    getRecommendedClasses: getRecommendedClassesMock,
     update: updateCustomerMock,
     resetPassword: resetPasswordMock,
+  },
+  classAPI: {
+    register: classRegisterMock,
+    cancelRegistration: classCancelRegistrationMock,
+    updateRegistrationStatus: classUpdateRegistrationStatusMock,
   },
   membershipAPI: {
     getTypes: getTypesMock,
@@ -82,6 +96,7 @@ const seedLoadSuccess = () => {
       pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
     },
   });
+  getRecommendedClassesMock.mockResolvedValue({ data: [] });
   getTypesMock.mockResolvedValue({ data: [{ id: 5, name: '10회권' }] });
   getByCustomerMock.mockResolvedValue({ data: [] });
 };
@@ -293,6 +308,95 @@ describe('CustomerDetail page', () => {
       search: '테스트',
     }));
     await waitFor(() => expect(screen.getByText('테스트 수업')).toBeTruthy());
+  });
+
+  it('links class activity item to class detail when class_id exists', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            activity_type: 'attended',
+            activity_id: 301,
+            class_id: 77,
+            class_title: '링크 수업',
+            class_date: '2026-03-03',
+            class_start_time: '07:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
+    });
+
+    renderPage();
+
+    const classLink = await screen.findByRole('link', { name: '링크 수업' });
+    expect(classLink.getAttribute('href')).toBe('/classes/77');
+  });
+
+  it('allows canceling reserved class from activity list', async () => {
+    getClassActivitiesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              activity_type: 'reserved',
+              activity_id: 401,
+              class_id: 55,
+              class_title: '예약 수업',
+              class_date: '2026-03-05',
+              class_start_time: '09:00:00',
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
+        },
+      });
+    classCancelRegistrationMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    const cancelButton = await screen.findByRole('button', { name: '예약 취소' });
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => expect(classCancelRegistrationMock).toHaveBeenCalledWith(55, 1));
+    await waitFor(() => expect(screen.getByText('예약을 취소했습니다.')).toBeTruthy());
+  });
+
+  it('allows marking attended class as absent from activity list', async () => {
+    getClassActivitiesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              activity_type: 'attended',
+              activity_id: 501,
+              class_id: 66,
+              class_title: '출석 수업',
+              class_date: '2026-03-06',
+              class_start_time: '10:00:00',
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
+        },
+      });
+    classUpdateRegistrationStatusMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    const absentButton = await screen.findByRole('button', { name: '결석 처리' });
+    fireEvent.click(absentButton);
+
+    await waitFor(() => expect(classUpdateRegistrationStatusMock).toHaveBeenCalledWith(66, 1, 'absent'));
+    await waitFor(() => expect(screen.getByText('출석을 결석으로 변경했습니다.')).toBeTruthy());
   });
 
   it('resets password with cancel and success paths', async () => {
@@ -599,5 +703,48 @@ describe('CustomerDetail page', () => {
 
     confirmSpy.mockRestore();
     consoleSpy.mockRestore();
+  });
+
+  it('loads recommended classes for membership and allows quick reserve', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 31,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 500,
+          title: '아쉬탕가',
+          class_date: '2026-03-10',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: false,
+        },
+      ],
+    });
+    classRegisterMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+    await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenCalledWith(1, {
+      membership_name: '아쉬탕가',
+      limit: 10,
+    }));
+
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButton);
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(500, { customer_id: 1 }));
+    await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
   });
 });

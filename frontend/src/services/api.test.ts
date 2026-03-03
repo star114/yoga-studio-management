@@ -125,6 +125,7 @@ describe('api service', () => {
     customerAPI.getById(1);
     customerAPI.getAttendances(1, { page: 2 });
     customerAPI.getClassActivities(1, { page: 3, activity_type: 'reserved' });
+    customerAPI.getRecommendedClasses(1, { membership_name: '아쉬탕가', limit: 5 });
     customerAPI.create(payload);
     customerAPI.update(1, payload);
     customerAPI.resetPassword(1);
@@ -181,6 +182,7 @@ describe('api service', () => {
     expect(getMock).toHaveBeenCalledWith('/customers/1');
     expect(getMock).toHaveBeenCalledWith('/customers/1/attendances', { params: { page: 2 } });
     expect(getMock).toHaveBeenCalledWith('/customers/1/class-activities', { params: { page: 3, activity_type: 'reserved' } });
+    expect(getMock).toHaveBeenCalledWith('/customers/1/recommended-classes', { params: { membership_name: '아쉬탕가', limit: 5 } });
     expect(postMock).toHaveBeenCalledWith('/customers', payload);
     expect(putMock).toHaveBeenCalledWith('/customers/1', payload);
     expect(putMock).toHaveBeenCalledWith('/customers/1/password');
