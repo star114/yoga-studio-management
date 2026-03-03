@@ -6,6 +6,8 @@ interface ValidationErrorItem {
 
 interface ApiErrorPayload {
   error?: string;
+  reason?: string;
+  failed_checks?: string[];
   errors?: ValidationErrorItem[];
 }
 
@@ -21,6 +23,10 @@ export const parseApiError = (error: unknown, fallback = '요청 처리에 실�
     }
 
     if (typeof data?.error === 'string' && data.error.length > 0) {
+      if (typeof data.reason === 'string' && data.reason.length > 0) {
+        return `${data.error} (${data.reason})`;
+      }
+
       return data.error;
     }
   }

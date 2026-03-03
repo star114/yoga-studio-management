@@ -31,6 +31,14 @@ describe('parseApiError', () => {
     expect(parseApiError(error)).toBe('권한이 없습니다.');
   });
 
+  it('includes reason next to error when provided', () => {
+    const error = makeAxiosError({
+      error: 'No valid membership for this class',
+      reason: 'CLASS_TITLE_MISMATCH',
+    });
+    expect(parseApiError(error)).toBe('No valid membership for this class (CLASS_TITLE_MISMATCH)');
+  });
+
   it('returns fallback when axios payload has no usable message', () => {
     const error = makeAxiosError({ error: '' });
     expect(parseApiError(error, 'fallback')).toBe('fallback');
