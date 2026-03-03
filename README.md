@@ -55,6 +55,7 @@ cp .env.example .env
 - `DB_PASSWORD`
 - `JWT_SECRET`
 - `ADMIN_PASSWORD`
+- `BUSINESS_TIMEZONE` (예: `Asia/Seoul`)
 
 ### 2. 실행
 ```bash
