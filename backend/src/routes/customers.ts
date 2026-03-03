@@ -6,6 +6,14 @@ import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+const normalizePhoneNumber = (value: string): string | null => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!/^\d{11}$/.test(digits)) {
+    return null;
+  }
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+};
+
 // 모든 고객 조회 (관리자)
 router.get('/', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -200,19 +208,23 @@ router.post('/',
     if (!trimmedPhone) {
       return res.status(400).json({ error: '전화번호는 필수입니다.' });
     }
+    const normalizedPhone = normalizePhoneNumber(trimmedPhone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: '전화번호 형식은 000-0000-0000 이어야 합니다.' });
+    }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      if (trimmedPhone) {
+      if (normalizedPhone) {
         const phoneCheck = await client.query(
           `SELECT id
            FROM yoga_customers
            WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g')
                  = regexp_replace($1, '[^0-9]', '', 'g')
            LIMIT 1`,
-          [trimmedPhone]
+          [normalizedPhone]
         );
         if (phoneCheck.rows.length > 0) {
           await client.query('ROLLBACK');
@@ -222,7 +234,7 @@ router.post('/',
 
       // 사용자 계정 생성
       const passwordHash = await bcrypt.hash('12345', 10);
-      const loginId = trimmedPhone;
+      const loginId = normalizedPhone;
       const userResult = await client.query(
         'INSERT INTO yoga_users (login_id, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
         [loginId, passwordHash, 'customer']
@@ -234,7 +246,7 @@ router.post('/',
       const customerResult = await client.query(
         `INSERT INTO yoga_customers (user_id, name, phone, notes)
          VALUES ($1, $2, $3, $4) RETURNING *`,
-        [userId, name, trimmedPhone, notes || null]
+        [userId, name, normalizedPhone, notes || null]
       );
 
       await client.query('COMMIT');
@@ -262,9 +274,15 @@ router.put('/:id',
     const { name, phone, notes } = req.body;
     const hasPhoneField = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone');
     const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
+    const normalizedPhone = hasPhoneField && trimmedPhone
+      ? normalizePhoneNumber(trimmedPhone)
+      : null;
 
     if (hasPhoneField && !trimmedPhone) {
       return res.status(400).json({ error: '전화번호는 필수입니다.' });
+    }
+    if (hasPhoneField && !normalizedPhone) {
+      return res.status(400).json({ error: '전화번호 형식은 000-0000-0000 이어야 합니다.' });
     }
 
     const client = await pool.connect();
@@ -278,7 +296,7 @@ router.put('/:id',
              notes = COALESCE($3, notes)
          WHERE id = $4
          RETURNING *`,
-        [name, hasPhoneField ? trimmedPhone : null, notes, id]
+        [name, hasPhoneField ? normalizedPhone : null, notes, id]
       );
 
       if (result.rows.length === 0) {
@@ -293,7 +311,7 @@ router.put('/:id',
            FROM yoga_customers c
            WHERE c.id = $2
              AND u.id = c.user_id`,
-          [trimmedPhone, id]
+          [normalizedPhone, id]
         );
       }
 

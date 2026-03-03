@@ -260,6 +260,15 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
   assert.equal(res.status, 400);
   assert.ok(Array.isArray(res.body.errors));
 
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { name: 'N', phone: '010-1234-567' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, '전화번호 형식은 000-0000-0000 이어야 합니다.');
+
   const dupPhoneClient = h.createDbClientMock();
   dupPhoneClient.queryQueue.push(
     { rows: [], rowCount: 0 }, // BEGIN
@@ -392,7 +401,7 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   assert.equal(res.status, 200);
   assert.equal(res.body.name, 'X2');
   assert.match(String(syncLoginClient.queryCalls[2][0]), /UPDATE yoga_users u/);
-  assert.equal(syncLoginClient.queryCalls[2][1][0], '01012345678');
+  assert.equal(syncLoginClient.queryCalls[2][1][0], '010-1234-5678');
 
   const updateErrClient = h.createDbClientMock();
   updateErrClient.queryQueue.push(
@@ -421,6 +430,19 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   });
   assert.equal(res.status, 400);
   assert.equal(invalidPhoneClient.queryCalls.length, 0);
+
+  const invalidFormatClient = h.createDbClientMock();
+  h.connectQueue.push(invalidFormatClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { phone: '010-1234-567' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, '전화번호 형식은 000-0000-0000 이어야 합니다.');
+  assert.equal(invalidFormatClient.queryCalls.length, 0);
 
   h.queryQueue.push({ rows: [] });
   t.mock.method(bcrypt, 'hash', async () => 'r-hash');
