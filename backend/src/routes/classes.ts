@@ -692,7 +692,7 @@ router.post('/:id/registrations',
       await client.query('BEGIN');
 
       const classResult = await client.query(
-        `SELECT id, is_open, max_capacity, class_date, start_time, end_time
+        `SELECT id, title, is_open, max_capacity, class_date, start_time, end_time
          FROM yoga_classes
          WHERE id = $1
          FOR UPDATE`,
@@ -716,6 +716,106 @@ router.post('/:id/registrations',
       if (!yogaClass.is_open) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Class is closed' });
+      }
+
+      const membershipResult = await client.query(
+        `SELECT m.id
+         FROM yoga_memberships m
+         INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
+         WHERE m.customer_id = $1
+           AND m.is_active = TRUE
+           AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
+           AND regexp_replace(
+                 trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
+                 '[[:space:]]+',
+                 ' ',
+                 'g'
+               ) = regexp_replace(
+                 trim(replace($2::text, chr(160), ' ')),
+                 '[[:space:]]+',
+                 ' ',
+                 'g'
+               )
+         LIMIT 1`,
+        [customerId, yogaClass.title]
+      );
+
+      if (membershipResult.rows.length === 0) {
+        const membershipDiagnosticResult = await client.query(
+          `SELECT
+             COUNT(*)::int AS total_memberships,
+             COUNT(*) FILTER (WHERE m.is_active = TRUE)::int AS active_memberships,
+             COUNT(*) FILTER (
+               WHERE m.remaining_sessions IS NULL OR m.remaining_sessions > 0
+             )::int AS remaining_memberships,
+             COUNT(*) FILTER (
+               WHERE regexp_replace(
+                 trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
+                 '[[:space:]]+',
+                 ' ',
+                 'g'
+               ) = regexp_replace(
+                 trim(replace($2::text, chr(160), ' ')),
+                 '[[:space:]]+',
+                 ' ',
+                 'g'
+               )
+             )::int AS title_matched_memberships
+           FROM yoga_memberships m
+           LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
+           WHERE m.customer_id = $1`,
+          [customerId, yogaClass.title]
+        );
+        const diagnostic = membershipDiagnosticResult.rows[0] as {
+          total_memberships: number;
+          active_memberships: number;
+          remaining_memberships: number;
+          title_matched_memberships: number;
+        } | undefined;
+        const totalMemberships = Number(diagnostic?.total_memberships ?? 0);
+        const activeMemberships = Number(diagnostic?.active_memberships ?? 0);
+        const remainingMemberships = Number(diagnostic?.remaining_memberships ?? 0);
+        const titleMatchedMemberships = Number(diagnostic?.title_matched_memberships ?? 0);
+        const failedChecks: string[] = [];
+        if (totalMemberships <= 0) {
+          failedChecks.push('NO_MEMBERSHIP');
+        }
+        if (titleMatchedMemberships <= 0) {
+          failedChecks.push('CLASS_TITLE_MISMATCH');
+        }
+        if (activeMemberships <= 0) {
+          failedChecks.push('NO_ACTIVE_MEMBERSHIP');
+        }
+        if (remainingMemberships <= 0) {
+          failedChecks.push('NO_REMAINING_SESSIONS');
+        }
+
+        console.warn('Class registration blocked by membership validation', {
+          class_id: Number(id),
+          customer_id: Number(customerId),
+          class_title: String(yogaClass.title ?? ''),
+          membership_diagnostics: {
+            total_memberships: totalMemberships,
+            active_memberships: activeMemberships,
+            remaining_memberships: remainingMemberships,
+            title_matched_memberships: titleMatchedMemberships,
+            failed_checks: failedChecks,
+          },
+        });
+
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'No valid membership for this class',
+          reason: failedChecks[0] ?? 'NO_ELIGIBLE_MEMBERSHIP',
+          checks: {
+            class_title: yogaClass.title,
+            has_membership: totalMemberships > 0,
+            has_matching_membership_type: titleMatchedMemberships > 0,
+            has_active_membership: activeMemberships > 0,
+            has_remaining_sessions: remainingMemberships > 0,
+          },
+          failed_checks: failedChecks,
+        });
       }
 
       const countResult = await client.query(
