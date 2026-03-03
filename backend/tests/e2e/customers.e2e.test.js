@@ -69,6 +69,7 @@ const createCustomersHarness = () => {
     method,
     routePath,
     params = {},
+    query = {},
     body = {},
     headers = {},
   }) => {
@@ -91,6 +92,7 @@ const createCustomersHarness = () => {
       method: method.toUpperCase(),
       path: routePath,
       params,
+      query,
       body,
       headers: reqHeaders,
       get(name) {
@@ -233,6 +235,65 @@ test('GET /:id covers forbidden, not found, and success', async () => {
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
+test('GET /:id/class-activities covers forbidden, success, filters, and error', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createCustomersHarness();
+
+  h.queryQueue.push({ rows: [] });
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    { rows: [{ total: 2 }] },
+    {
+      rows: [
+        {
+          activity_type: 'reserved',
+          activity_id: 11,
+          class_id: 7,
+          class_title: '아쉬탕가',
+          class_type: '아쉬탕가',
+          class_date: '2026-03-01',
+          class_start_time: '09:00:00',
+          class_end_time: '10:00:00',
+          attendance_date: null,
+          registered_at: '2026-02-28T00:00:00.000Z',
+        },
+      ],
+    }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    query: { page: '2', page_size: '5', activity_type: 'reserved', search: '아쉬', date_from: '2026-02-01' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.items.length, 1);
+  assert.equal(res.body.pagination.page, 2);
+  assert.equal(res.body.filter.activity_type, 'reserved');
+  assert.equal(res.body.filter.search, '아쉬');
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    new Error('activities fail')
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
     params: { id: '5' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });

@@ -27,13 +27,29 @@ interface Membership {
   expected_end_date?: string | null;
 }
 
-interface Attendance {
-  id: number;
-  attendance_date: string;
+type ActivityTypeFilter = 'all' | 'attended' | 'reserved';
+
+interface ClassActivity {
+  activity_type: 'attended' | 'reserved';
+  activity_id: number;
+  class_id?: number | null;
   class_title?: string | null;
   class_type?: string | null;
   class_date?: string | null;
   class_start_time?: string | null;
+  class_end_time?: string | null;
+  attendance_date?: string | null;
+  registered_at?: string | null;
+}
+
+interface ClassActivityResponse {
+  items: ClassActivity[];
+  pagination?: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
 }
 
 interface EditCustomerForm {
@@ -57,6 +73,7 @@ const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
   notes: '',
 };
+const ACTIVITY_PAGE_SIZE = 10;
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams();
@@ -65,7 +82,21 @@ const CustomerDetail: React.FC = () => {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [membershipTypes, setMembershipTypes] = useState<MembershipType[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
-  const [recentAttendances, setRecentAttendances] = useState<Attendance[]>([]);
+  const [classActivities, setClassActivities] = useState<ClassActivity[]>([]);
+  const [isActivityLoading, setIsActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState('');
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityTotal, setActivityTotal] = useState(0);
+  const [activityTotalPages, setActivityTotalPages] = useState(1);
+  const [activityTypeFilter, setActivityTypeFilter] = useState<ActivityTypeFilter>('all');
+  const [activitySearch, setActivitySearch] = useState('');
+  const [activityDateFrom, setActivityDateFrom] = useState('');
+  const [activityDateTo, setActivityDateTo] = useState('');
+  const [isActivityFilterModalOpen, setIsActivityFilterModalOpen] = useState(false);
+  const [draftActivityTypeFilter, setDraftActivityTypeFilter] = useState<ActivityTypeFilter>('all');
+  const [draftActivitySearch, setDraftActivitySearch] = useState('');
+  const [draftActivityDateFrom, setDraftActivityDateFrom] = useState('');
+  const [draftActivityDateTo, setDraftActivityDateTo] = useState('');
   const [newMembershipForm, setNewMembershipForm] = useState<NewMembershipForm>(INITIAL_NEW_MEMBERSHIP_FORM);
   const [editingMembershipId, setEditingMembershipId] = useState<number | null>(null);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
@@ -88,7 +119,29 @@ const CustomerDetail: React.FC = () => {
   const [notice, setNotice] = useState('');
 
   const hasValidCustomerId = useMemo(() => Number.isInteger(customerId) && customerId > 0, [customerId]);
-  const latestAttendance = useMemo(() => recentAttendances[0] || null, [recentAttendances]);
+  const activityPageItems = useMemo(() => {
+    const pages: Array<number | 'ellipsis'> = [];
+    if (activityTotalPages <= 7) {
+      for (let pageNumber = 1; pageNumber <= activityTotalPages; pageNumber += 1) {
+        pages.push(pageNumber);
+      }
+      return pages;
+    }
+    pages.push(1);
+    if (activityPage > 4) {
+      pages.push('ellipsis');
+    }
+    const start = Math.max(2, activityPage - 1);
+    const end = Math.min(activityTotalPages - 1, activityPage + 1);
+    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+      pages.push(pageNumber);
+    }
+    if (activityPage < activityTotalPages - 3) {
+      pages.push('ellipsis');
+    }
+    pages.push(activityTotalPages);
+    return pages;
+  }, [activityPage, activityTotalPages]);
 
   useEffect(() => {
     if (!hasValidCustomerId) {
@@ -115,7 +168,6 @@ const CustomerDetail: React.FC = () => {
             notes: customerRes.data.customer.notes || '',
           });
         }
-        setRecentAttendances(customerRes.data.recentAttendances || []);
         setMembershipTypes(membershipTypesRes.data);
         setMemberships(membershipsRes.data);
       } catch (loadError) {
@@ -129,15 +181,79 @@ const CustomerDetail: React.FC = () => {
     void load();
   }, [customerId, hasValidCustomerId]);
 
+  useEffect(() => {
+    if (!hasValidCustomerId) {
+      setIsActivityLoading(false);
+      setActivityError('유효하지 않은 고객 ID입니다.');
+      return;
+    }
+
+    const loadClassActivities = async () => {
+      try {
+        setActivityError('');
+        setIsActivityLoading(true);
+        const response = await customerAPI.getClassActivities(customerId, {
+          page: activityPage,
+          page_size: ACTIVITY_PAGE_SIZE,
+          ...(activityTypeFilter === 'all' ? {} : { activity_type: activityTypeFilter }),
+          ...(activitySearch.trim() ? { search: activitySearch.trim() } : {}),
+          ...(activityDateFrom ? { date_from: activityDateFrom } : {}),
+          ...(activityDateTo ? { date_to: activityDateTo } : {}),
+        });
+        const data = response.data as ClassActivity[] | ClassActivityResponse;
+        if (Array.isArray(data)) {
+          setClassActivities(data);
+          setActivityTotal(data.length);
+          setActivityTotalPages(1);
+          return;
+        }
+        setClassActivities(data.items || []);
+        setActivityTotal(data.pagination?.total ?? 0);
+        setActivityTotalPages(data.pagination?.total_pages ?? 1);
+      } catch (loadError) {
+        console.error('Failed to load customer class activities:', loadError);
+        setActivityError('수업 기록을 불러오지 못했습니다.');
+      } finally {
+        setIsActivityLoading(false);
+      }
+    };
+
+    void loadClassActivities();
+  }, [
+    customerId,
+    hasValidCustomerId,
+    activityPage,
+    activityTypeFilter,
+    activitySearch,
+    activityDateFrom,
+    activityDateTo,
+  ]);
+
   const showNotice = (message: string) => {
     setNotice(message);
     setTimeout(() => setNotice(''), 2500);
   };
 
+  const openActivityFilterModal = () => {
+    setDraftActivityTypeFilter(activityTypeFilter);
+    setDraftActivitySearch(activitySearch);
+    setDraftActivityDateFrom(activityDateFrom);
+    setDraftActivityDateTo(activityDateTo);
+    setIsActivityFilterModalOpen(true);
+  };
+
+  const applyActivityFilterModal = () => {
+    setActivityTypeFilter(draftActivityTypeFilter);
+    setActivitySearch(draftActivitySearch.trim());
+    setActivityDateFrom(draftActivityDateFrom);
+    setActivityDateTo(draftActivityDateTo);
+    setActivityPage(1);
+    setIsActivityFilterModalOpen(false);
+  };
+
   const loadCustomer = async () => {
     const response = await customerAPI.getById(customerId);
     setCustomer(response.data.customer);
-    setRecentAttendances(response.data.recentAttendances || []);
     const nextCustomer = response.data.customer as Customer | null;
     if (nextCustomer) {
       setEditCustomerForm({
@@ -402,32 +518,6 @@ const CustomerDetail: React.FC = () => {
         )}
       </section>
 
-      <section className="card">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
-          <Link
-            to={`/customers/${customerId}/attendances`}
-            className="btn-secondary text-sm"
-          >
-            전체 보기
-          </Link>
-        </div>
-        {!latestAttendance ? (
-          <p className="text-warm-600 py-3">출석 기록이 없습니다.</p>
-        ) : (
-          <div className="rounded-lg border border-warm-200 bg-warm-50 p-4">
-            <p className="text-primary-800 font-medium">
-              {latestAttendance.class_title || latestAttendance.class_type || '수업 정보 없음'}
-            </p>
-            <p className="text-sm text-warm-700 mt-1">
-              {latestAttendance.class_date && latestAttendance.class_start_time
-                ? `수업일시: ${formatKoreanDateTime(latestAttendance.class_date, latestAttendance.class_start_time)}`
-                : '-'}
-            </p>
-          </div>
-        )}
-      </section>
-
       {error && (
         <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
       )}
@@ -546,6 +636,179 @@ const CustomerDetail: React.FC = () => {
           )}
         </section>
       </div>
+
+      <section className="card">
+        <div className="space-y-3 mb-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xl font-display font-semibold text-primary-800">수업 기록 (출석/예약)</h2>
+            <button
+              type="button"
+              className="btn-secondary text-sm"
+              onClick={openActivityFilterModal}
+            >
+              필터
+            </button>
+          </div>
+          <p className="text-sm text-warm-600">
+            총 {activityTotal}건 · {activityPage}/{Math.max(1, activityTotalPages)} 페이지
+          </p>
+        </div>
+
+        {isActivityFilterModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md rounded-xl border border-warm-200 bg-white p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-display font-semibold text-primary-800">필터 설정</h3>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsActivityFilterModalOpen(false)}
+                >
+                  닫기
+                </button>
+              </div>
+
+              <div>
+                <label className="label" htmlFor="customer-activity-status-filter">상태</label>
+                <select
+                  id="customer-activity-status-filter"
+                  className="input-field"
+                  value={draftActivityTypeFilter}
+                  onChange={(e) => setDraftActivityTypeFilter(e.target.value as ActivityTypeFilter)}
+                >
+                  <option value="all">전체</option>
+                  <option value="attended">출석</option>
+                  <option value="reserved">예약</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label" htmlFor="customer-activity-search-filter">수업명 검색</label>
+                <input
+                  id="customer-activity-search-filter"
+                  className="input-field"
+                  placeholder="수업명 검색"
+                  value={draftActivitySearch}
+                  onChange={(e) => setDraftActivitySearch(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label" htmlFor="customer-activity-date-from">시작일</label>
+                  <input
+                    id="customer-activity-date-from"
+                    type="date"
+                    className="input-field"
+                    value={draftActivityDateFrom}
+                    onChange={(e) => setDraftActivityDateFrom(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="customer-activity-date-to">종료일</label>
+                  <input
+                    id="customer-activity-date-to"
+                    type="date"
+                    className="input-field"
+                    value={draftActivityDateTo}
+                    onChange={(e) => setDraftActivityDateTo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setDraftActivityTypeFilter('all');
+                    setDraftActivitySearch('');
+                    setDraftActivityDateFrom('');
+                    setDraftActivityDateTo('');
+                  }}
+                >
+                  초기화
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsActivityFilterModalOpen(false)}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={applyActivityFilterModal}
+                >
+                  적용
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isActivityLoading ? (
+          <p className="text-warm-600 py-3">수업 기록을 불러오는 중...</p>
+        ) : activityError ? (
+          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{activityError}</p>
+        ) : classActivities.length === 0 ? (
+          <p className="text-warm-600 py-3">수업 기록이 없습니다.</p>
+        ) : (
+          <div className="space-y-3">
+            {classActivities.map((item) => (
+              <div key={`${item.activity_type}-${item.activity_id}`} className="rounded-lg border border-warm-200 bg-warm-50 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`px-2 py-0.5 text-xs rounded-full ${item.activity_type === 'reserved' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                    {item.activity_type === 'reserved' ? '예약' : '출석'}
+                  </span>
+                  <p className="text-primary-800 font-medium">
+                    {item.class_title || item.class_type || '수업 정보 없음'}
+                  </p>
+                </div>
+                <p className="text-sm text-warm-700 mt-1">
+                  {item.class_date && item.class_start_time
+                    ? `수업일시: ${formatKoreanDateTime(item.class_date, item.class_start_time)}`
+                    : '-'}
+                </p>
+              </div>
+            ))}
+
+            <div className="flex flex-wrap items-center justify-end gap-1">
+              <button
+                type="button"
+                className="btn-secondary whitespace-nowrap"
+                disabled={activityPage <= 1}
+                onClick={() => setActivityPage((prev) => Math.max(1, prev - 1))}
+              >
+                이전
+              </button>
+              {activityPageItems.map((item, index) => (
+                item === 'ellipsis' ? (
+                  <span key={`activity-ellipsis-${index}`} className="px-2 text-warm-500">...</span>
+                ) : (
+                  <button
+                    key={`activity-page-${item}`}
+                    type="button"
+                    className={item === activityPage ? 'btn-primary min-w-[36px]' : 'btn-secondary min-w-[36px]'}
+                    onClick={() => setActivityPage(item)}
+                  >
+                    {item}
+                  </button>
+                )
+              ))}
+              <button
+                type="button"
+                className="btn-secondary whitespace-nowrap"
+                disabled={activityPage >= activityTotalPages}
+                onClick={() => setActivityPage((prev) => Math.min(activityTotalPages, prev + 1))}
+              >
+                다음
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 };

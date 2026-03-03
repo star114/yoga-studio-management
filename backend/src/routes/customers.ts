@@ -14,6 +14,14 @@ const normalizePhoneNumber = (value: string): string | null => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 };
 
+const hasCustomerAccess = async (customerId: string, userId: number) => {
+  const checkResult = await pool.query(
+    'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
+    [customerId, userId]
+  );
+  return checkResult.rows.length > 0;
+};
+
 // 모든 고객 조회 (관리자)
 router.get('/', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -43,11 +51,8 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
   // 일반 사용자는 자기 정보만 조회 가능
   if (req.user!.role !== 'admin') {
-    const checkResult = await pool.query(
-      'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
-      [id, req.user!.id]
-    );
-    if (checkResult.rows.length === 0) {
+    const hasAccess = await hasCustomerAccess(id, req.user!.id);
+    if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
     }
   }
@@ -100,6 +105,160 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
     });
   } catch (error) {
     console.error('Get customer error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 특정 고객 수업 활동(출석/예약) 조회
+router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
+  const rawPageSize = typeof req.query.page_size === 'string' ? Number(req.query.page_size) : 10;
+  const rawActivityType = typeof req.query.activity_type === 'string'
+    ? req.query.activity_type
+    : 'all';
+  const rawSearch = typeof req.query.search === 'string' ? req.query.search : '';
+  const rawDateFrom = typeof req.query.date_from === 'string' ? req.query.date_from : '';
+  const rawDateTo = typeof req.query.date_to === 'string' ? req.query.date_to : '';
+
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
+  const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
+    ? Math.min(Math.floor(rawPageSize), 100)
+    : 10;
+  const offset = (page - 1) * pageSize;
+  const activityType = ['all', 'attended', 'reserved'].includes(rawActivityType)
+    ? rawActivityType
+    : 'all';
+  const search = rawSearch.trim();
+  const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(rawDateFrom) ? rawDateFrom : '';
+  const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(rawDateTo) ? rawDateTo : '';
+
+  // 일반 사용자는 자기 정보만 조회 가능
+  if (req.user!.role !== 'admin') {
+    const hasAccess = await hasCustomerAccess(id, req.user!.id);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  }
+
+  try {
+    const whereClauses = ['1=1'];
+    const queryParams: Array<number | string> = [id];
+
+    if (activityType !== 'all') {
+      queryParams.push(activityType);
+      whereClauses.push(`h.activity_type = $${queryParams.length}`);
+    }
+
+    if (search) {
+      queryParams.push(`%${search}%`);
+      whereClauses.push(`COALESCE(h.class_title, h.class_type, '') ILIKE $${queryParams.length}`);
+    }
+
+    if (dateFrom) {
+      queryParams.push(dateFrom);
+      whereClauses.push(`h.class_day >= $${queryParams.length}::date`);
+    }
+
+    if (dateTo) {
+      queryParams.push(dateTo);
+      whereClauses.push(`h.class_day <= $${queryParams.length}::date`);
+    }
+
+    const whereSql = whereClauses.join(' AND ');
+    const withSql = `
+      WITH history AS (
+        SELECT
+          'attended'::text AS activity_type,
+          a.id::int AS activity_id,
+          cls.id::int AS class_id,
+          cls.title::text AS class_title,
+          COALESCE(a.class_type, cls.title)::text AS class_type,
+          cls.class_date::date AS class_day,
+          cls.class_date,
+          cls.start_time AS class_start_time,
+          cls.end_time AS class_end_time,
+          a.attendance_date,
+          NULL::timestamp AS registered_at,
+          COALESCE(
+            (cls.class_date::timestamp + cls.start_time),
+            a.attendance_date
+          ) AS sort_at
+        FROM yoga_attendances a
+        LEFT JOIN yoga_classes cls ON cls.id = a.class_id
+        WHERE a.customer_id = $1
+
+        UNION ALL
+
+        SELECT
+          'reserved'::text AS activity_type,
+          r.id::int AS activity_id,
+          cls.id::int AS class_id,
+          cls.title::text AS class_title,
+          cls.title::text AS class_type,
+          cls.class_date::date AS class_day,
+          cls.class_date,
+          cls.start_time AS class_start_time,
+          cls.end_time AS class_end_time,
+          NULL::timestamp AS attendance_date,
+          r.registered_at,
+          (cls.class_date::timestamp + cls.start_time) AS sort_at
+        FROM yoga_class_registrations r
+        INNER JOIN yoga_classes cls ON cls.id = r.class_id
+        WHERE r.customer_id = $1
+          AND r.attendance_status = 'reserved'
+      )
+    `;
+
+    const countResult = await pool.query(
+      `${withSql}
+       SELECT COUNT(*)::int AS total
+       FROM history h
+       WHERE ${whereSql}`,
+      queryParams
+    );
+    const total = countResult.rows[0]?.total ?? 0;
+
+    const limitParamIndex = queryParams.length + 1;
+    const offsetParamIndex = queryParams.length + 2;
+    const result = await pool.query(
+      `${withSql}
+       SELECT
+         h.activity_type,
+         h.activity_id,
+         h.class_id,
+         h.class_title,
+         h.class_type,
+         h.class_date,
+         h.class_start_time,
+         h.class_end_time,
+         h.attendance_date,
+         h.registered_at
+       FROM history h
+       WHERE ${whereSql}
+       ORDER BY h.sort_at DESC, h.activity_id DESC
+       LIMIT $${limitParamIndex}
+       OFFSET $${offsetParamIndex}`,
+      [...queryParams, pageSize, offset]
+    );
+
+    res.json({
+      items: result.rows,
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+      filter: {
+        activity_type: activityType,
+        search,
+        date_from: dateFrom || null,
+        date_to: dateTo || null,
+      },
+    });
+  } catch (error) {
+    console.error('Get customer class activities error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
