@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.3](https://github.com/star114/yoga-studio-management/compare/v2.3.2...v2.3.3) (2026-03-03)
+
+
+### Bug Fixes
+
+* make business timezone configurable for class status checks ([#33](https://github.com/star114/yoga-studio-management/issues/33)) ([8f220a4](https://github.com/star114/yoga-studio-management/commit/8f220a453f4ab681aee1982d46644fefad0f4a87))
+
 ## [2.3.2](https://github.com/star114/yoga-studio-management/compare/v2.3.1...v2.3.2) (2026-03-01)
 
 
