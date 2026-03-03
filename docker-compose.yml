@@ -35,6 +35,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_ID=${ADMIN_ID:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - BUSINESS_TIMEZONE=${BUSINESS_TIMEZONE:-Asia/Seoul}
       - CORS_ORIGIN=http://localhost:3000
     depends_on:
       db:
