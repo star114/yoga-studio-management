@@ -543,6 +543,16 @@ test('class registration and recurring routes cover core branches', async () => 
   assert.equal(res.status, 400);
   assert.equal(res.body.reason, 'MEMBERSHIP_RESERVATION_LIMIT_REACHED');
   assert.equal(res.body.checks.has_reservation_quota, false);
+  const reservedCountQuery = quotaExceededClient.queryCalls.find(
+    ([queryText]) =>
+      typeof queryText === 'string'
+      && queryText.includes('AS reserved_count')
+      && queryText.includes('CURRENT_DATE')
+  );
+  assert.ok(reservedCountQuery);
+  assert.match(reservedCountQuery[0], /c\.class_date > CURRENT_DATE/);
+  assert.match(reservedCountQuery[0], /c\.class_date = CURRENT_DATE/);
+  assert.match(reservedCountQuery[0], /c\.end_time >= CURRENT_TIME/);
 
   const noMembershipClient = h.createDbClientMock();
   noMembershipClient.queryQueue.push(
