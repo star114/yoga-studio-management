@@ -189,12 +189,12 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
     body: { identifier: '01012345678', password: 'ok-password' },
   });
   assert.equal(res.status, 200);
-  const loginQueryParams = h.queryCalls[h.queryCalls.length - 2][1];
-  const flattenedLoginParams = Array.isArray(loginQueryParams)
-    ? loginQueryParams.flat(Infinity)
-    : [loginQueryParams];
-  assert.ok(flattenedLoginParams.includes('01012345678'));
-  assert.ok(flattenedLoginParams.includes('010-1234-5678'));
+  const lookupCall = [...h.queryCalls].reverse().find((call) => Array.isArray(call[1])
+    && call[1][0] === '01012345678');
+  assert.ok(lookupCall);
+  const [lookupQueryText, lookupQueryParams] = lookupCall;
+  assert.ok(String(lookupQueryText).includes('ORDER BY CASE WHEN login_id = $1 THEN 0 ELSE 1 END'));
+  assert.deepEqual(lookupQueryParams, ['01012345678', '010-1234-5678']);
 
   h.queryQueue.push(new Error('login fail'));
   res = await h.runRoute({

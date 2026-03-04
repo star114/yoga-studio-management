@@ -28,22 +28,34 @@ router.post('/login',
     const { identifier, password } = req.body as { identifier: string; password: string };
     const loginId = identifier.trim();
     const normalizedPhoneLoginId = normalizePhoneNumber(loginId);
-    const loginCandidates = Array.from(new Set([
-      loginId,
-      ...(normalizedPhoneLoginId ? [normalizedPhoneLoginId] : []),
-    ]));
+    const fallbackLoginId = normalizedPhoneLoginId && normalizedPhoneLoginId !== loginId
+      ? normalizedPhoneLoginId
+      : null;
 
     try {
+      const loginLookupQuery = fallbackLoginId
+        ? `SELECT
+             id,
+             login_id,
+             role,
+             password_hash
+           FROM yoga_users
+           WHERE login_id = $1 OR login_id = $2
+           ORDER BY CASE WHEN login_id = $1 THEN 0 ELSE 1 END
+           LIMIT 1`
+        : `SELECT
+             id,
+             login_id,
+             role,
+             password_hash
+           FROM yoga_users
+           WHERE login_id = $1
+           LIMIT 1`;
+      const loginLookupParams = fallbackLoginId ? [loginId, fallbackLoginId] : [loginId];
+
       const userResult = await pool.query(
-        `SELECT
-           id,
-           login_id,
-           role,
-           password_hash
-         FROM yoga_users
-         WHERE login_id = ANY($1::text[])
-         LIMIT 1`,
-        [loginCandidates]
+        loginLookupQuery,
+        loginLookupParams
       );
 
       if (userResult.rows.length === 0) {
