@@ -248,12 +248,11 @@ const CustomerDetail: React.FC = () => {
   ]);
 
   const handleCancelReservedClass = async (item: ClassActivity) => {
-    if (!item.class_id) return;
     const actionKey = `reserved-${item.activity_id}`;
     setActivityActionLoading((prev) => ({ ...prev, [actionKey]: true }));
     setError('');
     try {
-      await classAPI.cancelRegistration(item.class_id, customerId);
+      await classAPI.cancelRegistration(item.class_id as number, customerId);
       setActivityReloadToken((prev) => prev + 1);
       showNotice('예약을 취소했습니다.');
     } catch (cancelError: unknown) {
@@ -265,12 +264,11 @@ const CustomerDetail: React.FC = () => {
   };
 
   const handleMarkAttendedAsAbsent = async (item: ClassActivity) => {
-    if (!item.class_id) return;
     const actionKey = `attended-${item.activity_id}`;
     setActivityActionLoading((prev) => ({ ...prev, [actionKey]: true }));
     setError('');
     try {
-      await classAPI.updateRegistrationStatus(item.class_id, customerId, 'absent');
+      await classAPI.updateRegistrationStatus(item.class_id as number, customerId, 'absent');
       await loadMemberships();
       setActivityReloadToken((prev) => prev + 1);
       showNotice('출석을 결석으로 변경했습니다.');
@@ -353,7 +351,7 @@ const CustomerDetail: React.FC = () => {
     try {
       await classAPI.register(classId, { customer_id: customerId });
       setMembershipRecommendedClasses((prev) => {
-        const classes = prev[membershipId] || [];
+        const classes = prev[membershipId] as RecommendedClass[];
         return {
           ...prev,
           [membershipId]: classes.map((item) => {
@@ -361,8 +359,8 @@ const CustomerDetail: React.FC = () => {
             return {
               ...item,
               is_registered: true,
-              remaining_seats: Math.max(0, Number(item.remaining_seats ?? 0) - 1),
-              current_enrollment: Number(item.current_enrollment ?? 0) + 1,
+              remaining_seats: Math.max(0, item.remaining_seats - 1),
+              current_enrollment: item.current_enrollment + 1,
             };
           }),
         };
@@ -742,40 +740,47 @@ const CustomerDetail: React.FC = () => {
                             불러오기
                           </button>
                         </div>
-                        {membershipRecommendationsLoading[membership.id] ? (
-                          <p className="text-xs text-warm-600">예정 수업 조회 중...</p>
-                        ) : membershipRecommendationsError[membership.id] ? (
-                          <p className="text-xs text-red-700">{membershipRecommendationsError[membership.id]}</p>
-                        ) : (membershipRecommendedClasses[membership.id] || []).length === 0 ? (
-                          <p className="text-xs text-warm-600">예정된 같은 이름 수업이 없습니다.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {(membershipRecommendedClasses[membership.id] || []).map((item) => (
-                              <div key={item.id} className="flex flex-col gap-1 rounded border border-warm-100 p-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                  <p className="text-sm text-primary-800">{item.title}</p>
-                                  <p className="text-xs text-warm-600">
-                                    {formatKoreanDateTime(item.class_date, item.start_time)} · 잔여 {item.remaining_seats}자리
-                                  </p>
+                        {(() => {
+                          const recommendedClasses = membershipRecommendedClasses[membership.id] ?? [];
+                          if (membershipRecommendationsLoading[membership.id]) {
+                            return <p className="text-xs text-warm-600">예정 수업 조회 중...</p>;
+                          }
+                          if (membershipRecommendationsError[membership.id]) {
+                            return <p className="text-xs text-red-700">{membershipRecommendationsError[membership.id]}</p>;
+                          }
+                          if (recommendedClasses.length === 0) {
+                            return <p className="text-xs text-warm-600">예정된 같은 이름 수업이 없습니다.</p>;
+                          }
+                          const hasNoRemainingSessions = typeof membership.remaining_sessions === 'number' && membership.remaining_sessions <= 0;
+                          return (
+                            <div className="space-y-2">
+                              {recommendedClasses.map((item) => (
+                                <div key={item.id} className="flex flex-col gap-1 rounded border border-warm-100 p-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <p className="text-sm text-primary-800">{item.title}</p>
+                                    <p className="text-xs text-warm-600">
+                                      {formatKoreanDateTime(item.class_date, item.start_time)} · 잔여 {item.remaining_seats}자리
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={
+                                      item.is_registered
+                                      || classReservationLoading[item.id]
+                                      || !membership.is_active
+                                      || hasNoRemainingSessions
+                                      || item.remaining_seats <= 0
+                                    }
+                                    onClick={() => void handleQuickReserveClass(membership.id, item.id)}
+                                  >
+                                    {item.is_registered ? '예약됨' : classReservationLoading[item.id] ? '예약 중...' : '바로 예약'}
+                                  </button>
                                 </div>
-                                <button
-                                  type="button"
-                                  className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                                  disabled={
-                                    item.is_registered
-                                    || classReservationLoading[item.id]
-                                    || !membership.is_active
-                                    || (membership.remaining_sessions !== null && (membership.remaining_sessions ?? 0) <= 0)
-                                    || Number(item.remaining_seats ?? 0) <= 0
-                                  }
-                                  onClick={() => void handleQuickReserveClass(membership.id, item.id)}
-                                >
-                                  {item.is_registered ? '예약됨' : classReservationLoading[item.id] ? '예약 중...' : '바로 예약'}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>
