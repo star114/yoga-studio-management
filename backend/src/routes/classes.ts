@@ -823,6 +823,10 @@ router.post('/:id/registrations',
          INNER JOIN yoga_classes c ON c.id = r.class_id
          WHERE r.customer_id = $1
            AND r.attendance_status = 'reserved'
+           AND (
+             c.class_date > CURRENT_DATE
+             OR (c.class_date = CURRENT_DATE AND c.end_time >= CURRENT_TIME)
+           )
            AND regexp_replace(
                  trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
                  '[[:space:]]+',
