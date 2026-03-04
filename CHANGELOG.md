@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.5](https://github.com/star114/yoga-studio-management/compare/v2.3.4...v2.3.5) (2026-03-04)
+
+
+### Bug Fixes
+
+* exclude past reservations from membership quota checks ([#37](https://github.com/star114/yoga-studio-management/issues/37)) ([6e7e50f](https://github.com/star114/yoga-studio-management/commit/6e7e50fd53e110399eb98b0d0cb1d6ab4b586845))
+
 ## [2.3.4](https://github.com/star114/yoga-studio-management/compare/v2.3.3...v2.3.4) (2026-03-04)
 
 
