@@ -254,6 +254,25 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
   });
   assert.equal(res.status, 403);
 
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    query: { date_from: '2026-99-99' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'date_from must be a valid YYYY-MM-DD date');
+
+  h.queryQueue.push(new Error('access check fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
     { rows: [{ total: 2 }] },
@@ -327,6 +346,16 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 403);
+
+  h.queryQueue.push(new Error('access check fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },

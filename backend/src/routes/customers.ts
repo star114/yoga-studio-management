@@ -14,6 +14,20 @@ const normalizePhoneNumber = (value: string): string | null => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 };
 
+const isValidIsoDate = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+};
+
 const hasCustomerAccess = async (customerId: string, userId: number) => {
   const checkResult = await pool.query(
     'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
@@ -130,18 +144,25 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
     ? rawActivityType
     : 'all';
   const search = rawSearch.trim();
-  const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(rawDateFrom) ? rawDateFrom : '';
-  const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(rawDateTo) ? rawDateTo : '';
+  const dateFrom = rawDateFrom.trim();
+  const dateTo = rawDateTo.trim();
 
-  // 일반 사용자는 자기 정보만 조회 가능
-  if (req.user!.role !== 'admin') {
-    const hasAccess = await hasCustomerAccess(id, req.user!.id);
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
+  if (dateFrom && !isValidIsoDate(dateFrom)) {
+    return res.status(400).json({ error: 'date_from must be a valid YYYY-MM-DD date' });
+  }
+  if (dateTo && !isValidIsoDate(dateTo)) {
+    return res.status(400).json({ error: 'date_to must be a valid YYYY-MM-DD date' });
   }
 
   try {
+    // 일반 사용자는 자기 정보만 조회 가능
+    if (req.user!.role !== 'admin') {
+      const hasAccess = await hasCustomerAccess(id, req.user!.id);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
     const whereClauses = ['1=1'];
     const queryParams: Array<number | string> = [id];
 
@@ -279,14 +300,14 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
     return res.status(400).json({ error: 'membership_name is required' });
   }
 
-  if (req.user!.role !== 'admin') {
-    const hasAccess = await hasCustomerAccess(id, req.user!.id);
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-  }
-
   try {
+    if (req.user!.role !== 'admin') {
+      const hasAccess = await hasCustomerAccess(id, req.user!.id);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
     const result = await pool.query(
       `SELECT
          c.id,
