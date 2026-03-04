@@ -6,6 +6,7 @@ import pool from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
+const AUTH_FAILURE_MESSAGE = '아이디 또는 비밀번호가 올바르지 않습니다.';
 
 const normalizePhoneNumber = (value: string): string | null => {
   const digits = String(value || '').replace(/\D/g, '');
@@ -59,14 +60,14 @@ router.post('/login',
       );
 
       if (userResult.rows.length === 0) {
-        return res.status(401).json({ error: '아이디를 찾을 수 없습니다.' });
+        return res.status(401).json({ error: AUTH_FAILURE_MESSAGE });
       }
       const user = userResult.rows[0];
 
       const validPassword = await bcrypt.compare(password, user.password_hash);
 
       if (!validPassword) {
-        return res.status(401).json({ error: '비밀번호가 올바르지 않습니다.' });
+        return res.status(401).json({ error: AUTH_FAILURE_MESSAGE });
       }
 
       const token = jwt.sign(
