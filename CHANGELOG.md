@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.4](https://github.com/star114/yoga-studio-management/compare/v2.3.3...v2.3.4) (2026-03-04)
+
+
+### Bug Fixes
+
+* normalize customer phone storage format and migrate legacy data ([#35](https://github.com/star114/yoga-studio-management/issues/35)) ([f9f9883](https://github.com/star114/yoga-studio-management/commit/f9f988315061663e7bea3d80fb0a94295be86ceb))
+
 ## [2.3.3](https://github.com/star114/yoga-studio-management/compare/v2.3.2...v2.3.3) (2026-03-03)
 
 
