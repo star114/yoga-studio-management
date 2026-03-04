@@ -137,6 +137,7 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
     body: { identifier: 'none@example.com', password: 'pw' },
   });
   assert.equal(res.status, 401);
+  assert.equal(res.body.error, '아이디를 찾을 수 없습니다.');
 
   h.queryQueue.push({
     rows: [{ id: 1, login_id: 'u@example.com', role: 'admin', password_hash: 'hash' }],
@@ -148,6 +149,7 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
     body: { identifier: 'u@example.com', password: 'wrong' },
   });
   assert.equal(res.status, 401);
+  assert.equal(res.body.error, '비밀번호가 올바르지 않습니다.');
 
   h.queryQueue.push(
     { rows: [{ id: 10, login_id: 'c@example.com', role: 'customer', password_hash: 'hash2' }] },
@@ -176,6 +178,23 @@ test('POST /login handles invalid credentials and success flow', async (t) => {
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.customerInfo, null);
+
+  h.queryQueue.push({
+    rows: [{ id: 12, login_id: '010-1234-5678', role: 'customer', password_hash: 'hash4' }],
+  }, { rows: [] });
+  t.mock.method(bcrypt, 'compare', async () => true);
+  res = await h.runRoute({
+    method: 'post',
+    path: '/login',
+    body: { identifier: '01012345678', password: 'ok-password' },
+  });
+  assert.equal(res.status, 200);
+  const loginQueryParams = h.queryCalls[h.queryCalls.length - 2][1];
+  const flattenedLoginParams = Array.isArray(loginQueryParams)
+    ? loginQueryParams.flat(Infinity)
+    : [loginQueryParams];
+  assert.ok(flattenedLoginParams.includes('01012345678'));
+  assert.ok(flattenedLoginParams.includes('010-1234-5678'));
 
   h.queryQueue.push(new Error('login fail'));
   res = await h.runRoute({

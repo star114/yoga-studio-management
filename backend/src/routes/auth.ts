@@ -7,6 +7,14 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+const normalizePhoneNumber = (value: string): string | null => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!/^\d{11}$/.test(digits)) {
+    return null;
+  }
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+};
+
 // 로그인
 router.post('/login',
   body('identifier').trim().notEmpty().withMessage('아이디를 입력해주세요.'),
@@ -19,6 +27,11 @@ router.post('/login',
 
     const { identifier, password } = req.body as { identifier: string; password: string };
     const loginId = identifier.trim();
+    const normalizedPhoneLoginId = normalizePhoneNumber(loginId);
+    const loginCandidates = Array.from(new Set([
+      loginId,
+      ...(normalizedPhoneLoginId ? [normalizedPhoneLoginId] : []),
+    ]));
 
     try {
       const userResult = await pool.query(
@@ -28,20 +41,20 @@ router.post('/login',
            role,
            password_hash
          FROM yoga_users
-         WHERE login_id = $1
+         WHERE login_id = ANY($1::text[])
          LIMIT 1`,
-        [loginId]
+        [loginCandidates]
       );
 
       if (userResult.rows.length === 0) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: '아이디를 찾을 수 없습니다.' });
       }
       const user = userResult.rows[0];
 
       const validPassword = await bcrypt.compare(password, user.password_hash);
 
       if (!validPassword) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: '비밀번호가 올바르지 않습니다.' });
       }
 
       const token = jwt.sign(
