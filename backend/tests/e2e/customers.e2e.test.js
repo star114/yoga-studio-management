@@ -286,6 +286,11 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
   assert.equal(res.body.pagination.page, 2);
   assert.equal(res.body.filter.activity_type, 'reserved');
   assert.equal(res.body.filter.search, '아쉬');
+  const classActivitiesQueryText = h.queryCalls
+    .map((call) => String(call[0]))
+    .find((text) => text.includes('WITH history AS'));
+  assert.ok(classActivitiesQueryText);
+  assert.ok(classActivitiesQueryText.includes('COALESCE(cls.class_date::date, a.attendance_date::date)'));
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },

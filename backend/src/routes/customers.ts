@@ -174,7 +174,7 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
           cls.id::int AS class_id,
           cls.title::text AS class_title,
           COALESCE(a.class_type, cls.title)::text AS class_type,
-          cls.class_date::date AS class_day,
+          COALESCE(cls.class_date::date, a.attendance_date::date) AS class_day,
           cls.class_date,
           cls.start_time AS class_start_time,
           cls.end_time AS class_end_time,
