@@ -6,6 +6,15 @@ import pool from '../config/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
+const AUTH_FAILURE_MESSAGE = '아이디 또는 비밀번호가 올바르지 않습니다.';
+
+const normalizePhoneNumber = (value: string): string | null => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!/^\d{11}$/.test(digits)) {
+    return null;
+  }
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+};
 
 // 로그인
 router.post('/login',
@@ -19,29 +28,46 @@ router.post('/login',
 
     const { identifier, password } = req.body as { identifier: string; password: string };
     const loginId = identifier.trim();
+    const normalizedPhoneLoginId = normalizePhoneNumber(loginId);
+    const fallbackLoginId = normalizedPhoneLoginId && normalizedPhoneLoginId !== loginId
+      ? normalizedPhoneLoginId
+      : null;
 
     try {
+      const loginLookupQuery = fallbackLoginId
+        ? `SELECT
+             id,
+             login_id,
+             role,
+             password_hash
+           FROM yoga_users
+           WHERE login_id = $1 OR login_id = $2
+           ORDER BY CASE WHEN login_id = $1 THEN 0 ELSE 1 END
+           LIMIT 1`
+        : `SELECT
+             id,
+             login_id,
+             role,
+             password_hash
+           FROM yoga_users
+           WHERE login_id = $1
+           LIMIT 1`;
+      const loginLookupParams = fallbackLoginId ? [loginId, fallbackLoginId] : [loginId];
+
       const userResult = await pool.query(
-        `SELECT
-           id,
-           login_id,
-           role,
-           password_hash
-         FROM yoga_users
-         WHERE login_id = $1
-         LIMIT 1`,
-        [loginId]
+        loginLookupQuery,
+        loginLookupParams
       );
 
       if (userResult.rows.length === 0) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: AUTH_FAILURE_MESSAGE });
       }
       const user = userResult.rows[0];
 
       const validPassword = await bcrypt.compare(password, user.password_hash);
 
       if (!validPassword) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: AUTH_FAILURE_MESSAGE });
       }
 
       const token = jwt.sign(

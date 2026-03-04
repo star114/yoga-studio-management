@@ -488,6 +488,7 @@ test('class registration and recurring routes cover core branches', async () => 
       rows: [
         {
           id: 11,
+          title: '아쉬탕가',
           is_open: true,
           max_capacity: 1,
           is_excluded: false,
@@ -496,6 +497,8 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
+    { rows: [{ id: 501, remaining_sessions: 5 }] },
+    { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 1 }] },
     { rows: [], rowCount: 0 }
   );
@@ -509,13 +512,14 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 400);
 
-  const dupClient = h.createDbClientMock();
-  dupClient.queryQueue.push(
+  const quotaExceededClient = h.createDbClientMock();
+  quotaExceededClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     {
       rows: [
         {
           id: 11,
+          title: '아쉬탕가',
           is_open: true,
           max_capacity: 10,
           is_excluded: false,
@@ -524,6 +528,82 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
+    { rows: [{ id: 501, remaining_sessions: 2 }] },
+    { rows: [{ reserved_count: 2 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(quotaExceededClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.reason, 'MEMBERSHIP_RESERVATION_LIMIT_REACHED');
+  assert.equal(res.body.checks.has_reservation_quota, false);
+
+  const noMembershipClient = h.createDbClientMock();
+  noMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [] },
+    {
+      rows: [
+        {
+          total_memberships: 1,
+          active_memberships: 1,
+          remaining_memberships: 1,
+          title_matched_memberships: 0,
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(noMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'No valid membership for this class');
+  assert.equal(res.body.reason, 'CLASS_TITLE_MISMATCH');
+  assert.equal(res.body.checks.has_matching_membership_type, false);
+
+  const dupClient = h.createDbClientMock();
+  dupClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 5 }] },
+    { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 0 }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
@@ -561,6 +641,7 @@ test('class registration and recurring routes cover core branches', async () => 
       rows: [
         {
           id: 11,
+          title: '아쉬탕가',
           is_open: true,
           max_capacity: 10,
           is_excluded: false,
@@ -569,6 +650,8 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
+    { rows: [{ id: 501, remaining_sessions: 5 }] },
+    { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 99, class_id: 11, customer_id: 1 }] },
     { rows: [], rowCount: 0 }

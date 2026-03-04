@@ -6,20 +6,30 @@ import CustomerDetail from './CustomerDetail';
 
 const {
   getByIdMock,
+  getClassActivitiesMock,
+  getRecommendedClassesMock,
+  classCancelRegistrationMock,
+  classUpdateRegistrationStatusMock,
   updateCustomerMock,
   resetPasswordMock,
   getTypesMock,
   getByCustomerMock,
+  classRegisterMock,
   createMembershipMock,
   updateMembershipMock,
   deleteMembershipMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getByIdMock: vi.fn(),
+  getClassActivitiesMock: vi.fn(),
+  getRecommendedClassesMock: vi.fn(),
+  classCancelRegistrationMock: vi.fn(),
+  classUpdateRegistrationStatusMock: vi.fn(),
   updateCustomerMock: vi.fn(),
   resetPasswordMock: vi.fn(),
   getTypesMock: vi.fn(),
   getByCustomerMock: vi.fn(),
+  classRegisterMock: vi.fn(),
   createMembershipMock: vi.fn(),
   updateMembershipMock: vi.fn(),
   deleteMembershipMock: vi.fn(),
@@ -39,8 +49,15 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../services/api', () => ({
   customerAPI: {
     getById: getByIdMock,
+    getClassActivities: getClassActivitiesMock,
+    getRecommendedClasses: getRecommendedClassesMock,
     update: updateCustomerMock,
     resetPassword: resetPasswordMock,
+  },
+  classAPI: {
+    register: classRegisterMock,
+    cancelRegistration: classCancelRegistrationMock,
+    updateRegistrationStatus: classUpdateRegistrationStatusMock,
   },
   membershipAPI: {
     getTypes: getTypesMock,
@@ -73,6 +90,13 @@ const seedLoadSuccess = () => {
       recentAttendances: [],
     },
   });
+  getClassActivitiesMock.mockResolvedValue({
+    data: {
+      items: [],
+      pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
+    },
+  });
+  getRecommendedClassesMock.mockResolvedValue({ data: [] });
   getTypesMock.mockResolvedValue({ data: [{ id: 5, name: '10회권' }] });
   getByCustomerMock.mockResolvedValue({ data: [] });
 };
@@ -166,7 +190,7 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('홍길동')).toBeTruthy();
     expect(screen.getByText(/메모:/)).toBeTruthy();
     expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy();
-    expect(screen.getByText('출석 기록이 없습니다.')).toBeTruthy();
+    expect(screen.getByText('수업 기록이 없습니다.')).toBeTruthy();
   });
 
   it('edits customer info in detail page and supports cancel', async () => {
@@ -214,87 +238,434 @@ describe('CustomerDetail page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('renders only latest attended class', async () => {
-    getByIdMock.mockResolvedValueOnce({
+  it('renders attended and reserved activities together', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
       data: {
-        customer: {
-          id: 1,
-          name: '홍길동',
-          phone: '010-1111-2222',
-        },
-        recentAttendances: [
+        items: [
           {
-            id: 101,
-            attendance_date: '2026-02-20T10:00:00.000Z',
+            activity_type: 'attended',
+            activity_id: 101,
             class_title: '아쉬탕가',
             class_date: '2026-02-20',
             class_start_time: '09:00:00',
           },
           {
-            id: 102,
-            attendance_date: '2026-02-21T10:00:00.000Z',
-            class_type: '빈야사',
+            activity_type: 'reserved',
+            activity_id: 102,
+            class_title: '빈야사',
+            class_date: '2026-02-21',
+            class_start_time: '10:00:00',
           },
         ],
+        pagination: { page: 1, page_size: 10, total: 2, total_pages: 1 },
       },
     });
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수업 기록 (출석/예약)')).toBeTruthy());
     expect(screen.getByText('아쉬탕가')).toBeTruthy();
-    expect(screen.queryByText('빈야사')).toBeNull();
-    expect(screen.getByRole('link', { name: '전체 보기' })).toBeTruthy();
+    expect(screen.getByText('빈야사')).toBeTruthy();
+    expect(screen.getByText('출석')).toBeTruthy();
+    expect(screen.getByText('예약')).toBeTruthy();
   });
 
-  it('renders fallback latest attendance datetime when class datetime is missing', async () => {
-    getByIdMock.mockResolvedValueOnce({
-      data: {
-        customer: {
-          id: 1,
-          name: '홍길동',
-          phone: '010-1111-2222',
+  it('applies activity filters from modal and requests filtered page', async () => {
+    getClassActivitiesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
         },
-        recentAttendances: [
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              activity_type: 'reserved',
+              activity_id: 501,
+              class_title: '테스트 수업',
+              class_date: '2026-03-01',
+              class_start_time: '11:00:00',
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+        },
+      });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '필터' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.change(screen.getByLabelText('상태'), { target: { value: 'reserved' } });
+    fireEvent.change(screen.getByLabelText('수업명 검색'), { target: { value: '테스트' } });
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+
+    await waitFor(() => expect(getClassActivitiesMock).toHaveBeenLastCalledWith(1, {
+      page: 1,
+      page_size: 10,
+      activity_type: 'reserved',
+      search: '테스트',
+    }));
+    await waitFor(() => expect(screen.getByText('테스트 수업')).toBeTruthy());
+  });
+
+  it('applies activity date range filters', async () => {
+    getClassActivitiesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
+        },
+      });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '필터' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-01' } });
+    fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-03-31' } });
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+
+    await waitFor(() => expect(getClassActivitiesMock).toHaveBeenLastCalledWith(1, {
+      page: 1,
+      page_size: 10,
+      date_from: '2026-03-01',
+      date_to: '2026-03-31',
+    }));
+  });
+
+  it('resets activity filter inputs and closes modal with cancel', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {
+        items: [
           {
-            id: 201,
-            attendance_date: '2026-02-20T10:00:00.000Z',
-            class_title: '아쉬탕가',
+            activity_type: 'reserved',
+            activity_id: 888,
+            class_id: 88,
+            class_title: '페이지 수업',
+            class_date: '2026-03-07',
+            class_start_time: '11:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 120, total_pages: 12 },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '필터' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('...')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.change(screen.getByLabelText('상태'), { target: { value: 'reserved' } });
+    fireEvent.change(screen.getByLabelText('수업명 검색'), { target: { value: '임시검색' } });
+    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-03-01' } });
+    fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-03-31' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
+    expect((screen.getByLabelText('상태') as HTMLSelectElement).value).toBe('all');
+    expect((screen.getByLabelText('수업명 검색') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('시작일') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('종료일') as HTMLInputElement).value).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByText('필터 설정')).toBeNull();
+  });
+
+  it('closes activity filter modal with close button', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '필터' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+    expect(screen.queryByText('필터 설정')).toBeNull();
+  });
+
+  it('shows activity load error message', async () => {
+    getClassActivitiesMock.mockRejectedValueOnce(new Error('activity fail'));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('수업 기록을 불러오지 못했습니다.')).toBeTruthy());
+  });
+
+  it('handles legacy array response for class activities', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: [
+        {
+          activity_type: 'attended',
+          activity_id: 777,
+          class_id: 91,
+          class_title: '배열 응답 수업',
+          class_date: '2026-03-02',
+          class_start_time: '08:00:00',
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('배열 응답 수업')).toBeTruthy());
+    expect(screen.getByText('총 1건 · 1/1 페이지')).toBeTruthy();
+  });
+
+  it('handles class activity object response without items/pagination fields', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {},
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('수업 기록이 없습니다.')).toBeTruthy());
+    expect(screen.getByText('총 0건 · 1/1 페이지')).toBeTruthy();
+  });
+
+  it('links class activity item to class detail when class_id exists', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            activity_type: 'attended',
+            activity_id: 301,
+            class_id: 77,
+            class_title: '링크 수업',
+            class_date: '2026-03-03',
+            class_start_time: '07:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
+    });
+
+    renderPage();
+
+    const classLink = await screen.findByRole('link', { name: '링크 수업' });
+    expect(classLink.getAttribute('href')).toBe('/classes/77');
+  });
+
+  it('shows both-side ellipsis when activity page moves to middle range', async () => {
+    getClassActivitiesMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            activity_type: 'reserved',
+            activity_id: 909,
+            class_id: 99,
+            class_title: '다중 페이지 수업',
+            class_date: '2026-03-08',
+            class_start_time: '12:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 120, total_pages: 12 },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '다음' })).toBeTruthy());
+    for (let i = 0; i < 5; i += 1) {
+      await waitFor(() => expect(screen.queryByText('수업 기록을 불러오는 중...')).toBeNull());
+      fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    }
+
+    await waitFor(() => expect(screen.getAllByText('...').length).toBe(2));
+  });
+
+  it('changes activity page by clicking page number and next button', async () => {
+    getClassActivitiesMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            activity_type: 'reserved',
+            activity_id: 910,
+            class_id: 100,
+            class_title: '페이지 이동 수업',
+            class_date: '2026-03-08',
+            class_start_time: '12:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 120, total_pages: 12 },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '2' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    await waitFor(() => expect(screen.getByText('총 120건 · 2/12 페이지')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText('수업 기록을 불러오는 중...')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(screen.getByText('총 120건 · 3/12 페이지')).toBeTruthy());
+  });
+
+  it('changes activity page with previous button', async () => {
+    getClassActivitiesMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            activity_type: 'reserved',
+            activity_id: 911,
+            class_id: 101,
+            class_title: '이전 페이지 수업',
+            class_date: '2026-03-08',
+            class_start_time: '12:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 120, total_pages: 12 },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '2' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    await waitFor(() => expect(screen.getByText('총 120건 · 2/12 페이지')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText('수업 기록을 불러오는 중...')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
+    await waitFor(() => expect(screen.getByText('총 120건 · 1/12 페이지')).toBeTruthy());
+  });
+
+  it('shows dash when class datetime is missing in activity card', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            activity_type: 'attended',
+            activity_id: 302,
+            class_id: 78,
+            class_title: '일시 없음 수업',
             class_date: null,
             class_start_time: null,
           },
         ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
       },
     });
 
     renderPage();
-    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('일시 없음 수업')).toBeTruthy());
     expect(screen.getByText('-')).toBeTruthy();
   });
 
-  it('renders fallback latest attendance title when class title/type are both missing', async () => {
-    getByIdMock.mockResolvedValueOnce({
-      data: {
-        customer: {
-          id: 1,
-          name: '홍길동',
-          phone: '010-1111-2222',
+  it('allows canceling reserved class from activity list', async () => {
+    getClassActivitiesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              activity_type: 'reserved',
+              activity_id: 401,
+              class_id: 55,
+              class_title: '예약 수업',
+              class_date: '2026-03-05',
+              class_start_time: '09:00:00',
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
         },
-        recentAttendances: [
-          {
-            id: 202,
-            attendance_date: '2026-02-20T10:00:00.000Z',
-            class_title: null,
-            class_type: null,
-            class_date: null,
-            class_start_time: null,
-          },
-        ],
-      },
-    });
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
+        },
+      });
+    classCancelRegistrationMock.mockResolvedValueOnce(undefined);
 
     renderPage();
-    await waitFor(() => expect(screen.getByText('수업 정보 없음')).toBeTruthy());
+    const cancelButton = await screen.findByRole('button', { name: '예약 취소' });
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => expect(classCancelRegistrationMock).toHaveBeenCalledWith(55, 1));
+    await waitFor(() => expect(screen.getByText('예약을 취소했습니다.')).toBeTruthy());
+  });
+
+  it('shows error when canceling reserved class fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            activity_type: 'reserved',
+            activity_id: 402,
+            class_id: 56,
+            class_title: '예약 실패 수업',
+            class_date: '2026-03-05',
+            class_start_time: '09:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
+    });
+    classCancelRegistrationMock.mockRejectedValueOnce(new Error('cancel fail'));
+
+    renderPage();
+    const cancelButton = await screen.findByRole('button', { name: '예약 취소' });
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('allows marking attended class as absent from activity list', async () => {
+    getClassActivitiesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              activity_type: 'attended',
+              activity_id: 501,
+              class_id: 66,
+              class_title: '출석 수업',
+              class_date: '2026-03-06',
+              class_start_time: '10:00:00',
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { page: 1, page_size: 10, total: 0, total_pages: 1 },
+        },
+      });
+    classUpdateRegistrationStatusMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    const absentButton = await screen.findByRole('button', { name: '결석 처리' });
+    fireEvent.click(absentButton);
+
+    await waitFor(() => expect(classUpdateRegistrationStatusMock).toHaveBeenCalledWith(66, 1, 'absent'));
+    await waitFor(() => expect(screen.getByText('출석을 결석으로 변경했습니다.')).toBeTruthy());
+  });
+
+  it('shows error when marking attended class as absent fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            activity_type: 'attended',
+            activity_id: 502,
+            class_id: 67,
+            class_title: '결석 실패 수업',
+            class_date: '2026-03-06',
+            class_start_time: '10:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
+    });
+    classUpdateRegistrationStatusMock.mockRejectedValueOnce(new Error('absent fail'));
+
+    renderPage();
+    const absentButton = await screen.findByRole('button', { name: '결석 처리' });
+    fireEvent.click(absentButton);
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 
   it('resets password with cancel and success paths', async () => {
@@ -601,5 +972,273 @@ describe('CustomerDetail page', () => {
 
     confirmSpy.mockRestore();
     consoleSpy.mockRestore();
+  });
+
+  it('loads recommended classes for membership and allows quick reserve', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 31,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 500,
+          title: '아쉬탕가',
+          class_date: '2026-03-10',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: false,
+        },
+      ],
+    });
+    classRegisterMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+    await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenCalledWith(1, {
+      membership_name: '아쉬탕가',
+      limit: 10,
+    }));
+
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButton);
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(500, { customer_id: 1 }));
+    await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
+  });
+
+  it('updates only the selected class when quick reserving among multiple recommendations', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 36,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 701,
+          title: '아쉬탕가 A',
+          class_date: '2026-03-20',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: false,
+        },
+        {
+          id: 702,
+          title: '아쉬탕가 B',
+          class_date: '2026-03-21',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 2,
+          current_enrollment: 4,
+          is_registered: false,
+        },
+      ],
+    });
+    classRegisterMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    await waitFor(() => expect(screen.getByText('아쉬탕가 A')).toBeTruthy());
+    const quickReserveButtons = screen.getAllByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButtons[1]);
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(702, { customer_id: 1 }));
+    await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
+  });
+
+  it('shows error when loading recommended classes fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 32,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockRejectedValueOnce(new Error('recommended load fail'));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('shows error when quick reserve from membership card fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 33,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 501,
+          title: '아쉬탕가',
+          class_date: '2026-03-11',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 2,
+          current_enrollment: 3,
+          is_registered: false,
+        },
+      ],
+    });
+    classRegisterMock.mockRejectedValueOnce(new Error('reserve fail'));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButton);
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('disables quick reserve when membership has no remaining sessions', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 34,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 0,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 610,
+          title: '아쉬탕가',
+          class_date: '2026-03-13',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 2,
+          current_enrollment: 5,
+          is_registered: false,
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    expect((quickReserveButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('disables quick reserve when remaining seats are zero', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 35,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: null,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 611,
+          title: '아쉬탕가',
+          class_date: '2026-03-14',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 0,
+          current_enrollment: 10,
+          is_registered: false,
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    expect((quickReserveButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('renders class activity title fallback from class_type and default text', async () => {
+    getClassActivitiesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            activity_type: 'attended',
+            activity_id: 1201,
+            class_id: 120,
+            class_title: '',
+            class_type: '대체 수업명',
+            class_date: '2026-03-15',
+            class_start_time: '08:00:00',
+          },
+          {
+            activity_type: 'reserved',
+            activity_id: 1202,
+            class_id: 121,
+            class_title: '',
+            class_type: '',
+            class_date: '2026-03-15',
+            class_start_time: '09:00:00',
+          },
+          {
+            activity_type: 'reserved',
+            activity_id: 1203,
+            class_id: null,
+            class_title: '',
+            class_type: '',
+            class_date: '2026-03-15',
+            class_start_time: '09:00:00',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 3, total_pages: 1 },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('link', { name: '대체 수업명' })).toBeTruthy());
+    expect(screen.getAllByText('수업 정보 없음').length).toBeGreaterThanOrEqual(2);
   });
 });

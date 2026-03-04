@@ -69,6 +69,7 @@ const createCustomersHarness = () => {
     method,
     routePath,
     params = {},
+    query = {},
     body = {},
     headers = {},
   }) => {
@@ -91,6 +92,7 @@ const createCustomersHarness = () => {
       method: method.toUpperCase(),
       path: routePath,
       params,
+      query,
       body,
       headers: reqHeaders,
       get(name) {
@@ -239,6 +241,148 @@ test('GET /:id covers forbidden, not found, and success', async () => {
   assert.equal(res.status, 500);
 });
 
+test('GET /:id/class-activities covers forbidden, success, filters, and error', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createCustomersHarness();
+
+  h.queryQueue.push({ rows: [] });
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    query: { date_from: '2026-99-99' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'date_from must be a valid YYYY-MM-DD date');
+
+  h.queryQueue.push(new Error('access check fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    { rows: [{ total: 2 }] },
+    {
+      rows: [
+        {
+          activity_type: 'reserved',
+          activity_id: 11,
+          class_id: 7,
+          class_title: '아쉬탕가',
+          class_type: '아쉬탕가',
+          class_date: '2026-03-01',
+          class_start_time: '09:00:00',
+          class_end_time: '10:00:00',
+          attendance_date: null,
+          registered_at: '2026-02-28T00:00:00.000Z',
+        },
+      ],
+    }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    query: { page: '2', page_size: '5', activity_type: 'reserved', search: '아쉬', date_from: '2026-02-01' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.items.length, 1);
+  assert.equal(res.body.pagination.page, 2);
+  assert.equal(res.body.filter.activity_type, 'reserved');
+  assert.equal(res.body.filter.search, '아쉬');
+  const classActivitiesQueryText = h.queryCalls
+    .map((call) => String(call[0]))
+    .find((text) => text.includes('WITH history AS'));
+  assert.ok(classActivitiesQueryText);
+  assert.ok(classActivitiesQueryText.includes('COALESCE(cls.class_date::date, a.attendance_date::date)'));
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    new Error('activities fail')
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
+test('GET /:id/recommended-classes covers validation, forbidden, success, and error', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createCustomersHarness();
+
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: {},
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(new Error('access check fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    { rows: [{ id: 9, title: '아쉬탕가' }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가', limit: '10' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].title, '아쉬탕가');
+
+  h.queryQueue.push(new Error('recommended fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
 test('POST / covers validation/missing id/duplicate/success/error', async (t) => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createCustomersHarness();
@@ -259,6 +403,15 @@ test('POST / covers validation/missing id/duplicate/success/error', async (t) =>
   });
   assert.equal(res.status, 400);
   assert.ok(Array.isArray(res.body.errors));
+
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { name: 'N', phone: '010-1234-567' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, '전화번호 형식은 000-0000-0000 이어야 합니다.');
 
   const dupPhoneClient = h.createDbClientMock();
   dupPhoneClient.queryQueue.push(
@@ -392,7 +545,7 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   assert.equal(res.status, 200);
   assert.equal(res.body.name, 'X2');
   assert.match(String(syncLoginClient.queryCalls[2][0]), /UPDATE yoga_users u/);
-  assert.equal(syncLoginClient.queryCalls[2][1][0], '01012345678');
+  assert.equal(syncLoginClient.queryCalls[2][1][0], '010-1234-5678');
 
   const updateErrClient = h.createDbClientMock();
   updateErrClient.queryQueue.push(
@@ -421,6 +574,19 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   });
   assert.equal(res.status, 400);
   assert.equal(invalidPhoneClient.queryCalls.length, 0);
+
+  const invalidFormatClient = h.createDbClientMock();
+  h.connectQueue.push(invalidFormatClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { phone: '010-1234-567' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, '전화번호 형식은 000-0000-0000 이어야 합니다.');
+  assert.equal(invalidFormatClient.queryCalls.length, 0);
 
   h.queryQueue.push({ rows: [] });
   t.mock.method(bcrypt, 'hash', async () => 'r-hash');

@@ -33,7 +33,6 @@ vi.mock('./pages/CustomerMemberships', () => ({ default: () => <div>Customer Mem
 vi.mock('./pages/CustomerClassDetail', () => ({ default: () => <div>Customer Class Detail</div> }));
 vi.mock('./pages/CustomerManagement', () => ({ default: () => <div>Customer Management</div> }));
 vi.mock('./pages/CustomerDetail', () => ({ default: () => <div>Customer Detail</div> }));
-vi.mock('./pages/CustomerAttendances', () => ({ default: () => <div>Customer Attendances</div> }));
 vi.mock('./pages/CustomerProfile', () => ({ default: () => <div>Customer Profile</div> }));
 vi.mock('./pages/MembershipTypeManagement', () => ({ default: () => <div>Membership Types</div> }));
 vi.mock('./pages/AdminAccountManagement', () => ({ default: () => <div>Admin Accounts</div> }));
@@ -96,12 +95,6 @@ describe('App routing shell', () => {
     authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
     await renderAt('/admin-accounts');
     expect(screen.getByText('Admin Accounts')).toBeTruthy();
-  });
-
-  it('renders customer attendance history route for admin users', async () => {
-    authState = { user: { id: 1, login_id: 'admin@yoga.com', role: 'admin' }, isLoading: false };
-    await renderAt('/customers/1/attendances');
-    expect(screen.getByText('Customer Attendances')).toBeTruthy();
   });
 
   it('handles nested redirects and wildcard fallback', async () => {

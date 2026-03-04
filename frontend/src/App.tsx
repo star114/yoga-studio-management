@@ -8,7 +8,6 @@ import CustomerMemberships from './pages/CustomerMemberships';
 import CustomerClassDetail from './pages/CustomerClassDetail';
 import CustomerManagement from './pages/CustomerManagement';
 import CustomerDetail from './pages/CustomerDetail';
-import CustomerAttendances from './pages/CustomerAttendances';
 import CustomerProfile from './pages/CustomerProfile';
 import MembershipTypeManagement from './pages/MembershipTypeManagement';
 import AdminAccountManagement from './pages/AdminAccountManagement';
@@ -69,11 +68,6 @@ const AppRoutes: React.FC = () => {
         <Route path="customers/:id" element={
           <ProtectedRoute adminOnly>
             <CustomerDetail />
-          </ProtectedRoute>
-        } />
-        <Route path="customers/:id/attendances" element={
-          <ProtectedRoute adminOnly>
-            <CustomerAttendances />
           </ProtectedRoute>
         } />
         <Route path="memberships" element={
