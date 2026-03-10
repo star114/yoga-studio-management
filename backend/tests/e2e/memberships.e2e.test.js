@@ -352,6 +352,16 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 404);
 
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: null,
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Request body must be an object');
+
   h.queryQueue.push({ rows: [{ id: 201, notes: 'x2' }] });
   res = await h.runRoute({
     method: 'put',

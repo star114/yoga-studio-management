@@ -754,6 +754,7 @@ router.post('/:id/registrations',
   authenticate,
   body('customer_id').optional().isInt({ min: 1 }),
   body('allow_cross_membership_registration').optional().isBoolean(),
+  body('mark_attended_after_register').optional().isBoolean(),
   validateRequest,
   async (req: AuthRequest, res) => {
     const { id } = req.params;
@@ -792,13 +793,25 @@ router.post('/:id/registrations',
       const yogaClass = classResult.rows[0];
 
       const now = new Date();
-      const classEndAt = new Date(`${String(yogaClass.class_date).slice(0, 10)}T${String(yogaClass.end_time).slice(0, 8)}`);
-      if (classEndAt <= now) {
+      const normalizedClassDate = String(yogaClass.class_date).slice(0, 10);
+      const normalizedEndTime = String(yogaClass.end_time).slice(0, 8);
+      const classEndAt = new Date(`${normalizedClassDate}T${normalizedEndTime}`);
+      const isCompletedClass = classEndAt <= now;
+      const markAttendedAfterRegister = req.user?.role === 'admin'
+        && req.body.mark_attended_after_register === true;
+      const shouldCreateImmediateAttendance = isCompletedClass && markAttendedAfterRegister;
+
+      if (markAttendedAfterRegister && !isCompletedClass) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Post-attendance registration is only available for completed classes' });
+      }
+
+      if (isCompletedClass && !shouldCreateImmediateAttendance) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Class is completed' });
       }
 
-      if (!yogaClass.is_open) {
+      if (!yogaClass.is_open && !shouldCreateImmediateAttendance) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Class is closed' });
       }
@@ -842,7 +855,8 @@ router.post('/:id/registrations',
                   ) THEN 0
              ELSE 1
            END,
-           m.created_at DESC`,
+           m.created_at DESC
+         FOR UPDATE OF m`,
         [customerId, yogaClass.title]
       );
 
@@ -963,25 +977,27 @@ router.post('/:id/registrations',
 
       const usesAlternativeMembership = matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
 
-      const countResult = await client.query(
-        'SELECT COUNT(*)::int AS count FROM yoga_class_registrations WHERE class_id = $1',
-        [id]
-      );
-      const currentEnrollment = countResult.rows[0].count as number;
+      if (!shouldCreateImmediateAttendance) {
+        const countResult = await client.query(
+          'SELECT COUNT(*)::int AS count FROM yoga_class_registrations WHERE class_id = $1',
+          [id]
+        );
+        const currentEnrollment = countResult.rows[0].count as number;
 
-      if (currentEnrollment >= Number(yogaClass.max_capacity)) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Class is full' });
+        if (currentEnrollment >= Number(yogaClass.max_capacity)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Class is full' });
+        }
       }
 
       const selectedMembership = (usesAlternativeMembership ? eligibleMembershipRows : matchingMembershipRows)[0];
 
       const registrationResult = await client.query(
-        `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id)
-         VALUES ($1, $2, $3)
+        `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id, attendance_status)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (class_id, customer_id) DO NOTHING
          RETURNING *`,
-        [id, customerId, selectedMembership.id]
+        [id, customerId, selectedMembership.id, shouldCreateImmediateAttendance ? 'attended' : 'reserved']
       );
 
       if (registrationResult.rows.length === 0) {
@@ -990,15 +1006,30 @@ router.post('/:id/registrations',
       }
 
       if (selectedMembership?.remaining_sessions !== null) {
-        await client.query(
+        const membershipUpdateResult = await client.query(
           `UPDATE yoga_memberships
            SET remaining_sessions = remaining_sessions - 1,
                is_active = CASE
                  WHEN (remaining_sessions - 1) <= 0 THEN FALSE
                  ELSE TRUE
                END
-           WHERE id = $1`,
+           WHERE id = $1
+             AND remaining_sessions > 0
+           RETURNING id`,
           [selectedMembership.id]
+        );
+
+        if (membershipUpdateResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Membership sessions exhausted' });
+        }
+      }
+
+      if (shouldCreateImmediateAttendance) {
+        await client.query(
+          `INSERT INTO yoga_attendances (customer_id, membership_id, class_id, attendance_date, instructor_id, class_type)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [customerId, selectedMembership.id, id, classEndAt, req.user!.id, yogaClass.title || null]
         );
       }
 

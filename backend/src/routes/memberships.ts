@@ -234,10 +234,18 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { remaining_sessions, is_active, notes } = req.body;
-    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(req.body, 'remaining_sessions');
-    const hasIsActive = Object.prototype.hasOwnProperty.call(req.body, 'is_active');
-    const hasNotes = Object.prototype.hasOwnProperty.call(req.body, 'notes');
+    const requestBody = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body as Record<string, unknown>
+      : null;
+
+    if (requestBody === null) {
+      return res.status(400).json({ error: 'Request body must be an object' });
+    }
+
+    const { remaining_sessions, is_active, notes } = requestBody;
+    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(requestBody, 'remaining_sessions');
+    const hasIsActive = Object.prototype.hasOwnProperty.call(requestBody, 'is_active');
+    const hasNotes = Object.prototype.hasOwnProperty.call(requestBody, 'notes');
 
     if (hasIsActive && typeof is_active !== 'boolean') {
       return res.status(400).json({ error: 'is_active must be boolean' });

@@ -521,6 +521,56 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 400);
 
+  const completedManualAttendanceClient = h.createDbClientMock();
+  completedManualAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: null,
+          is_open: false,
+          max_capacity: 1,
+          is_excluded: false,
+          class_date: '2000-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [{ id: 77, class_id: 11, customer_id: 1, membership_id: 501, attendance_status: 'attended' }] },
+    { rows: [{ id: 501 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(completedManualAttendanceClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, mark_attended_after_register: true },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.attendance_status, 'attended');
+  assert.equal(
+    completedManualAttendanceClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('SELECT COUNT(*)::int AS count FROM yoga_class_registrations')
+    ),
+    false
+  );
+  assert.equal(
+    completedManualAttendanceClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('INSERT INTO yoga_attendances')
+    ),
+    true
+  );
+  const completedAttendanceInsertCall = completedManualAttendanceClient.queryCalls.find(([queryText]) =>
+    String(queryText).includes('INSERT INTO yoga_attendances')
+  );
+  assert.equal(String(completedAttendanceInsertCall?.[1]?.[3]?.toISOString?.() || ''), '2000-01-01T03:00:00.000Z');
+  assert.equal(completedAttendanceInsertCall?.[1]?.[5], null);
+
   const fullClient = h.createDbClientMock();
   fullClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -551,6 +601,34 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 400);
 
+  const prematureAttendanceClient = h.createDbClientMock();
+  prematureAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(prematureAttendanceClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, mark_attended_after_register: true },
+  });
+  assert.equal(res.status, 400);
+
   const remainingSessionsClient = h.createDbClientMock();
   remainingSessionsClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -570,7 +648,7 @@ test('class registration and recurring routes cover core branches', async () => 
     { rows: [{ id: 501, remaining_sessions: 2, is_title_match: true }] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 188, class_id: 11, customer_id: 1, membership_id: 501 }] },
-    { rows: [], rowCount: 1 },
+    { rows: [{ id: 501 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(remainingSessionsClient);
@@ -586,6 +664,45 @@ test('class registration and recurring routes cover core branches', async () => 
     ([queryText]) => typeof queryText === 'string' && queryText.includes('AS reserved_count')
   );
   assert.equal(reservedCountQuery, undefined);
+  assert.equal(
+    remainingSessionsClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('FOR UPDATE OF m')
+    ),
+    true
+  );
+
+  const exhaustedAfterSelectionClient = h.createDbClientMock();
+  exhaustedAfterSelectionClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 1, is_title_match: true }] },
+    { rows: [{ count: 0 }] },
+    { rows: [{ id: 188, class_id: 11, customer_id: 1, membership_id: 501 }] },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(exhaustedAfterSelectionClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Membership sessions exhausted');
 
   const crossMembershipConfirmClient = h.createDbClientMock();
   crossMembershipConfirmClient.queryQueue.push(
@@ -640,7 +757,7 @@ test('class registration and recurring routes cover core branches', async () => 
     { rows: [{ id: 778, remaining_sessions: 3, is_title_match: false }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 199, class_id: 11, customer_id: 1, membership_id: 778 }] },
-    { rows: [], rowCount: 1 },
+    { rows: [{ id: 778 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(crossMembershipAllowedClient);
@@ -723,7 +840,7 @@ test('class registration and recurring routes cover core branches', async () => 
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 99, class_id: 11, customer_id: 1, membership_id: 501 }] },
-    { rows: [], rowCount: 1 },
+    { rows: [{ id: 501 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(successClient);
@@ -1493,7 +1610,7 @@ test('class registration diagnostics and recurring creation cover remaining bran
     { rows: [{ id: 801, remaining_sessions: 1, is_title_match: false }] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 501, class_id: 11, customer_id: 1, membership_id: 801 }] },
-    { rows: [], rowCount: 1 },
+    { rows: [{ id: 801 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(crossMembershipRemainingClient);

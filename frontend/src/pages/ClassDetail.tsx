@@ -89,6 +89,7 @@ const ClassDetail: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const isCompletedClass = classDetail?.class_status === 'completed';
 
   const classStatusLabel = useMemo(() => {
     switch (classDetail?.class_status) {
@@ -320,11 +321,14 @@ const ClassDetail: React.FC = () => {
       setError('');
       setNotice('');
       setIsRegisterSubmitting(true);
-      await classAPI.register(classId, { customer_id: customerId });
+      await classAPI.register(classId, {
+        customer_id: customerId,
+        ...(isCompletedClass ? { mark_attended_after_register: true } : {}),
+      });
       setManualRegisterSearch('');
       setSelectedCustomerId('');
       await refreshClassAndRegistrations();
-      setNotice('수동 신청이 등록되었습니다.');
+      setNotice(isCompletedClass ? '사후 출석 등록을 완료했습니다.' : '수동 신청이 등록되었습니다.');
     } catch (registerError: unknown) {
       console.error('Failed to register customer:', registerError);
       if (shouldConfirmCrossMembershipRegistration(registerError)) {
@@ -334,11 +338,14 @@ const ClassDetail: React.FC = () => {
             await classAPI.register(classId, {
               customer_id: customerId,
               allow_cross_membership_registration: true,
+              ...(isCompletedClass ? { mark_attended_after_register: true } : {}),
             });
             setManualRegisterSearch('');
             setSelectedCustomerId('');
             await refreshClassAndRegistrations();
-            setNotice('다른 회원권 차감으로 수동 신청이 등록되었습니다.');
+            setNotice(isCompletedClass
+              ? '다른 회원권 차감으로 사후 출석 등록을 완료했습니다.'
+              : '다른 회원권 차감으로 수동 신청이 등록되었습니다.');
             return;
           } catch (retryError: unknown) {
             console.error('Failed to register customer with alternative membership:', retryError);
@@ -666,12 +673,16 @@ const ClassDetail: React.FC = () => {
       </section>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">수동 신청 등록</h2>
+        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+          {isCompletedClass ? '사후 출석 등록' : '수동 신청 등록'}
+        </h2>
         <form className="space-y-4" onSubmit={handleManualRegister}>
           <div className="rounded-2xl border border-warm-200 bg-warm-50/80 p-4 space-y-4">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
-                <p className="text-sm font-medium text-primary-800">미등록 고객 선택</p>
+                <p className="text-sm font-medium text-primary-800">
+                  {isCompletedClass ? '미등록 방문 고객 선택' : '미등록 고객 선택'}
+                </p>
               </div>
               <div className="self-start rounded-full bg-white px-3 py-1 text-xs font-semibold text-warm-700 border border-warm-200">
                 검색 결과 {filteredUnregisteredCustomers.length}명
@@ -724,12 +735,11 @@ const ClassDetail: React.FC = () => {
                 type="submit"
                 disabled={
                   isRegisterSubmitting
-                  || !classDetail.is_open
-                  || classDetail.class_status === 'completed'
+                  || (!classDetail.is_open && !isCompletedClass)
                 }
                 className="btn-primary min-w-[140px] px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isRegisterSubmitting ? '등록 중...' : '수동 신청 등록'}
+                {isRegisterSubmitting ? '등록 중...' : isCompletedClass ? '사후 출석 등록' : '수동 신청 등록'}
               </button>
             </div>
           </div>
@@ -771,7 +781,10 @@ const ClassDetail: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => void handleCheckIn(registration.customer_id)}
-                      disabled={classDetail.class_status === 'completed' || checkingInCustomerId === registration.customer_id}
+                      disabled={
+                        checkingInCustomerId === registration.customer_id
+                        || registration.attendance_status === 'attended'
+                      }
                       className="px-3 py-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {checkingInCustomerId === registration.customer_id ? '처리 중...' : '출석 체크'}
