@@ -332,20 +332,50 @@ router.put('/:id',
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   const { id } = req.params;
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    await client.query(
+      `UPDATE yoga_attendances
+       SET membership_id = NULL
+       WHERE membership_id = $1`,
+      [id]
+    );
+
+    await client.query(
+      `DELETE FROM yoga_class_registrations
+       WHERE membership_id = $1
+         AND attendance_status = 'reserved'`,
+      [id]
+    );
+
+    await client.query(
+      `UPDATE yoga_class_registrations
+       SET membership_id = NULL
+       WHERE membership_id = $1
+         AND attendance_status IN ('attended', 'absent')`,
+      [id]
+    );
+
+    const result = await client.query(
       'DELETE FROM yoga_memberships WHERE id = $1 RETURNING id',
       [id]
     );
 
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Membership not found' });
     }
 
+    await client.query('COMMIT');
     res.json({ message: 'Membership deleted successfully' });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Delete membership error:', error);
     res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 

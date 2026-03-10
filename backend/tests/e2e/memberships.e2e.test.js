@@ -2,12 +2,35 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
 
+const createDbClientMock = () => {
+  const queryQueue = [];
+  const queryCalls = [];
+  let released = false;
+  return {
+    queryQueue,
+    queryCalls,
+    get released() {
+      return released;
+    },
+    async query(...args) {
+      queryCalls.push(args);
+      const next = queryQueue.shift();
+      if (next instanceof Error) throw next;
+      return next ?? { rows: [], rowCount: 0 };
+    },
+    release() {
+      released = true;
+    },
+  };
+};
+
 const createMembershipsHarness = () => {
   const dbModulePath = require.resolve('../../dist/config/database');
   const routerModulePath = require.resolve('../../dist/routes/memberships');
 
   const queryQueue = [];
   const queryCalls = [];
+  const connectQueue = [];
   const poolMock = {
     async query(...args) {
       queryCalls.push(args);
@@ -20,6 +43,13 @@ const createMembershipsHarness = () => {
       const next = queryQueue.shift();
       if (next instanceof Error) throw next;
       return next ?? { rows: [], rowCount: 0 };
+    },
+    async connect() {
+      const client = connectQueue.shift();
+      if (!client) {
+        throw new Error('No mock client queued');
+      }
+      return client;
     },
   };
 
@@ -113,7 +143,7 @@ const createMembershipsHarness = () => {
     return { status: res.statusCode, body: res.body };
   };
 
-  return { queryQueue, queryCalls, runRoute };
+  return { queryQueue, queryCalls, connectQueue, createDbClientMock, runRoute };
 };
 
 const adminToken = () =>
@@ -465,7 +495,15 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 500);
 
-  h.queryQueue.push({ rows: [] });
+  const deleteNotFoundClient = h.createDbClientMock();
+  deleteNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteNotFoundClient);
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -474,7 +512,16 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 201 }] });
+  const deleteSuccessClient = h.createDbClientMock();
+  deleteSuccessClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 2 },
+    { rows: [], rowCount: 3 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 201 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteSuccessClient);
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -482,8 +529,32 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
+  assert.equal(
+    deleteSuccessClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_attendances')
+    ),
+    true
+  );
+  assert.equal(
+    deleteSuccessClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes("DELETE FROM yoga_class_registrations")
+    ),
+    true
+  );
+  assert.equal(
+    deleteSuccessClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes("attendance_status IN ('attended', 'absent')")
+    ),
+    true
+  );
 
-  h.queryQueue.push(new Error('delete membership fail'));
+  const deleteErrorClient = h.createDbClientMock();
+  deleteErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    new Error('delete membership fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteErrorClient);
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',

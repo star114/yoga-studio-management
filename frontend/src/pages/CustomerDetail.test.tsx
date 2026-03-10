@@ -202,6 +202,31 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('수업 기록이 없습니다.')).toBeTruthy();
   });
 
+  it('paginates memberships with numbered buttons in customer detail', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        { id: 201, membership_type_name: '상세 회원권 1', remaining_sessions: 10, is_active: true, notes: null },
+        { id: 202, membership_type_name: '상세 회원권 2', remaining_sessions: 9, is_active: true, notes: null },
+        { id: 203, membership_type_name: '상세 회원권 3', remaining_sessions: 8, is_active: true, notes: null },
+        { id: 204, membership_type_name: '상세 회원권 4', remaining_sessions: 7, is_active: true, notes: null },
+        { id: 205, membership_type_name: '상세 회원권 5', remaining_sessions: 6, is_active: true, notes: null },
+        { id: 206, membership_type_name: '상세 회원권 6', remaining_sessions: 5, is_active: true, notes: null },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('상세 회원권 1')).toBeTruthy());
+    expect(screen.getByRole('button', { name: '1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '2' })).toBeTruthy();
+    expect(screen.queryByText('상세 회원권 6')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+
+    await waitFor(() => expect(screen.getByText('상세 회원권 6')).toBeTruthy());
+    expect(screen.queryByText('상세 회원권 1')).toBeNull();
+  });
+
   it('edits customer info in detail page and supports cancel', async () => {
     updateCustomerMock.mockResolvedValueOnce(undefined);
     renderPage();

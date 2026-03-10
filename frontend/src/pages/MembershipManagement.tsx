@@ -41,6 +41,7 @@ const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
   notes: '',
 };
+const MEMBERSHIPS_PAGE_SIZE = 5;
 
 const formatConsumedSummary = (membership: Membership) => {
   const consumedSessions = membership.consumed_sessions ?? 0;
@@ -66,10 +67,23 @@ const MembershipManagement: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [membershipPage, setMembershipPage] = useState(1);
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId) || null,
     [customers, selectedCustomerId]
+  );
+  const membershipTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(memberships.length / MEMBERSHIPS_PAGE_SIZE)),
+    [memberships.length]
+  );
+  const paginatedMemberships = useMemo(() => {
+    const startIndex = (membershipPage - 1) * MEMBERSHIPS_PAGE_SIZE;
+    return memberships.slice(startIndex, startIndex + MEMBERSHIPS_PAGE_SIZE);
+  }, [membershipPage, memberships]);
+  const membershipPageItems = useMemo(
+    () => Array.from({ length: membershipTotalPages }, (_, index) => index + 1),
+    [membershipTotalPages]
   );
 
   useEffect(() => {
@@ -81,8 +95,13 @@ const MembershipManagement: React.FC = () => {
       void loadMemberships(selectedCustomerId);
     } else {
       setMemberships([]);
+      setMembershipPage(1);
     }
   }, [selectedCustomerId]);
+
+  useEffect(() => {
+    setMembershipPage((prev) => Math.min(prev, membershipTotalPages));
+  }, [membershipTotalPages]);
 
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
@@ -118,6 +137,7 @@ const MembershipManagement: React.FC = () => {
       setError('');
       const response = await membershipAPI.getByCustomer(customerId);
       setMemberships(response.data);
+      setMembershipPage(1);
     } catch (loadError) {
       console.error('Failed to load memberships:', loadError);
       setError('회원권 목록을 불러오지 못했습니다.');
@@ -283,7 +303,7 @@ const MembershipManagement: React.FC = () => {
             <p className="text-warm-600 py-6 text-center">등록된 회원권이 없습니다.</p>
           ) : (
             <div className="space-y-3">
-              {memberships.map((membership) => (
+              {paginatedMemberships.map((membership) => (
                 <div key={membership.id} className="border border-warm-200 rounded-lg p-4 bg-warm-50">
                   {editingMembershipId === membership.id ? (
                     <div className="space-y-3">
@@ -346,6 +366,24 @@ const MembershipManagement: React.FC = () => {
                     </div>
                   )}
                 </div>
+              ))}
+            </div>
+          )}
+          {memberships.length > MEMBERSHIPS_PAGE_SIZE && (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {membershipPageItems.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  className={`min-w-[2.25rem] rounded-md px-3 py-1.5 text-sm ${
+                    membershipPage === pageNumber
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-warm-100 text-primary-800 hover:bg-warm-200'
+                  }`}
+                  onClick={() => setMembershipPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
               ))}
             </div>
           )}
