@@ -6,12 +6,25 @@ import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
 
+const getCustomerIdFromUser = async (userId: number): Promise<number | null> => {
+  const result = await pool.query(
+    'SELECT id FROM yoga_customers WHERE user_id = $1',
+    [userId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return Number(result.rows[0].id);
+};
+
 // 출석 기록 조회 (필터링 가능)
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, async (req: AuthRequest, res) => {
   const { customer_id, start_date, end_date, limit = 50 } = req.query;
 
   try {
-    const customerIdFilter =
+    let customerIdFilter =
       typeof customer_id === 'string' && customer_id.trim() !== ''
         ? customer_id.trim()
         : null;
@@ -23,6 +36,19 @@ router.get('/', authenticate, async (req, res) => {
       typeof end_date === 'string' && end_date.trim() !== ''
         ? end_date.trim()
         : null;
+
+    if (req.user!.role !== 'admin') {
+      const ownCustomerId = await getCustomerIdFromUser(req.user!.id);
+      if (!ownCustomerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      if (customerIdFilter && customerIdFilter !== String(ownCustomerId)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      customerIdFilter = String(ownCustomerId);
+    }
 
     let query = `
       SELECT 

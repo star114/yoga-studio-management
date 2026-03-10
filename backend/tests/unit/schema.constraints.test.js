@@ -46,3 +46,13 @@ test('class registrations can link to memberships for reservation restoration', 
   );
   assert.match(schema, /CREATE INDEX IF NOT EXISTS idx_class_registrations_membership_id/i);
 });
+
+test('memberships schema prevents negative remaining sessions', () => {
+  const schemaPath = path.resolve(__dirname, '../../../database/schema.sql');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+
+  assert.match(
+    schema,
+    /remaining_sessions\s+INTEGER\s+CHECK\s+\(remaining_sessions IS NULL OR remaining_sessions >= 0\)/i
+  );
+});

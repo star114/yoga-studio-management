@@ -750,6 +750,23 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
     false
   );
 
+  const clearNotesClient = h.createDbClientMock();
+  clearNotesClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 11, name: 'Existing', phone: '010-1234-5678', notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(clearNotesClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { notes: null },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.notes, null);
+
   h.queryQueue.push({ rows: [] });
   t.mock.method(bcrypt, 'hash', async () => 'r-hash');
   res = await h.runRoute({

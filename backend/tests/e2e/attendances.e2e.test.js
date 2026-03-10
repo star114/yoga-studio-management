@@ -144,13 +144,36 @@ const createAttendancesHarness = () => {
 
 const adminToken = () =>
   jwt.sign({ id: 1, login_id: 'admin@example.com', role: 'admin' }, process.env.JWT_SECRET);
+const customerToken = () =>
+  jwt.sign({ id: 10, login_id: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
 
 test('attendances list/update/today routes cover success and errors', async () => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createAttendancesHarness();
 
-  h.queryQueue.push({ rows: [{ id: 1 }] });
   let res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { customer_id: '3' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 9 }] },
+    { rows: [{ id: 1 }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: '2026-01-01', end_date: '2026-01-31', limit: '10' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.length, 1);
+
+  h.queryQueue.push({ rows: [{ id: 1 }] });
+  res = await h.runRoute({
     method: 'get',
     routePath: '/',
     query: { customer_id: '3', start_date: '2026-01-01', end_date: '2026-01-31', limit: '10' },

@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES yoga_customers(id) ON DELETE CASCADE,
     membership_type_id INTEGER REFERENCES yoga_membership_types(id),
-    remaining_sessions INTEGER,  -- 잔여 횟수
+    remaining_sessions INTEGER CHECK (remaining_sessions IS NULL OR remaining_sessions >= 0),  -- 잔여 횟수
     is_active BOOLEAN DEFAULT TRUE,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

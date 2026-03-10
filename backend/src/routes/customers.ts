@@ -538,9 +538,12 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const requestBody = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const requestBody = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body as Record<string, unknown>
+      : {};
     const { name, phone, notes } = requestBody;
     const hasPhoneField = Object.prototype.hasOwnProperty.call(requestBody, 'phone');
+    const hasNotesField = Object.prototype.hasOwnProperty.call(requestBody, 'notes');
     const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
     const normalizedPhone = hasPhoneField && trimmedPhone
       ? normalizePhoneNumber(trimmedPhone)
@@ -561,10 +564,13 @@ router.put('/:id',
         `UPDATE yoga_customers 
          SET name = COALESCE($1, name),
              phone = COALESCE($2, phone),
-             notes = COALESCE($3, notes)
-         WHERE id = $4
+             notes = CASE
+               WHEN $3 THEN $4
+               ELSE notes
+             END
+         WHERE id = $5
          RETURNING *`,
-        [name, hasPhoneField ? normalizedPhone : null, notes, id]
+        [name, hasPhoneField ? normalizedPhone : null, hasNotesField, notes ?? null, id]
       );
 
       if (result.rows.length === 0) {
