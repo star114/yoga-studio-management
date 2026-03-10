@@ -777,6 +777,44 @@ test('class registration and recurring routes cover core branches', async () => 
     false
   );
 
+  const cancelSelfAttendedClient = h.createDbClientMock();
+  cancelSelfAttendedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 2, membership_id: 501, attendance_status: 'attended' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelSelfAttendedClient);
+  h.queryQueue.push({ rows: [{ id: 7 }] });
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/me',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(
+    cancelSelfAttendedClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('DELETE FROM yoga_class_registrations')
+    ),
+    false
+  );
+
+  const cancelSelfAbsentClient = h.createDbClientMock();
+  cancelSelfAbsentClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 3, membership_id: 501, attendance_status: 'absent' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelSelfAbsentClient);
+  h.queryQueue.push({ rows: [{ id: 7 }] });
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/me',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+
   const cancelSelfErrorClient = h.createDbClientMock();
   cancelSelfErrorClient.queryQueue.push(
     { rows: [], rowCount: 0 },
