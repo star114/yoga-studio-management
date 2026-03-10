@@ -26,6 +26,8 @@ interface CustomerMembership {
   id: number;
   membership_type_name: string;
   remaining_sessions?: number | null;
+  total_sessions?: number | null;
+  consumed_sessions?: number;
   is_active: boolean;
   start_date?: string | null;
   expected_end_date?: string | null;
@@ -73,6 +75,14 @@ const normalizeTime = (value?: string | null) => {
 };
 
 const normalizeDate = (value: string) => value.slice(0, 10);
+
+const formatConsumedSummary = (membership: CustomerMembership) => {
+  const consumedSessions = membership.consumed_sessions ?? 0;
+  if (membership.total_sessions === null || membership.total_sessions === undefined) {
+    return `${consumedSessions}회`;
+  }
+  return `${consumedSessions} / ${membership.total_sessions}회`;
+};
 
 const isAfterGraceTime = (entry: CustomerCalendarEntry, now: Date) => {
   if (!entry.start_time) return false;
@@ -283,11 +293,17 @@ const CustomerMemberships: React.FC = () => {
 
                 <div className="space-y-1.5 text-sm text-warm-700">
                   <p>
-                    <span className="text-warm-600">잔여 횟수:</span>{' '}
+                    <span className="text-warm-600">예약 가능 잔여:</span>{' '}
                     <span className="font-semibold text-primary-800">
                       {membership.remaining_sessions === null || membership.remaining_sessions === undefined
                         ? '무제한'
                         : `${membership.remaining_sessions}회`}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-warm-600">소진 횟수:</span>{' '}
+                    <span className="font-medium text-primary-800">
+                      {formatConsumedSummary(membership)}
                     </span>
                   </p>
                   <p>

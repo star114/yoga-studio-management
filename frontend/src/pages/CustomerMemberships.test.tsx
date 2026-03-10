@@ -98,6 +98,8 @@ describe('CustomerMemberships page', () => {
           id: 1,
           membership_type_name: '프리패스',
           remaining_sessions: null,
+          total_sessions: null,
+          consumed_sessions: 7,
           is_active: true,
           start_date: '2026-02-01',
           expected_end_date: null,
@@ -109,6 +111,7 @@ describe('CustomerMemberships page', () => {
 
     await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
     expect(screen.getByText('무제한')).toBeTruthy();
+    expect(screen.getByText('7회')).toBeTruthy();
     expect(screen.getByText('2026년 2월 1일')).toBeTruthy();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
@@ -120,6 +123,8 @@ describe('CustomerMemberships page', () => {
           id: 2,
           membership_type_name: '10회권',
           remaining_sessions: 3,
+          total_sessions: 10,
+          consumed_sessions: 4,
           is_active: true,
           start_date: '2026-02-01',
           expected_end_date: '2026-04-01',
@@ -130,6 +135,7 @@ describe('CustomerMemberships page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('10회권')).toBeTruthy());
+    expect(screen.getByText('4 / 10회')).toBeTruthy();
     expect(screen.getByText('2026년 4월 1일')).toBeTruthy();
   });
 

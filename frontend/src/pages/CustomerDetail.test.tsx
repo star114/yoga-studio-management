@@ -247,7 +247,7 @@ describe('CustomerDetail page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('renders attended and reserved activities together', async () => {
+  it('renders attended, reserved, and absent activities together', async () => {
     getClassActivitiesMock.mockResolvedValueOnce({
       data: {
         items: [
@@ -265,18 +265,27 @@ describe('CustomerDetail page', () => {
             class_date: '2026-02-21',
             class_start_time: '10:00:00',
           },
+          {
+            activity_type: 'absent',
+            activity_id: 103,
+            class_title: '하타',
+            class_date: '2026-02-22',
+            class_start_time: '11:00:00',
+          },
         ],
-        pagination: { page: 1, page_size: 10, total: 2, total_pages: 1 },
+        pagination: { page: 1, page_size: 10, total: 3, total_pages: 1 },
       },
     });
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('수업 기록 (출석/예약)')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('수업 기록 (출석/예약/결석)')).toBeTruthy());
     expect(screen.getByText('아쉬탕가')).toBeTruthy();
     expect(screen.getByText('빈야사')).toBeTruthy();
+    expect(screen.getByText('하타')).toBeTruthy();
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('예약')).toBeTruthy();
+    expect(screen.getByText('결석')).toBeTruthy();
   });
 
   it('applies activity filters from modal and requests filtered page', async () => {
@@ -858,6 +867,8 @@ describe('CustomerDetail page', () => {
           id: 10,
           membership_type_name: '날짜있음권',
           remaining_sessions: 3,
+          total_sessions: 10,
+          consumed_sessions: 4,
           is_active: true,
           start_date: '2026-02-01',
           expected_end_date: '2026-03-05',
@@ -868,6 +879,8 @@ describe('CustomerDetail page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByText('날짜있음권')).toBeTruthy());
+    expect(screen.getByText('예약 가능 잔여: 3')).toBeTruthy();
+    expect(screen.getByText('소진 횟수: 4 / 10회')).toBeTruthy();
     expect(screen.getByText('시작일: 2026년 2월 1일')).toBeTruthy();
     expect(screen.getByText('예상 종료일: 2026년 3월 5일')).toBeTruthy();
   });

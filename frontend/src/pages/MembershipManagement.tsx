@@ -18,6 +18,8 @@ interface Membership {
   id: number;
   membership_type_name: string;
   remaining_sessions?: number | null;
+  total_sessions?: number | null;
+  consumed_sessions?: number;
   is_active: boolean;
   notes?: string | null;
   start_date?: string | null;
@@ -38,6 +40,14 @@ interface EditMembershipForm {
 const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   membership_type_id: '',
   notes: '',
+};
+
+const formatConsumedSummary = (membership: Membership) => {
+  const consumedSessions = membership.consumed_sessions ?? 0;
+  if (membership.total_sessions === null || membership.total_sessions === undefined) {
+    return `${consumedSessions}회`;
+  }
+  return `${consumedSessions} / ${membership.total_sessions}회`;
 };
 
 const MembershipManagement: React.FC = () => {
@@ -320,7 +330,8 @@ const MembershipManagement: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">잔여 횟수: {membership.remaining_sessions ?? '무제한'}</p>
+                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.remaining_sessions ?? '무제한'}</p>
+                      <p className="text-sm text-warm-700">소진 횟수: {formatConsumedSummary(membership)}</p>
                       <p className="text-sm text-warm-700">
                         시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
                       </p>

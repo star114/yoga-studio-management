@@ -242,7 +242,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   process.env.JWT_SECRET = 'test-secret';
   const h = createMembershipsHarness();
 
-  h.queryQueue.push({ rows: [{ id: 10 }] });
+  h.queryQueue.push({
+    rows: [{
+      id: 10,
+      total_sessions: 10,
+      consumed_sessions: 4,
+      remaining_sessions: 3,
+    }],
+  });
   let res = await h.runRoute({
     method: 'get',
     routePath: '/customer/:customerId',
@@ -251,6 +258,8 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].total_sessions, 10);
+  assert.equal(res.body[0].consumed_sessions, 4);
 
   h.queryQueue.push(new Error('customer memberships fail'));
   res = await h.runRoute({
