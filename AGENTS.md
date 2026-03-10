@@ -82,8 +82,16 @@ npm run test:coverage:all-src
 ## 9) PR Requirements
 - .github/pull_request_template.md must be used as template.
 
-## 9) 금지 사항
+## 10) 금지 사항
 - 요청 없는 대규모 리팩터링
 - 게이트 우회를 위한 커버리지 범위 축소
 - 실패 테스트를 skip 처리만으로 통과시키기
 - 관련 없는 파일 변경을 커밋에 포함하기
+
+## 11) Tooling / MCP
+- If you need OpenAI API / Codex / ChatGPT Apps SDK details, ALWAYS use the `openaiDeveloperDocs` MCP server first.
+- If you need third-party library docs (React/Vite/Express/Postgres/etc.), use `context7` before guessing.
+
+## 12) Safety
+- Never exfiltrate secrets. Only use env vars explicitly allowlisted (env_vars).
+- Prefer read-only operations first (SELECT, explain, dry-run) before writing changes.
