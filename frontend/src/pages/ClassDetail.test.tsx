@@ -115,6 +115,7 @@ const seedLoad = (overrides?: Record<string, unknown>) => {
     data: [
       { id: 101, name: '홍길동', phone: '010-1111-2222' },
       { id: 102, name: '김영희', phone: '010-2222-3333' },
+      { id: 103, name: '박민수', phone: '010-9999-8888' },
     ],
   });
 };
@@ -182,6 +183,17 @@ describe('ClassDetail page', () => {
     expect(screen.getByText('상태: 오픈')).toBeTruthy();
     expect(screen.getByText('홍길동')).toBeTruthy();
     expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
+  });
+
+  it('filters manual registration customers by search keyword', async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('고객 검색')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('고객 검색'), { target: { value: '2222' } });
+
+    expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: '신청할 고객 선택' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: '박민수 (010-9999-8888)' })).toBeFalsy();
   });
 
   it('updates class basic info from detail page', async () => {
@@ -352,7 +364,7 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(1, { customer_id: 102 }));
@@ -366,7 +378,7 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
@@ -412,7 +424,7 @@ describe('ClassDetail page', () => {
     classGetByIdMock.mockResolvedValueOnce({ data: null });
     classGetRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
@@ -863,7 +875,7 @@ describe('ClassDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
 
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(1, 1, { customer_id: 102 }));
@@ -884,7 +896,7 @@ describe('ClassDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
 
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(classRegisterMock).toHaveBeenCalledTimes(1));
@@ -902,7 +914,7 @@ describe('ClassDetail page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
 
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(classRegisterMock).toHaveBeenCalledTimes(2));
