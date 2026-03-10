@@ -33,7 +33,8 @@ export const startClassAutoCloseWorker = () => {
              r.id AS registration_id,
              r.class_id,
              r.customer_id,
-             c.title AS class_title
+             c.title AS class_title,
+             r.membership_id AS reserved_membership_id
            FROM yoga_class_registrations r
            INNER JOIN yoga_classes c ON c.id = r.class_id
            WHERE c.is_open = TRUE
@@ -58,18 +59,32 @@ export const startClassAutoCloseWorker = () => {
              wa.customer_id,
              wa.class_title,
              m.id AS membership_id,
+             CASE
+               WHEN wa.reserved_membership_id IS NULL THEN TRUE
+               ELSE FALSE
+             END AS should_decrement_membership,
              ROW_NUMBER() OVER (
                PARTITION BY wa.registration_id
                ORDER BY
-                 CASE WHEN mt.name = wa.class_title THEN 0 ELSE 1 END,
+                 CASE
+                   WHEN wa.reserved_membership_id IS NOT NULL
+                     AND m.id = wa.reserved_membership_id THEN -1
+                   WHEN mt.name = wa.class_title THEN 0
+                   ELSE 1
+                 END,
                  m.created_at DESC,
                  m.id DESC
              ) AS rn
            FROM without_attendance wa
-           INNER JOIN yoga_memberships m
-             ON m.customer_id = wa.customer_id
-            AND m.is_active = TRUE
-            AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
+           INNER JOIN yoga_memberships m ON (
+             (wa.reserved_membership_id IS NOT NULL AND m.id = wa.reserved_membership_id)
+             OR (
+               wa.reserved_membership_id IS NULL
+               AND m.customer_id = wa.customer_id
+               AND m.is_active = TRUE
+               AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
+             )
+           )
            LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
          ),
          selected_memberships AS (
@@ -78,7 +93,8 @@ export const startClassAutoCloseWorker = () => {
              class_id,
              customer_id,
              class_title,
-             membership_id
+             membership_id,
+             should_decrement_membership
            FROM membership_candidates
            WHERE rn = 1
          ),
@@ -108,9 +124,13 @@ export const startClassAutoCloseWorker = () => {
            RETURNING r.id
          ),
          membership_usage AS (
-           SELECT membership_id, COUNT(*)::int AS used_count
-           FROM inserted
-           GROUP BY membership_id
+           SELECT i.membership_id, COUNT(*)::int AS used_count
+           FROM inserted i
+           INNER JOIN selected_memberships sm
+             ON sm.class_id = i.class_id
+            AND sm.customer_id = i.customer_id
+           WHERE sm.should_decrement_membership = TRUE
+           GROUP BY i.membership_id
          ),
          updated_memberships AS (
            UPDATE yoga_memberships m

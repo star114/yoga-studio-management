@@ -35,3 +35,14 @@ test('attendance comment thread schema exists with required constraints', () => 
   assert.match(schema, /author_user_id\s+INTEGER\s+NOT NULL\s+REFERENCES\s+yoga_users\(id\)\s+ON DELETE RESTRICT/i);
   assert.match(schema, /CREATE INDEX IF NOT EXISTS idx_attendance_messages_attendance_created/i);
 });
+
+test('class registrations can link to memberships for reservation restoration', () => {
+  const schemaPath = path.resolve(__dirname, '../../../database/schema.sql');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+
+  assert.match(
+    schema,
+    /membership_id\s+INTEGER\s+REFERENCES\s+yoga_memberships\(id\)\s+ON DELETE SET NULL/i
+  );
+  assert.match(schema, /CREATE INDEX IF NOT EXISTS idx_class_registrations_membership_id/i);
+});

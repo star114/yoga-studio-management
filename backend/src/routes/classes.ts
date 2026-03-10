@@ -41,6 +41,30 @@ const getLatestAttendanceIdByClassCustomer = async (
   return Number(attendanceResult.rows[0].id);
 };
 
+const restoreMembershipSessions = async (
+  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
+  membershipId: number | null
+) => {
+  if (membershipId === null) {
+    return;
+  }
+
+  await client.query(
+    `UPDATE yoga_memberships
+     SET remaining_sessions = CASE
+           WHEN remaining_sessions IS NULL THEN NULL
+           ELSE remaining_sessions + 1
+         END,
+         is_active = CASE
+           WHEN remaining_sessions IS NULL THEN is_active
+           WHEN (remaining_sessions + 1) > 0 THEN TRUE
+           ELSE FALSE
+         END
+     WHERE id = $1`,
+    [membershipId]
+  );
+};
+
 // 수업 목록 조회
 router.get('/',
   authenticate,
@@ -569,7 +593,7 @@ router.put('/:id/registrations/:customerId/status',
       await client.query('BEGIN');
 
       const registrationResult = await client.query(
-        `SELECT id, class_id, customer_id, attendance_status, registration_comment, registered_at
+        `SELECT id, class_id, customer_id, membership_id, attendance_status, registration_comment, registered_at
          FROM yoga_class_registrations
          WHERE class_id = $1 AND customer_id = $2
          FOR UPDATE`,
@@ -616,7 +640,12 @@ router.put('/:id/registrations/:customerId/status',
           const membershipUsage = new Map<number, number>();
 
           attendanceRows.forEach((attendanceRow) => {
-            if (attendanceRow.membership_id === null) return;
+            if (
+              attendanceRow.membership_id === null
+              || attendanceRow.membership_id === currentRegistration.membership_id
+            ) {
+              return;
+            }
             const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
             membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
           });
@@ -650,7 +679,7 @@ router.put('/:id/registrations/:customerId/status',
         `UPDATE yoga_class_registrations
          SET attendance_status = $3
          WHERE class_id = $1 AND customer_id = $2
-         RETURNING id, class_id, customer_id, attendance_status, registration_comment, registered_at`,
+         RETURNING id, class_id, customer_id, membership_id, attendance_status, registration_comment, registered_at`,
         [classId, customerId, attendanceStatus]
       );
 
@@ -969,17 +998,32 @@ router.post('/:id/registrations',
         return res.status(400).json({ error: 'Class is full' });
       }
 
+      const selectedMembership = (usesAlternativeMembership ? eligibleMembershipRows : matchingMembershipRows)[0];
+
       const registrationResult = await client.query(
-        `INSERT INTO yoga_class_registrations (class_id, customer_id)
-         VALUES ($1, $2)
+        `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id)
+         VALUES ($1, $2, $3)
          ON CONFLICT (class_id, customer_id) DO NOTHING
          RETURNING *`,
-        [id, customerId]
+        [id, customerId, selectedMembership?.id ?? null]
       );
 
       if (registrationResult.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Customer already registered' });
+      }
+
+      if (selectedMembership?.remaining_sessions !== null) {
+        await client.query(
+          `UPDATE yoga_memberships
+           SET remaining_sessions = remaining_sessions - 1,
+               is_active = CASE
+                 WHEN (remaining_sessions - 1) <= 0 THEN FALSE
+                 ELSE TRUE
+               END
+           WHERE id = $1`,
+          [selectedMembership.id]
+        );
       }
 
       await client.query('COMMIT');
@@ -1010,18 +1054,46 @@ router.delete('/:id/registrations/me',
         return res.status(403).json({ error: 'Customer account not found' });
       }
 
-      const result = await pool.query(
-        `DELETE FROM yoga_class_registrations
-         WHERE class_id = $1 AND customer_id = $2
-         RETURNING id`,
-        [id, customerId]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Registration not found' });
+        const registrationResult = await client.query(
+          `SELECT id, membership_id, attendance_status
+           FROM yoga_class_registrations
+           WHERE class_id = $1 AND customer_id = $2
+           FOR UPDATE`,
+          [id, customerId]
+        );
+
+        if (registrationResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Registration not found' });
+        }
+
+        const registration = registrationResult.rows[0] as {
+          id: number;
+          membership_id: number | null;
+          attendance_status: 'reserved' | 'attended' | 'absent';
+        };
+
+        if (registration.attendance_status === 'reserved') {
+          await restoreMembershipSessions(client, registration.membership_id);
+        }
+
+        await client.query(
+          'DELETE FROM yoga_class_registrations WHERE id = $1',
+          [registration.id]
+        );
+
+        await client.query('COMMIT');
+        res.json({ message: 'Registration canceled successfully' });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      res.json({ message: 'Registration canceled successfully' });
     } catch (error) {
       console.error('Cancel class registration (self) error:', error);
       res.status(500).json({ error: 'Server error' });
@@ -1037,18 +1109,46 @@ router.delete('/:id/registrations/:customerId',
     const { id, customerId } = req.params;
 
     try {
-      const result = await pool.query(
-        `DELETE FROM yoga_class_registrations
-         WHERE class_id = $1 AND customer_id = $2
-         RETURNING id`,
-        [id, customerId]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Registration not found' });
+        const registrationResult = await client.query(
+          `SELECT id, membership_id, attendance_status
+           FROM yoga_class_registrations
+           WHERE class_id = $1 AND customer_id = $2
+           FOR UPDATE`,
+          [id, customerId]
+        );
+
+        if (registrationResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Registration not found' });
+        }
+
+        const registration = registrationResult.rows[0] as {
+          id: number;
+          membership_id: number | null;
+          attendance_status: 'reserved' | 'attended' | 'absent';
+        };
+
+        if (registration.attendance_status === 'reserved') {
+          await restoreMembershipSessions(client, registration.membership_id);
+        }
+
+        await client.query(
+          'DELETE FROM yoga_class_registrations WHERE id = $1',
+          [registration.id]
+        );
+
+        await client.query('COMMIT');
+        res.json({ message: 'Registration canceled successfully' });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      res.json({ message: 'Registration canceled successfully' });
     } catch (error) {
       console.error('Cancel class registration (admin) error:', error);
       res.status(500).json({ error: 'Server error' });

@@ -518,6 +518,31 @@ test('attendance check/create and delete routes cover transaction branches', asy
   });
   assert.equal(res.status, 201);
 
+  const reservedMembershipClient = h.createDbClientMock();
+  reservedMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가', membership_id: 77 }] },
+    { rows: [] },
+    { rows: [{ id: 77, remaining_sessions: 0, is_active: false }] },
+    { rows: [{ id: 16, membership_id: 77, class_id: 5, class_type: '아쉬탕가' }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(reservedMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(
+    reservedMembershipClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('remaining_sessions = remaining_sessions - 1')
+    ),
+    false
+  );
+
   const postErrClient = h.createDbClientMock();
   postErrClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -578,6 +603,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3 }] },
+    { rows: [{ membership_id: null }] },
     { rows: [{ id: 2, remaining_sessions: 1 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -592,7 +618,32 @@ test('attendance check/create and delete routes cover transaction branches', asy
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
-  assert.match(String(deleteSuccessClient.queryCalls[4][0]), /UPDATE yoga_class_registrations/i);
+  assert.match(String(deleteSuccessClient.queryCalls[5][0]), /UPDATE yoga_class_registrations/i);
+
+  const deleteReservedMembershipClient = h.createDbClientMock();
+  deleteReservedMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 23, membership_id: 4, class_id: 8, customer_id: 9 }] },
+    { rows: [{ membership_id: 4 }] },
+    { rows: [{ id: 4, remaining_sessions: 0 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteReservedMembershipClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '23' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    deleteReservedMembershipClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
+    ),
+    false
+  );
 
   const deleteErrClient = h.createDbClientMock();
   deleteErrClient.queryQueue.push(

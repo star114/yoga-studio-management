@@ -647,7 +647,8 @@ test('class registration and recurring routes cover core branches', async () => 
     { rows: [{ id: 778, remaining_sessions: 3, is_title_match: false }] },
     { rows: [{ reserved_count: 1 }] },
     { rows: [{ count: 1 }] },
-    { rows: [{ id: 199, class_id: 11, customer_id: 1 }] },
+    { rows: [{ id: 199, class_id: 11, customer_id: 1, membership_id: 778 }] },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(crossMembershipAllowedClient);
@@ -735,7 +736,8 @@ test('class registration and recurring routes cover core branches', async () => 
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
     { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 1 }] },
-    { rows: [{ id: 99, class_id: 11, customer_id: 1 }] },
+    { rows: [{ id: 99, class_id: 11, customer_id: 1, membership_id: 501 }] },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(successClient);
@@ -748,7 +750,14 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 201);
 
-  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [] });
+  const cancelSelfNotFoundClient = h.createDbClientMock();
+  cancelSelfNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelSelfNotFoundClient);
+  h.queryQueue.push({ rows: [{ id: 7 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id/registrations/me',
@@ -757,7 +766,16 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [{ id: 1 }] });
+  const cancelSelfSuccessClient = h.createDbClientMock();
+  cancelSelfSuccessClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelSelfSuccessClient);
+  h.queryQueue.push({ rows: [{ id: 7 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id/registrations/me',
@@ -766,7 +784,14 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 200);
 
-  h.queryQueue.push(new Error('cancel self fail'));
+  const cancelSelfErrorClient = h.createDbClientMock();
+  cancelSelfErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    new Error('cancel self fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelSelfErrorClient);
+  h.queryQueue.push({ rows: [{ id: 7 }] });
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id/registrations/me',
@@ -792,7 +817,13 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 403);
 
-  h.queryQueue.push({ rows: [] });
+  const cancelAdminNotFoundClient = h.createDbClientMock();
+  cancelAdminNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminNotFoundClient);
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id/registrations/:customerId',
@@ -801,7 +832,15 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 1 }] });
+  const cancelAdminSuccessClient = h.createDbClientMock();
+  cancelAdminSuccessClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminSuccessClient);
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id/registrations/:customerId',
@@ -810,7 +849,13 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 200);
 
-  h.queryQueue.push(new Error('cancel admin fail'));
+  const cancelAdminErrorClient = h.createDbClientMock();
+  cancelAdminErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    new Error('cancel admin fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminErrorClient);
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id/registrations/:customerId',
