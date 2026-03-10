@@ -227,6 +227,25 @@ describe('CustomerDetail page', () => {
     expect(screen.queryByRole('button', { name: '고객 정보 저장' })).toBeNull();
   });
 
+  it('formats plain phone digits while editing customer detail', async () => {
+    updateCustomerMock.mockResolvedValueOnce(undefined);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '기본 정보 수정' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '기본 정보 수정' }));
+
+    fireEvent.change(screen.getByLabelText('고객 전화번호'), { target: { value: '01000000000' } });
+    expect((screen.getByLabelText('고객 전화번호') as HTMLInputElement).value).toBe('010-0000-0000');
+
+    fireEvent.click(screen.getByRole('button', { name: '고객 정보 저장' }));
+
+    await waitFor(() => expect(updateCustomerMock).toHaveBeenCalledWith(1, {
+      name: '홍길동',
+      phone: '010-0000-0000',
+      notes: '메모',
+    }));
+  });
+
   it('validates required phone in customer edit and shows update error', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     updateCustomerMock.mockRejectedValueOnce(new Error('update failed'));

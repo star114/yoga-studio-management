@@ -7,6 +7,7 @@ import {
   shouldConfirmCrossMembershipRegistration,
 } from '../utils/apiError';
 import { formatKoreanDate, formatKoreanDateTime } from '../utils/dateFormat';
+import { formatPhoneNumberInput } from '../utils/phoneNumber';
 
 interface Customer {
   id: number;
@@ -443,7 +444,7 @@ const CustomerDetail: React.FC = () => {
   const handleSaveCustomer = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    const trimmedPhone = editCustomerForm.phone.trim();
+    const trimmedPhone = formatPhoneNumberInput(editCustomerForm.phone.trim());
     if (!trimmedPhone) {
       setError('전화번호는 필수입니다.');
       return;
@@ -632,7 +633,7 @@ const CustomerDetail: React.FC = () => {
                   id="customer-detail-phone"
                   className="input-field"
                   value={editCustomerForm.phone}
-                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, phone: formatPhoneNumberInput(e.target.value) }))}
                   required
                 />
               </div>

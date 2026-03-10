@@ -107,6 +107,27 @@ describe('CustomerManagement page', () => {
     expect(await screen.findByText('홍길동')).toBeTruthy();
   });
 
+  it('formats plain phone digits before submitting create form', async () => {
+    createMock.mockResolvedValueOnce(undefined);
+    getAllMock.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('표시할 고객이 없습니다.')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '홍길동' } });
+    fireEvent.change(screen.getByLabelText('전화번호'), { target: { value: '01000000000' } });
+
+    expect((screen.getByLabelText('전화번호') as HTMLInputElement).value).toBe('010-0000-0000');
+
+    fireEvent.click(screen.getByRole('button', { name: '고객 생성' }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledWith({
+      name: '홍길동',
+      phone: '010-0000-0000',
+      notes: null,
+    }));
+  });
+
   it('shows parsed error when create fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     createMock.mockRejectedValueOnce(new Error('create failed'));
