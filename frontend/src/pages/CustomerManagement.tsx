@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { customerAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
+import { formatPhoneNumberInput } from '../utils/phoneNumber';
 
 interface Customer {
   id: number;
@@ -73,11 +74,10 @@ const CustomerManagement: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setIsSubmitting(true);
-    setFormError('');
+    setIsSubmitting(true); setFormError('');
 
     try {
-      const trimmedPhone = form.phone.trim();
+      const trimmedPhone = formatPhoneNumberInput(form.phone.trim());
 
       if (!trimmedPhone) {
         setFormError('전화번호는 필수입니다.');
@@ -142,7 +142,7 @@ const CustomerManagement: React.FC = () => {
                 id="customer-phone"
                 className="input-field"
                 value={form.phone}
-                onChange={(e) => handleFormChange('phone', e.target.value)}
+                onChange={(e) => handleFormChange('phone', formatPhoneNumberInput(e.target.value))}
                 required
               />
               <p className="mt-1 text-xs text-warm-500">입력한 전화번호가 로그인 아이디로 사용됩니다.</p>
@@ -222,12 +222,7 @@ const CustomerManagement: React.FC = () => {
                       <td className="py-3 pr-4">{customer.total_attendance ?? 0}</td>
                       <td className="py-3 pr-0">
                         <div className="flex justify-end gap-2">
-                          <Link
-                            to={`/customers/${customer.id}`}
-                            className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
-                          >
-                            상세
-                          </Link>
+                          <Link to={`/customers/${customer.id}`} className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200">상세</Link>
                           <button
                             type="button"
                             onClick={() => handleDelete(customer)}

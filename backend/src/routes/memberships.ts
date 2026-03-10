@@ -118,10 +118,18 @@ router.get('/customer/:customerId', authenticate, async (req, res) => {
         m.*,
         mt.name as membership_type_name,
         mt.description,
+        mt.total_sessions,
+        COALESCE(usage_summary.consumed_sessions, 0) AS consumed_sessions,
         usage.start_date,
         projection.expected_end_date
       FROM yoga_memberships m
       LEFT JOIN yoga_membership_types mt ON m.membership_type_id = mt.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS consumed_sessions
+        FROM yoga_class_registrations r
+        WHERE r.membership_id = m.id
+          AND r.attendance_status IN ('attended', 'absent')
+      ) usage_summary ON true
       LEFT JOIN LATERAL (
         SELECT MIN(events.class_date) AS start_date
         FROM (
@@ -226,10 +234,18 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { remaining_sessions, is_active, notes } = req.body;
-    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(req.body || {}, 'remaining_sessions');
-    const hasIsActive = Object.prototype.hasOwnProperty.call(req.body || {}, 'is_active');
-    const hasNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'notes');
+    const requestBody = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body as Record<string, unknown>
+      : null;
+
+    if (requestBody === null) {
+      return res.status(400).json({ error: 'Request body must be an object' });
+    }
+
+    const { remaining_sessions, is_active, notes } = requestBody;
+    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(requestBody, 'remaining_sessions');
+    const hasIsActive = Object.prototype.hasOwnProperty.call(requestBody, 'is_active');
+    const hasNotes = Object.prototype.hasOwnProperty.call(requestBody, 'notes');
 
     if (hasIsActive && typeof is_active !== 'boolean') {
       return res.status(400).json({ error: 'is_active must be boolean' });

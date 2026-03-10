@@ -107,6 +107,27 @@ describe('CustomerManagement page', () => {
     expect(await screen.findByText('홍길동')).toBeTruthy();
   });
 
+  it('formats plain phone digits before submitting create form', async () => {
+    createMock.mockResolvedValueOnce(undefined);
+    getAllMock.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('표시할 고객이 없습니다.')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '홍길동' } });
+    fireEvent.change(screen.getByLabelText('전화번호'), { target: { value: '01000000000' } });
+
+    expect((screen.getByLabelText('전화번호') as HTMLInputElement).value).toBe('010-0000-0000');
+
+    fireEvent.click(screen.getByRole('button', { name: '고객 생성' }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledWith({
+      name: '홍길동',
+      phone: '010-0000-0000',
+      notes: null,
+    }));
+  });
+
   it('shows parsed error when create fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     createMock.mockRejectedValueOnce(new Error('create failed'));
@@ -180,6 +201,26 @@ describe('CustomerManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('수정대상')).toBeTruthy());
     expect(screen.queryByRole('button', { name: '수정' })).toBeNull();
+  });
+
+  it('renders detail link for each customer row', async () => {
+    getAllMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 7,
+          user_id: 7,
+          name: '링크대상',
+          phone: '010-7777-7777',
+          membership_count: 1,
+          total_attendance: 1,
+        },
+      ],
+    });
+
+    renderPage();
+
+    const detailLink = await screen.findByRole('link', { name: '상세' });
+    expect(detailLink.getAttribute('href')).toBe('/customers/7');
   });
 
   it('delete flow handles cancel and success', async () => {

@@ -242,7 +242,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   process.env.JWT_SECRET = 'test-secret';
   const h = createMembershipsHarness();
 
-  h.queryQueue.push({ rows: [{ id: 10 }] });
+  h.queryQueue.push({
+    rows: [{
+      id: 10,
+      total_sessions: 10,
+      consumed_sessions: 4,
+      remaining_sessions: 3,
+    }],
+  });
   let res = await h.runRoute({
     method: 'get',
     routePath: '/customer/:customerId',
@@ -251,6 +258,8 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].total_sessions, 10);
+  assert.equal(res.body[0].consumed_sessions, 4);
 
   h.queryQueue.push(new Error('customer memberships fail'));
   res = await h.runRoute({
@@ -343,6 +352,16 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 404);
 
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: null,
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Request body must be an object');
+
   h.queryQueue.push({ rows: [{ id: 201, notes: 'x2' }] });
   res = await h.runRoute({
     method: 'put',
@@ -366,6 +385,31 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.is_active, false);
+
+  h.queryQueue.push(
+    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] },
+    { rows: [{ id: 203, remaining_sessions: 8, is_active: false, notes: null }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '203' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { is_active: false },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.id, 203);
+  assert.equal(res.body.is_active, false);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '999' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { is_active: false },
+  });
+  assert.equal(res.status, 404);
 
   res = await h.runRoute({
     method: 'put',

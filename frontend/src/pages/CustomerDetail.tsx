@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { classAPI, customerAPI, membershipAPI } from '../services/api';
-import { parseApiError } from '../utils/apiError';
+import {
+  getCrossMembershipConfirmationMessage,
+  parseApiError,
+  shouldConfirmCrossMembershipRegistration,
+} from '../utils/apiError';
 import { formatKoreanDate, formatKoreanDateTime } from '../utils/dateFormat';
+import { formatPhoneNumberInput } from '../utils/phoneNumber';
 
 interface Customer {
   id: number;
@@ -21,6 +26,8 @@ interface Membership {
   id: number;
   membership_type_name: string;
   remaining_sessions?: number | null;
+  total_sessions?: number | null;
+  consumed_sessions?: number;
   is_active: boolean;
   notes?: string | null;
   start_date?: string | null;
@@ -38,10 +45,10 @@ interface RecommendedClass {
   is_registered: boolean;
 }
 
-type ActivityTypeFilter = 'all' | 'attended' | 'reserved';
+type ActivityTypeFilter = 'all' | 'attended' | 'reserved' | 'absent';
 
 interface ClassActivity {
-  activity_type: 'attended' | 'reserved';
+  activity_type: 'attended' | 'reserved' | 'absent';
   activity_id: number;
   class_id?: number | null;
   class_title?: string | null;
@@ -85,6 +92,14 @@ const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
   notes: '',
 };
 const ACTIVITY_PAGE_SIZE = 10;
+
+const formatConsumedSummary = (membership: Membership) => {
+  const consumedSessions = membership.consumed_sessions ?? 0;
+  if (membership.total_sessions === null || membership.total_sessions === undefined) {
+    return `${consumedSessions}회`;
+  }
+  return `${consumedSessions} / ${membership.total_sessions}회`;
+};
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams();
@@ -368,6 +383,39 @@ const CustomerDetail: React.FC = () => {
       showNotice('수업을 예약했습니다.');
     } catch (reserveError: unknown) {
       console.error('Failed to reserve class from membership card:', reserveError);
+      if (shouldConfirmCrossMembershipRegistration(reserveError)) {
+        const ok = window.confirm(getCrossMembershipConfirmationMessage(reserveError));
+        if (ok) {
+          try {
+            await classAPI.register(classId, {
+              customer_id: customerId,
+              allow_cross_membership_registration: true,
+            });
+            setMembershipRecommendedClasses((prev) => {
+              const classes = prev[membershipId] as RecommendedClass[];
+              return {
+                ...prev,
+                [membershipId]: classes.map((item) => {
+                  if (item.id !== classId) return item;
+                  return {
+                    ...item,
+                    is_registered: true,
+                    remaining_seats: Math.max(0, item.remaining_seats - 1),
+                    current_enrollment: item.current_enrollment + 1,
+                  };
+                }),
+              };
+            });
+            showNotice('다른 회원권 차감으로 수업을 예약했습니다.');
+            return;
+          } catch (retryError: unknown) {
+            console.error('Failed to reserve class with alternative membership:', retryError);
+            setError(parseApiError(retryError));
+            return;
+          }
+        }
+        return;
+      }
       setError(parseApiError(reserveError));
     } finally {
       setClassReservationLoading((prev) => ({ ...prev, [classId]: false }));
@@ -396,7 +444,7 @@ const CustomerDetail: React.FC = () => {
   const handleSaveCustomer = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    const trimmedPhone = editCustomerForm.phone.trim();
+    const trimmedPhone = formatPhoneNumberInput(editCustomerForm.phone.trim());
     if (!trimmedPhone) {
       setError('전화번호는 필수입니다.');
       return;
@@ -585,7 +633,7 @@ const CustomerDetail: React.FC = () => {
                   id="customer-detail-phone"
                   className="input-field"
                   value={editCustomerForm.phone}
-                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => setEditCustomerForm((prev) => ({ ...prev, phone: formatPhoneNumberInput(e.target.value) }))}
                   required
                 />
               </div>
@@ -721,7 +769,8 @@ const CustomerDetail: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">잔여 횟수: {membership.remaining_sessions ?? '무제한'}</p>
+                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.remaining_sessions ?? '무제한'}</p>
+                      <p className="text-sm text-warm-700">소진 횟수: {formatConsumedSummary(membership)}</p>
                       <p className="text-sm text-warm-700">
                         시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
                       </p>
@@ -798,7 +847,7 @@ const CustomerDetail: React.FC = () => {
       <section className="card">
         <div className="space-y-3 mb-4">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-display font-semibold text-primary-800">수업 기록 (출석/예약)</h2>
+            <h2 className="text-xl font-display font-semibold text-primary-800">수업 기록 (출석/예약/결석)</h2>
             <button
               type="button"
               className="btn-secondary text-sm"
@@ -837,6 +886,7 @@ const CustomerDetail: React.FC = () => {
                   <option value="all">전체</option>
                   <option value="attended">출석</option>
                   <option value="reserved">예약</option>
+                  <option value="absent">결석</option>
                 </select>
               </div>
 
@@ -919,8 +969,20 @@ const CustomerDetail: React.FC = () => {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${item.activity_type === 'reserved' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                        {item.activity_type === 'reserved' ? '예약' : '출석'}
+                      <span
+                        className={`px-2 py-0.5 text-xs rounded-full ${
+                          item.activity_type === 'reserved'
+                            ? 'bg-blue-100 text-blue-700'
+                            : item.activity_type === 'absent'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {item.activity_type === 'reserved'
+                          ? '예약'
+                          : item.activity_type === 'absent'
+                            ? '결석'
+                            : '출석'}
                       </span>
                       {item.class_id ? (
                         <Link
@@ -952,7 +1014,7 @@ const CustomerDetail: React.FC = () => {
                         >
                           {activityActionLoading[`reserved-${item.activity_id}`] ? '처리 중...' : '예약 취소'}
                         </button>
-                      ) : (
+                      ) : item.activity_type === 'attended' ? (
                         <button
                           type="button"
                           className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
@@ -961,7 +1023,7 @@ const CustomerDetail: React.FC = () => {
                         >
                           {activityActionLoading[`attended-${item.activity_id}`] ? '처리 중...' : '결석 처리'}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>

@@ -9,7 +9,7 @@ const router = express.Router();
 const AUTH_FAILURE_MESSAGE = '아이디 또는 비밀번호가 올바르지 않습니다.';
 
 const normalizePhoneNumber = (value: string): string | null => {
-  const digits = String(value || '').replace(/\D/g, '');
+  const digits = String(value).replace(/\D/g, '');
   if (!/^\d{11}$/.test(digits)) {
     return null;
   }

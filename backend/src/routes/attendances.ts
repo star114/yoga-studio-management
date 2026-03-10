@@ -101,7 +101,7 @@ router.post('/',
 
       const classId = Number(class_id);
       const classResult = await client.query(
-        `SELECT cls.id, cls.title
+        `SELECT cls.id, cls.title, reg.membership_id
          FROM yoga_classes cls
          INNER JOIN yoga_class_registrations reg ON reg.class_id = cls.id
          WHERE cls.id = $1 AND reg.customer_id = $2
@@ -116,6 +116,7 @@ router.post('/',
       }
 
       resolvedClassId = classResult.rows[0].id as number;
+      const reservedMembershipId = classResult.rows[0].membership_id as number | null | undefined;
       if (!resolvedClassType) {
         resolvedClassType = String(classResult.rows[0].title ?? '').trim();
       }
@@ -136,7 +137,18 @@ router.post('/',
 
       // 활성 회원권 확인
       let activeMembership;
-      if (membership_id) {
+      if (reservedMembershipId !== null && reservedMembershipId !== undefined) {
+        const membershipResult = await client.query(
+          'SELECT * FROM yoga_memberships WHERE id = $1 AND customer_id = $2',
+          [reservedMembershipId, customer_id]
+        );
+
+        if (membershipResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Reserved membership not found' });
+        }
+        activeMembership = membershipResult.rows[0];
+      } else if (membership_id) {
         const membershipResult = await client.query(
           `SELECT * FROM yoga_memberships
            WHERE id = $1 AND customer_id = $2 AND is_active = true`,
@@ -174,7 +186,10 @@ router.post('/',
       }
 
       // 횟수제 회원권인 경우 잔여 횟수 확인
-      if (activeMembership.remaining_sessions !== null) {
+      if (
+        (reservedMembershipId === null || reservedMembershipId === undefined)
+        && activeMembership.remaining_sessions !== null
+      ) {
         if (activeMembership.remaining_sessions <= 0) {
           await client.query('ROLLBACK');
           return res.status(400).json({ error: 'No remaining sessions' });
@@ -197,13 +212,17 @@ router.post('/',
 
       await client.query(
         `UPDATE yoga_class_registrations
-         SET attendance_status = 'attended'
+         SET attendance_status = 'attended',
+             membership_id = COALESCE(membership_id, $3)
          WHERE class_id = $1 AND customer_id = $2`,
-        [resolvedClassId, customer_id]
+        [resolvedClassId, customer_id, activeMembership.id]
       );
 
-      // 횟수제 회원권인 경우 잔여 횟수 차감
-      if (activeMembership.remaining_sessions !== null) {
+      // 예약 시점에 차감된 회원권이면 중복 차감하지 않는다.
+      if (
+        (reservedMembershipId === null || reservedMembershipId === undefined)
+        && activeMembership.remaining_sessions !== null
+      ) {
         await client.query(
           `UPDATE yoga_memberships 
            SET remaining_sessions = remaining_sessions - 1,
@@ -393,6 +412,19 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     }
 
     const attendance = attendanceResult.rows[0];
+    let linkedRegistrationMembershipId: number | null = null;
+
+    if (attendance.class_id) {
+      const registrationResult = await client.query(
+        `SELECT membership_id
+         FROM yoga_class_registrations
+         WHERE class_id = $1
+           AND customer_id = $2
+         LIMIT 1`,
+        [attendance.class_id, attendance.customer_id]
+      );
+      linkedRegistrationMembershipId = (registrationResult.rows[0]?.membership_id as number | null | undefined) ?? null;
+    }
 
     // 회원권 정보 조회
     const membershipResult = await client.query(
@@ -404,7 +436,10 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       const membership = membershipResult.rows[0];
       
       // 횟수제 회원권인 경우 잔여 횟수 복원
-      if (membership.remaining_sessions !== null) {
+      if (
+        membership.remaining_sessions !== null
+        && linkedRegistrationMembershipId !== attendance.membership_id
+      ) {
         await client.query(
           `UPDATE yoga_memberships 
            SET remaining_sessions = remaining_sessions + 1,

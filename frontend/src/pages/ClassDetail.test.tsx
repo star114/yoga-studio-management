@@ -1,4 +1,5 @@
 import React from 'react';
+import { AxiosError } from 'axios';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -17,6 +18,8 @@ const {
   attendanceCheckInMock,
   customerGetAllMock,
   parseApiErrorMock,
+  shouldConfirmCrossMembershipRegistrationMock,
+  getCrossMembershipConfirmationMessageMock,
 } = vi.hoisted(() => ({
   classGetByIdMock: vi.fn(),
   classGetRegistrationsMock: vi.fn(),
@@ -30,6 +33,8 @@ const {
   attendanceCheckInMock: vi.fn(),
   customerGetAllMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
+  shouldConfirmCrossMembershipRegistrationMock: vi.fn(() => false),
+  getCrossMembershipConfirmationMessageMock: vi.fn(() => '회원권이 없는데 등록하시겠어요? 다른 회원권에서 1회 차감됩니다.'),
 }));
 
 const navigateMock = vi.fn();
@@ -66,6 +71,8 @@ vi.mock('../services/api', () => ({
 
 vi.mock('../utils/apiError', () => ({
   parseApiError: parseApiErrorMock,
+  shouldConfirmCrossMembershipRegistration: shouldConfirmCrossMembershipRegistrationMock,
+  getCrossMembershipConfirmationMessage: getCrossMembershipConfirmationMessageMock,
 }));
 
 const renderPage = () => render(
@@ -108,6 +115,7 @@ const seedLoad = (overrides?: Record<string, unknown>) => {
     data: [
       { id: 101, name: '홍길동', phone: '010-1111-2222' },
       { id: 102, name: '김영희', phone: '010-2222-3333' },
+      { id: 103, name: '박민수', phone: '010-9999-8888' },
     ],
   });
 };
@@ -117,6 +125,7 @@ describe('ClassDetail page', () => {
     vi.resetAllMocks();
     routeId = '1';
     seedLoad();
+    vi.stubGlobal('confirm', vi.fn(() => true));
     classGetRegistrationCommentThreadMock.mockResolvedValue({
       data: { attendance_id: 9001, messages: [] },
     });
@@ -134,6 +143,7 @@ describe('ClassDetail page', () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('shows invalid route error for bad class id', async () => {
@@ -173,6 +183,17 @@ describe('ClassDetail page', () => {
     expect(screen.getByText('상태: 오픈')).toBeTruthy();
     expect(screen.getByText('홍길동')).toBeTruthy();
     expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
+  });
+
+  it('filters manual registration customers by search keyword', async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('고객 검색')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('고객 검색'), { target: { value: '2222' } });
+
+    expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: '신청할 고객 선택' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: '박민수 (010-9999-8888)' })).toBeFalsy();
   });
 
   it('updates class basic info from detail page', async () => {
@@ -343,11 +364,54 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(1, { customer_id: 102 }));
     await waitFor(() => expect(screen.getByText('수동 신청이 등록되었습니다.')).toBeTruthy());
+  });
+
+  it('registers walk-in attendance manually after class completion', async () => {
+    classGetByIdMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '완료수업',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        max_capacity: 10,
+        is_open: false,
+        class_status: 'completed',
+      },
+    });
+    classGetRegistrationsMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 2,
+            class_id: 1,
+            customer_id: 102,
+            registered_at: '2026-03-01T02:00:00.000Z',
+            attendance_status: 'attended',
+            customer_name: '김영희',
+            customer_phone: '010-2222-3333',
+          },
+        ],
+      });
+    classRegisterMock.mockResolvedValueOnce(undefined);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '사후 출석 등록' })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: '사후 출석 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(1, {
+      customer_id: 102,
+      mark_attended_after_register: true,
+    }));
+    await waitFor(() => expect(screen.getByText('사후 출석 등록을 완료했습니다.')).toBeTruthy());
   });
 
   it('shows parsed error when manual register fails', async () => {
@@ -357,7 +421,7 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('option', { name: '김영희 (010-2222-3333)' })).toBeTruthy());
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
@@ -403,7 +467,7 @@ describe('ClassDetail page', () => {
     classGetByIdMock.mockResolvedValueOnce({ data: null });
     classGetRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
     fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
 
     await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
@@ -811,7 +875,149 @@ describe('ClassDetail page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('disables register/cancel buttons for completed or unavailable class state', async () => {
+  it('retries manual registration after cross-membership confirmation', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    classRegisterMock
+      .mockRejectedValueOnce(crossMembershipError)
+      .mockResolvedValueOnce(undefined);
+    classGetRegistrationsMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 1,
+            class_id: 1,
+            customer_id: 101,
+            registered_at: '2026-03-01T01:00:00.000Z',
+            customer_name: '홍길동',
+            customer_phone: '010-1111-2222',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 1,
+            class_id: 1,
+            customer_id: 101,
+            registered_at: '2026-03-01T01:00:00.000Z',
+            customer_name: '홍길동',
+            customer_phone: '010-1111-2222',
+          },
+          {
+            id: 2,
+            class_id: 1,
+            customer_id: 102,
+            registered_at: '2026-03-01T02:00:00.000Z',
+            customer_name: '김영희',
+            customer_phone: '010-2222-3333',
+          },
+        ],
+      });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(1, 1, { customer_id: 102 }));
+    await waitFor(() => expect(globalThis.confirm).toHaveBeenCalledWith('회원권이 없는데 등록하시겠어요? 다른 회원권에서 1회 차감됩니다.'));
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(2, 1, {
+      customer_id: 102,
+      allow_cross_membership_registration: true,
+    }));
+    await waitFor(() => expect(screen.getByText('다른 회원권 차감으로 수동 신청이 등록되었습니다.')).toBeTruthy());
+  });
+
+  it('retries post-attendance registration after cross-membership confirmation', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    classGetByIdMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '완료수업',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        max_capacity: 10,
+        is_open: false,
+        class_status: 'completed',
+      },
+    });
+    classGetRegistrationsMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 2,
+            class_id: 1,
+            customer_id: 102,
+            registered_at: '2026-03-01T02:00:00.000Z',
+            attendance_status: 'attended',
+            customer_name: '김영희',
+            customer_phone: '010-2222-3333',
+          },
+        ],
+      });
+    classRegisterMock
+      .mockRejectedValueOnce(crossMembershipError)
+      .mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '사후 출석 등록' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: '사후 출석 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(1, 1, {
+      customer_id: 102,
+      mark_attended_after_register: true,
+    }));
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(2, 1, {
+      customer_id: 102,
+      allow_cross_membership_registration: true,
+      mark_attended_after_register: true,
+    }));
+    await waitFor(() => expect(screen.getByText('다른 회원권 차감으로 사후 출석 등록을 완료했습니다.')).toBeTruthy());
+  });
+
+  it('stops manual registration retry when cross-membership confirmation is canceled', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    (globalThis.confirm as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+    classRegisterMock.mockRejectedValueOnce(crossMembershipError);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledTimes(1));
+    expect(parseApiErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('shows error when cross-membership retry fails during manual registration', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    const retryError = new Error('retry failed');
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    classRegisterMock
+      .mockRejectedValueOnce(crossMembershipError)
+      .mockRejectedValueOnce(retryError);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(parseApiErrorMock).toHaveBeenCalledWith(retryError));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+  });
+
+  it('keeps completed-class attendance actions available except cancel', async () => {
     classGetByIdMock.mockResolvedValueOnce({
       data: {
         id: 1,
@@ -828,7 +1034,8 @@ describe('ClassDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('상태: 완료')).toBeTruthy());
-    expect((screen.getByRole('button', { name: '수동 신청 등록' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '사후 출석 등록' }) as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole('button', { name: '신청 취소' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '출석 체크' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

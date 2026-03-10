@@ -236,11 +236,48 @@ test('attendances list/update/today routes cover success and errors', async () =
     routePath: '/:id',
     params: { id: '8' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { class_id: 2 },
+    body: { class_id: 2, class_type: '직접입력2' },
   });
   assert.equal(res.status, 200);
   assert.match(String(updateMoveClassClient.queryCalls[6][0]), /UPDATE yoga_class_registrations r/i);
   assert.match(String(updateMoveClassClient.queryCalls[7][0]), /SET attendance_status = 'attended'/i);
+
+  const updateMissingRegistrationClient = h.createDbClientMock();
+  updateMissingRegistrationClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, customer_id: 3, class_id: 1 }] },
+    { rows: [{ id: 2, title: '빈야사' }] },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateMissingRegistrationClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '8' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { class_id: 2 },
+  });
+  assert.equal(res.status, 400);
+
+  const updateDuplicateAttendanceClient = h.createDbClientMock();
+  updateDuplicateAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, customer_id: 3, class_id: 1 }] },
+    { rows: [{ id: 2, title: '빈야사' }] },
+    { rows: [{ id: 900 }] },
+    { rows: [{ id: 901 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateDuplicateAttendanceClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '8' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { class_id: 2 },
+  });
+  assert.equal(res.status, 409);
 
   const updateErrClient = h.createDbClientMock();
   updateErrClient.queryQueue.push(
@@ -301,7 +338,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3, membership_id: 9, class_id: 5 },
+    body: { customer_id: 3, membership_id: 9, class_id: 5, class_type: '직접입력' },
   });
   assert.equal(res.status, 400);
 
@@ -319,9 +356,28 @@ test('attendance check/create and delete routes cover transaction branches', asy
     method: 'post',
     routePath: '/',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { customer_id: 3, membership_id: 9, class_id: 5 },
+    body: { customer_id: 3, membership_id: 9, class_id: 5, class_type: '직접입력' },
   });
   assert.equal(res.status, 201);
+
+  const blankTitleClient = h.createDbClientMock();
+  blankTitleClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: null }] },
+    { rows: [] },
+    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 14, membership_id: 9, class_type: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(blankTitleClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, membership_id: 9, class_id: 5, class_type: '   ' },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(blankTitleClient.queryCalls[4][1][4], null);
 
   const classMismatchClient = h.createDbClientMock();
   classMismatchClient.queryQueue.push(
@@ -462,6 +518,49 @@ test('attendance check/create and delete routes cover transaction branches', asy
   });
   assert.equal(res.status, 201);
 
+  const reservedMembershipClient = h.createDbClientMock();
+  reservedMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가', membership_id: 77 }] },
+    { rows: [] },
+    { rows: [{ id: 77, remaining_sessions: 0, is_active: false }] },
+    { rows: [{ id: 16, membership_id: 77, class_id: 5, class_type: '아쉬탕가' }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(reservedMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(
+    reservedMembershipClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('remaining_sessions = remaining_sessions - 1')
+    ),
+    false
+  );
+
+  const reservedMembershipMissingClient = h.createDbClientMock();
+  reservedMembershipMissingClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가', membership_id: 77 }] },
+    { rows: [] },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(reservedMembershipMissingClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body?.error, 'Reserved membership not found');
+
   const postErrClient = h.createDbClientMock();
   postErrClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -478,6 +577,30 @@ test('attendance check/create and delete routes cover transaction branches', asy
     body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 500);
+
+  const blankTitleUpdateClient = h.createDbClientMock();
+  blankTitleUpdateClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 9, customer_id: 3, class_id: 1 }] },
+    { rows: [{ id: 6, title: null }] },
+    { rows: [{ id: 91 }] },
+    { rows: [] },
+    { rows: [{ id: 9, class_type: null, class_id: 6 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(blankTitleUpdateClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '9' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { class_id: 6, class_type: '   ' },
+  });
+  assert.equal(res.status, 200);
+  const blankTitleUpdateCall = blankTitleUpdateClient.queryCalls.find((call) =>
+    String(call[0]).includes('UPDATE yoga_attendances')
+  );
+  assert.ok(blankTitleUpdateCall);
 
   const deleteNotFoundClient = h.createDbClientMock();
   deleteNotFoundClient.queryQueue.push(
@@ -498,6 +621,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3 }] },
+    { rows: [{ membership_id: null }] },
     { rows: [{ id: 2, remaining_sessions: 1 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -512,7 +636,32 @@ test('attendance check/create and delete routes cover transaction branches', asy
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
-  assert.match(String(deleteSuccessClient.queryCalls[4][0]), /UPDATE yoga_class_registrations/i);
+  assert.match(String(deleteSuccessClient.queryCalls[5][0]), /UPDATE yoga_class_registrations/i);
+
+  const deleteReservedMembershipClient = h.createDbClientMock();
+  deleteReservedMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 23, membership_id: 4, class_id: 8, customer_id: 9 }] },
+    { rows: [{ membership_id: 4 }] },
+    { rows: [{ id: 4, remaining_sessions: 0 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteReservedMembershipClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '23' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    deleteReservedMembershipClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
+    ),
+    false
+  );
 
   const deleteErrClient = h.createDbClientMock();
   deleteErrClient.queryQueue.push(

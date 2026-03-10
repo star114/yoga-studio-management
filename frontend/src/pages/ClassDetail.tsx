@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { attendanceAPI, classAPI, customerAPI } from '../services/api';
-import { parseApiError } from '../utils/apiError';
+import {
+  getCrossMembershipConfirmationMessage,
+  parseApiError,
+  shouldConfirmCrossMembershipRegistration,
+} from '../utils/apiError';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 
 interface YogaClassDetail {
@@ -67,6 +71,7 @@ const ClassDetail: React.FC = () => {
   const [classDetail, setClassDetail] = useState<YogaClassDetail | null>(null);
   const [registrations, setRegistrations] = useState<ClassRegistration[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [manualRegisterSearch, setManualRegisterSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [savingAttendanceStatusCustomerId, setSavingAttendanceStatusCustomerId] = useState<number | null>(null);
   const [loadingThreadCustomerIds, setLoadingThreadCustomerIds] = useState<Record<number, boolean>>({});
@@ -84,6 +89,7 @@ const ClassDetail: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const isCompletedClass = classDetail?.class_status === 'completed';
 
   const classStatusLabel = useMemo(() => {
     switch (classDetail?.class_status) {
@@ -102,6 +108,20 @@ const ClassDetail: React.FC = () => {
     const registered = new Set(registrations.map((item) => item.customer_id));
     return customers.filter((customer) => !registered.has(customer.id));
   }, [customers, registrations]);
+
+  const filteredUnregisteredCustomers = useMemo(() => {
+    const keyword = manualRegisterSearch.trim().toLowerCase();
+
+    if (!keyword) {
+      return unregisteredCustomers;
+    }
+
+    return unregisteredCustomers.filter((customer) => (
+      customer.name.toLowerCase().includes(keyword)
+      || customer.phone.toLowerCase().includes(keyword)
+      || String(customer.id).includes(keyword)
+    ));
+  }, [manualRegisterSearch, unregisteredCustomers]);
 
   useEffect(() => {
     if (!Number.isInteger(classId) || classId < 1) {
@@ -295,16 +315,46 @@ const ClassDetail: React.FC = () => {
       return;
     }
 
+    const customerId = Number(selectedCustomerId);
+
     try {
       setError('');
       setNotice('');
       setIsRegisterSubmitting(true);
-      await classAPI.register(classId, { customer_id: Number(selectedCustomerId) });
+      await classAPI.register(classId, {
+        customer_id: customerId,
+        ...(isCompletedClass ? { mark_attended_after_register: true } : {}),
+      });
+      setManualRegisterSearch('');
       setSelectedCustomerId('');
       await refreshClassAndRegistrations();
-      setNotice('수동 신청이 등록되었습니다.');
+      setNotice(isCompletedClass ? '사후 출석 등록을 완료했습니다.' : '수동 신청이 등록되었습니다.');
     } catch (registerError: unknown) {
       console.error('Failed to register customer:', registerError);
+      if (shouldConfirmCrossMembershipRegistration(registerError)) {
+        const ok = window.confirm(getCrossMembershipConfirmationMessage(registerError));
+        if (ok) {
+          try {
+            await classAPI.register(classId, {
+              customer_id: customerId,
+              allow_cross_membership_registration: true,
+              ...(isCompletedClass ? { mark_attended_after_register: true } : {}),
+            });
+            setManualRegisterSearch('');
+            setSelectedCustomerId('');
+            await refreshClassAndRegistrations();
+            setNotice(isCompletedClass
+              ? '다른 회원권 차감으로 사후 출석 등록을 완료했습니다.'
+              : '다른 회원권 차감으로 수동 신청이 등록되었습니다.');
+            return;
+          } catch (retryError: unknown) {
+            console.error('Failed to register customer with alternative membership:', retryError);
+            setError(parseApiError(retryError));
+            return;
+          }
+        }
+        return;
+      }
       setError(parseApiError(registerError));
     } finally {
       setIsRegisterSubmitting(false);
@@ -623,31 +673,76 @@ const ClassDetail: React.FC = () => {
       </section>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">수동 신청 등록</h2>
-        <form className="flex flex-col md:flex-row gap-3" onSubmit={handleManualRegister}>
-          <select
-            className="input-field md:max-w-sm"
-            value={selectedCustomerId}
-            onChange={(e) => setSelectedCustomerId(e.target.value)}
-          >
-            <option value="">신청할 고객 선택</option>
-            {unregisteredCustomers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name} ({customer.phone})
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            disabled={
-              isRegisterSubmitting
-              || !classDetail.is_open
-              || classDetail.class_status === 'completed'
-            }
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isRegisterSubmitting ? '등록 중...' : '수동 신청 등록'}
-          </button>
+        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+          {isCompletedClass ? '사후 출석 등록' : '수동 신청 등록'}
+        </h2>
+        <form className="space-y-4" onSubmit={handleManualRegister}>
+          <div className="rounded-2xl border border-warm-200 bg-warm-50/80 p-4 space-y-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-sm font-medium text-primary-800">
+                  {isCompletedClass ? '미등록 방문 고객 선택' : '미등록 고객 선택'}
+                </p>
+              </div>
+              <div className="self-start rounded-full bg-white px-3 py-1 text-xs font-semibold text-warm-700 border border-warm-200">
+                검색 결과 {filteredUnregisteredCustomers.length}명
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <label htmlFor="manual-register-search" className="block text-sm font-medium text-warm-700 mb-1">
+                  고객 검색
+                </label>
+                <input
+                  id="manual-register-search"
+                  type="text"
+                  className="input-field h-11 bg-white"
+                  value={manualRegisterSearch}
+                  onChange={(e) => setManualRegisterSearch(e.target.value)}
+                  placeholder="이름/전화번호로 고객 검색"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="manual-register-customer" className="block text-sm font-medium text-warm-700 mb-1">
+                  신청할 고객
+                </label>
+                <select
+                  id="manual-register-customer"
+                  className="input-field h-11 bg-white"
+                  value={selectedCustomerId}
+                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                >
+                  <option value="">신청할 고객 선택</option>
+                  {filteredUnregisteredCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name} ({customer.phone})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {filteredUnregisteredCustomers.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-warm-300 bg-white px-3 py-2 text-sm text-warm-600">
+                검색 조건에 맞는 미등록 고객이 없습니다.
+              </p>
+            ) : (
+              <p className="text-xs text-warm-600">
+                이미 등록된 고객은 목록에서 제외됩니다.
+              </p>
+            )}
+            <div className="flex justify-end pt-1">
+              <button
+                type="submit"
+                disabled={
+                  isRegisterSubmitting
+                  || (!classDetail.is_open && !isCompletedClass)
+                }
+                className="btn-primary min-w-[140px] px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isRegisterSubmitting ? '등록 중...' : isCompletedClass ? '사후 출석 등록' : '수동 신청 등록'}
+              </button>
+            </div>
+          </div>
         </form>
       </section>
 
@@ -686,7 +781,10 @@ const ClassDetail: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => void handleCheckIn(registration.customer_id)}
-                      disabled={classDetail.class_status === 'completed' || checkingInCustomerId === registration.customer_id}
+                      disabled={
+                        checkingInCustomerId === registration.customer_id
+                        || registration.attendance_status === 'attended'
+                      }
                       className="px-3 py-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {checkingInCustomerId === registration.customer_id ? '처리 중...' : '출석 체크'}

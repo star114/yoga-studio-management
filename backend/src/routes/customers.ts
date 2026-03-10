@@ -7,7 +7,7 @@ import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 const router = express.Router();
 
 const normalizePhoneNumber = (value: string): string | null => {
-  const digits = String(value || '').replace(/\D/g, '');
+  const digits = String(value).replace(/\D/g, '');
   if (!/^\d{11}$/.test(digits)) {
     return null;
   }
@@ -123,7 +123,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// 특정 고객 수업 활동(출석/예약) 조회
+// 특정 고객 수업 활동(출석/예약/결석) 조회
 router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) => {
   const { id } = req.params;
   const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
@@ -140,7 +140,7 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
     ? Math.min(Math.floor(rawPageSize), 100)
     : 10;
   const offset = (page - 1) * pageSize;
-  const activityType = ['all', 'attended', 'reserved'].includes(rawActivityType)
+  const activityType = ['all', 'attended', 'reserved', 'absent'].includes(rawActivityType)
     ? rawActivityType
     : 'all';
   const search = rawSearch.trim();
@@ -228,6 +228,26 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
         INNER JOIN yoga_classes cls ON cls.id = r.class_id
         WHERE r.customer_id = $1
           AND r.attendance_status = 'reserved'
+
+        UNION ALL
+
+        SELECT
+          'absent'::text AS activity_type,
+          r.id::int AS activity_id,
+          cls.id::int AS class_id,
+          cls.title::text AS class_title,
+          cls.title::text AS class_type,
+          cls.class_date::date AS class_day,
+          cls.class_date,
+          cls.start_time AS class_start_time,
+          cls.end_time AS class_end_time,
+          NULL::timestamp AS attendance_date,
+          r.registered_at,
+          (cls.class_date::timestamp + cls.start_time) AS sort_at
+        FROM yoga_class_registrations r
+        INNER JOIN yoga_classes cls ON cls.id = r.class_id
+        WHERE r.customer_id = $1
+          AND r.attendance_status = 'absent'
       )
     `;
 
@@ -453,11 +473,8 @@ router.post('/',
       phone: string;
       notes?: string;
     };
-    const trimmedPhone = (phone || '').trim();
+    const trimmedPhone = phone.trim();
 
-    if (!trimmedPhone) {
-      return res.status(400).json({ error: '전화번호는 필수입니다.' });
-    }
     const normalizedPhone = normalizePhoneNumber(trimmedPhone);
     if (!normalizedPhone) {
       return res.status(400).json({ error: '전화번호 형식은 000-0000-0000 이어야 합니다.' });
@@ -521,8 +538,9 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { name, phone, notes } = req.body;
-    const hasPhoneField = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone');
+    const requestBody = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const { name, phone, notes } = requestBody;
+    const hasPhoneField = Object.prototype.hasOwnProperty.call(requestBody, 'phone');
     const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
     const normalizedPhone = hasPhoneField && trimmedPhone
       ? normalizePhoneNumber(trimmedPhone)
