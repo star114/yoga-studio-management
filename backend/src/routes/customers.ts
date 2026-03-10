@@ -538,8 +538,9 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
-    const { name, phone, notes } = req.body;
-    const hasPhoneField = Object.prototype.hasOwnProperty.call(req.body, 'phone');
+    const requestBody = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const { name, phone, notes } = requestBody;
+    const hasPhoneField = Object.prototype.hasOwnProperty.call(requestBody, 'phone');
     const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
     const normalizedPhone = hasPhoneField && trimmedPhone
       ? normalizePhoneNumber(trimmedPhone)

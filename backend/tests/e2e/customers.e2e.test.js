@@ -727,6 +727,29 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
   assert.equal(res.body.error, '전화번호 형식은 000-0000-0000 이어야 합니다.');
   assert.equal(invalidFormatClient.queryCalls.length, 0);
 
+  h.connectQueue.length = 0;
+
+  const nullBodyClient = h.createDbClientMock();
+  nullBodyClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 11, name: 'Existing', phone: '010-1234-5678', notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(nullBodyClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: null,
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.name, 'Existing');
+  assert.equal(
+    nullBodyClient.queryCalls.some(([queryText]) => String(queryText).includes('UPDATE yoga_users u')),
+    false
+  );
+
   h.queryQueue.push({ rows: [] });
   t.mock.method(bcrypt, 'hash', async () => 'r-hash');
   res = await h.runRoute({
