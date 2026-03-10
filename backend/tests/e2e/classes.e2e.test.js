@@ -868,6 +868,30 @@ test('class registration and recurring routes cover core branches', async () => 
     true
   );
 
+  const cancelAdminNullMembershipClient = h.createDbClientMock();
+  cancelAdminNullMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 3, membership_id: null, attendance_status: 'attended' }] },
+    { rows: [{ id: 92, membership_id: null }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminNullMembershipClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '4' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    cancelAdminNullMembershipClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
+    ),
+    false
+  );
+
   const cancelAdminErrorClient = h.createDbClientMock();
   cancelAdminErrorClient.queryQueue.push(
     { rows: [], rowCount: 0 },

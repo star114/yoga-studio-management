@@ -543,6 +543,24 @@ test('attendance check/create and delete routes cover transaction branches', asy
     false
   );
 
+  const reservedMembershipMissingClient = h.createDbClientMock();
+  reservedMembershipMissingClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가', membership_id: 77 }] },
+    { rows: [] },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(reservedMembershipMissingClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body?.error, 'Reserved membership not found');
+
   const postErrClient = h.createDbClientMock();
   postErrClient.queryQueue.push(
     { rows: [], rowCount: 0 },

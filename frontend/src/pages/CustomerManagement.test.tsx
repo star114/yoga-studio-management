@@ -203,6 +203,26 @@ describe('CustomerManagement page', () => {
     expect(screen.queryByRole('button', { name: '수정' })).toBeNull();
   });
 
+  it('renders detail link for each customer row', async () => {
+    getAllMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 7,
+          user_id: 7,
+          name: '링크대상',
+          phone: '010-7777-7777',
+          membership_count: 1,
+          total_attendance: 1,
+        },
+      ],
+    });
+
+    renderPage();
+
+    const detailLink = await screen.findByRole('link', { name: '상세' });
+    expect(detailLink.getAttribute('href')).toBe('/customers/7');
+  });
+
   it('delete flow handles cancel and success', async () => {
     deleteMock.mockResolvedValueOnce(undefined);
     getAllMock

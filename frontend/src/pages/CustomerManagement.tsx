@@ -74,8 +74,7 @@ const CustomerManagement: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setIsSubmitting(true);
-    setFormError('');
+    setIsSubmitting(true); setFormError('');
 
     try {
       const trimmedPhone = formatPhoneNumberInput(form.phone.trim());
@@ -223,12 +222,7 @@ const CustomerManagement: React.FC = () => {
                       <td className="py-3 pr-4">{customer.total_attendance ?? 0}</td>
                       <td className="py-3 pr-0">
                         <div className="flex justify-end gap-2">
-                          <Link
-                            to={`/customers/${customer.id}`}
-                            className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
-                          >
-                            상세
-                          </Link>
+                          <Link to={`/customers/${customer.id}`} className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200">상세</Link>
                           <button
                             type="button"
                             onClick={() => handleDelete(customer)}

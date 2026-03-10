@@ -604,6 +604,55 @@ describe('ClassManagement page', () => {
     }));
   });
 
+  it('ignores malformed stored filters and falls back to default list query', async () => {
+    localStorage.setItem('class-management-filters:1', '{invalid-json');
+    getAllMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+    expect(getAllMock).toHaveBeenCalledTimes(1);
+    expect(getAllMock.mock.calls[0][0]).toBeUndefined();
+  });
+
+  it('falls back to empty date filters when stored values are not strings', async () => {
+    localStorage.setItem('class-management-filters:1', JSON.stringify({
+      showOpenOnly: true,
+      dateFromFilter: 20260201,
+      dateToFilter: false,
+    }));
+    getAllMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+    expect(getAllMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    expect((screen.getByLabelText('오픈 수업만 보기') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('시작일') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('종료일') as HTMLInputElement).value).toBe('');
+  });
+
+  it('skips stored filter hydration when current user is not an admin', async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: 2, login_id: 'customer1', role: 'customer' },
+      customerInfo: null,
+    });
+    localStorage.setItem('class-management-filters:2', JSON.stringify({
+      showOpenOnly: true,
+      dateFromFilter: '2026-02-01',
+      dateToFilter: '2026-02-28',
+    }));
+    getAllMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
+    expect(getAllMock).toHaveBeenCalledTimes(1);
+    expect(getAllMock.mock.calls[0][0]).toBeUndefined();
+  });
+
   it('shows validation error when date range is invalid', async () => {
     getAllMock.mockResolvedValueOnce({ data: [] });
 

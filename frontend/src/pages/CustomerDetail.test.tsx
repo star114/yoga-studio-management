@@ -273,6 +273,7 @@ describe('CustomerDetail page', () => {
           {
             activity_type: 'attended',
             activity_id: 101,
+            class_id: 201,
             class_title: '아쉬탕가',
             class_date: '2026-02-20',
             class_start_time: '09:00:00',
@@ -280,6 +281,7 @@ describe('CustomerDetail page', () => {
           {
             activity_type: 'reserved',
             activity_id: 102,
+            class_id: 202,
             class_title: '빈야사',
             class_date: '2026-02-21',
             class_start_time: '10:00:00',
@@ -287,6 +289,7 @@ describe('CustomerDetail page', () => {
           {
             activity_type: 'absent',
             activity_id: 103,
+            class_id: 203,
             class_title: '하타',
             class_date: '2026-02-22',
             class_start_time: '11:00:00',
@@ -305,6 +308,8 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('예약')).toBeTruthy();
     expect(screen.getByText('결석')).toBeTruthy();
+    expect(screen.queryAllByRole('button', { name: '예약 취소' })).toHaveLength(1);
+    expect(screen.queryAllByRole('button', { name: '결석 처리' })).toHaveLength(1);
   });
 
   it('applies activity filters from modal and requests filtered page', async () => {

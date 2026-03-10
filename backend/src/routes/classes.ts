@@ -43,12 +43,8 @@ const getLatestAttendanceIdByClassCustomer = async (
 
 const restoreMembershipSessions = async (
   client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
-  membershipId: number | null
+  membershipId: number
 ) => {
-  if (membershipId === null) {
-    return;
-  }
-
   await client.query(
     `UPDATE yoga_memberships
      SET remaining_sessions = CASE
@@ -985,7 +981,7 @@ router.post('/:id/registrations',
          VALUES ($1, $2, $3)
          ON CONFLICT (class_id, customer_id) DO NOTHING
          RETURNING *`,
-        [id, customerId, selectedMembership?.id ?? null]
+        [id, customerId, selectedMembership.id]
       );
 
       if (registrationResult.rows.length === 0) {
