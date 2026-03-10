@@ -947,7 +947,7 @@ router.post('/:id/registrations',
           await client.query('ROLLBACK');
           return res.status(400).json({
             error: 'No valid membership for this class',
-            reason: failedChecks[0],
+            reason: failedChecks[0] ?? 'NO_ELIGIBLE_MEMBERSHIP',
             checks: {
               class_title: yogaClass.title,
               has_membership: totalMemberships > 0,

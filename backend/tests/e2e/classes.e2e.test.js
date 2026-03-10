@@ -1431,6 +1431,48 @@ test('class registration diagnostics and recurring creation cover remaining bran
   assert.equal(res.body.reason, 'CLASS_TITLE_MISMATCH');
   assert.equal(res.body.checks.has_alternative_membership, true);
 
+  const noEligibleDiagnosticClient = h.createDbClientMock();
+  noEligibleDiagnosticClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          class_date: '2999-01-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+        },
+      ],
+    },
+    { rows: [] },
+    {
+      rows: [
+        {
+          total_memberships: 2,
+          active_memberships: 1,
+          remaining_memberships: 1,
+          eligible_memberships: 0,
+          title_matched_memberships: 1,
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(noEligibleDiagnosticClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.reason, 'NO_ELIGIBLE_MEMBERSHIP');
+  assert.deepEqual(res.body.failed_checks, []);
+
   const crossMembershipRemainingClient = h.createDbClientMock();
   crossMembershipRemainingClient.queryQueue.push(
     { rows: [], rowCount: 0 },
