@@ -9,7 +9,7 @@ interface NavItem {
 }
 
 const Layout: React.FC = () => {
-  const { user, customerInfo, logout } = useAuth();
+  const { user, logout } = useAuth();
   const isAdmin = user?.role === 'admin';
   const navItems: NavItem[] = [
     { to: '/', label: isAdmin ? '대시보드' : '🧘 수련 기록', end: true },

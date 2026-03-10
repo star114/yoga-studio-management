@@ -227,9 +227,9 @@ router.put('/:id',
   async (req, res) => {
     const { id } = req.params;
     const { remaining_sessions, is_active, notes } = req.body;
-    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(req.body || {}, 'remaining_sessions');
-    const hasIsActive = Object.prototype.hasOwnProperty.call(req.body || {}, 'is_active');
-    const hasNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'notes');
+    const hasRemainingSessions = Object.prototype.hasOwnProperty.call(req.body, 'remaining_sessions');
+    const hasIsActive = Object.prototype.hasOwnProperty.call(req.body, 'is_active');
+    const hasNotes = Object.prototype.hasOwnProperty.call(req.body, 'notes');
 
     if (hasIsActive && typeof is_active !== 'boolean') {
       return res.status(400).json({ error: 'is_active must be boolean' });

@@ -367,6 +367,31 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(res.body.is_active, false);
 
+  h.queryQueue.push(
+    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] },
+    { rows: [{ id: 203, remaining_sessions: 8, is_active: false, notes: null }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '203' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { is_active: false },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.id, 203);
+  assert.equal(res.body.is_active, false);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '999' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { is_active: false },
+  });
+  assert.equal(res.status, 404);
+
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',

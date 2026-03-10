@@ -264,6 +264,16 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'date_from must be a valid YYYY-MM-DD date');
 
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    query: { date_to: '2026/03/01' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'date_to must be a valid YYYY-MM-DD date');
+
   h.queryQueue.push(new Error('access check fail'));
   res = await h.runRoute({
     method: 'get',
@@ -297,7 +307,14 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
     method: 'get',
     routePath: '/:id/class-activities',
     params: { id: '5' },
-    query: { page: '2', page_size: '5', activity_type: 'reserved', search: '아쉬', date_from: '2026-02-01' },
+    query: {
+      page: '2',
+      page_size: '5',
+      activity_type: 'reserved',
+      search: '아쉬',
+      date_from: '2026-02-01',
+      date_to: '2026-03-31',
+    },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 200);
@@ -305,11 +322,31 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
   assert.equal(res.body.pagination.page, 2);
   assert.equal(res.body.filter.activity_type, 'reserved');
   assert.equal(res.body.filter.search, '아쉬');
+  assert.equal(res.body.filter.date_to, '2026-03-31');
   const classActivitiesQueryText = h.queryCalls
     .map((call) => String(call[0]))
     .find((text) => text.includes('WITH history AS'));
   assert.ok(classActivitiesQueryText);
   assert.ok(classActivitiesQueryText.includes('COALESCE(cls.class_date::date, a.attendance_date::date)'));
+
+  h.queryQueue.push(
+    { rows: [] },
+    { rows: [] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
+    params: { id: '5' },
+    query: { page: '0', page_size: '0', activity_type: 'weird' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.pagination.page, 1);
+  assert.equal(res.body.pagination.page_size, 10);
+  assert.equal(res.body.pagination.total, 0);
+  assert.equal(res.body.filter.activity_type, 'all');
+  assert.equal(res.body.filter.date_from, null);
+  assert.equal(res.body.filter.date_to, null);
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
@@ -372,12 +409,97 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   assert.equal(res.body.length, 1);
   assert.equal(res.body[0].title, '아쉬탕가');
 
+  h.queryQueue.push({ rows: [{ id: 10, title: '빈야사' }] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '빈야사', limit: '0' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  const recommendedQueryCall = h.queryCalls
+    .slice()
+    .reverse()
+    .find((call) => String(call[0]).includes('FROM yoga_classes c'));
+  assert.ok(recommendedQueryCall);
+  assert.equal(recommendedQueryCall[1][2], 20);
+
   h.queryQueue.push(new Error('recommended fail'));
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
     query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
+test('GET /:id/attendances covers forbidden, success, filters, and error', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createCustomersHarness();
+
+  h.queryQueue.push({ rows: [] });
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/attendances',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    { rows: [{ total: 2 }] },
+    {
+      rows: [
+        {
+          id: 71,
+          class_title: '아쉬탕가',
+        },
+      ],
+    }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/attendances',
+    params: { id: '5' },
+    query: { months: '3', page: '2', page_size: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.items.length, 1);
+  assert.equal(res.body.pagination.page, 2);
+  assert.equal(res.body.filter.months, 3);
+  const attendanceQueryText = h.queryCalls
+    .map((call) => String(call[0]))
+    .find((text) => text.includes('FROM yoga_attendances a') && text.includes('LIMIT $'));
+  assert.ok(attendanceQueryText);
+  assert.ok(attendanceQueryText.includes("CURRENT_DATE - ($2::text || ' months')::interval"));
+
+  h.queryQueue.push(
+    { rows: [] },
+    { rows: [] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/attendances',
+    params: { id: '5' },
+    query: { page: '0', page_size: '0' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.pagination.page, 1);
+  assert.equal(res.body.pagination.page_size, 20);
+  assert.equal(res.body.pagination.total, 0);
+  assert.equal(res.body.filter.months, null);
+
+  h.queryQueue.push(new Error('attendances fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/attendances',
+    params: { id: '5' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);
@@ -562,6 +684,23 @@ test('PUT /:id and PUT /:id/password cover success/not-found/error', async (t) =
     body: { name: 'X3' },
   });
   assert.equal(res.status, 500);
+
+  const duplicateLoginUpdateClient = h.createDbClientMock();
+  duplicateLoginUpdateClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    Object.assign(new Error('duplicate update'), { code: '23505' }),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(duplicateLoginUpdateClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { name: 'dup', phone: '01012345678' },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Login ID already exists');
 
   const invalidPhoneClient = h.createDbClientMock();
   h.connectQueue.push(invalidPhoneClient);

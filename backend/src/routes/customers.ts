@@ -7,7 +7,7 @@ import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 const router = express.Router();
 
 const normalizePhoneNumber = (value: string): string | null => {
-  const digits = String(value || '').replace(/\D/g, '');
+  const digits = String(value).replace(/\D/g, '');
   if (!/^\d{11}$/.test(digits)) {
     return null;
   }
@@ -453,11 +453,8 @@ router.post('/',
       phone: string;
       notes?: string;
     };
-    const trimmedPhone = (phone || '').trim();
+    const trimmedPhone = phone.trim();
 
-    if (!trimmedPhone) {
-      return res.status(400).json({ error: '전화번호는 필수입니다.' });
-    }
     const normalizedPhone = normalizePhoneNumber(trimmedPhone);
     if (!normalizedPhone) {
       return res.status(400).json({ error: '전화번호 형식은 000-0000-0000 이어야 합니다.' });
@@ -522,7 +519,7 @@ router.put('/:id',
   async (req, res) => {
     const { id } = req.params;
     const { name, phone, notes } = req.body;
-    const hasPhoneField = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone');
+    const hasPhoneField = Object.prototype.hasOwnProperty.call(req.body, 'phone');
     const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
     const normalizedPhone = hasPhoneField && trimmedPhone
       ? normalizePhoneNumber(trimmedPhone)
