@@ -1304,6 +1304,9 @@ router.put('/:id',
   requireAdmin,
   async (req, res) => {
     const { id } = req.params;
+    const requestBody = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body as Record<string, unknown>
+      : {};
     const {
       title,
       class_date,
@@ -1312,15 +1315,22 @@ router.put('/:id',
       max_capacity,
       is_open,
       notes,
-    } = req.body;
+    } = requestBody;
+    const hasNotesField = Object.prototype.hasOwnProperty.call(requestBody, 'notes');
+    const normalizedStartTime = typeof start_time === 'string' ? start_time : null;
+    const normalizedEndTime = typeof end_time === 'string' ? end_time : null;
 
-    if (start_time && !isValidTime(start_time)) {
+    if (normalizedStartTime && !isValidTime(normalizedStartTime)) {
       return res.status(400).json({ error: 'Invalid start_time format' });
     }
-    if (end_time && !isValidTime(end_time)) {
+    if (normalizedEndTime && !isValidTime(normalizedEndTime)) {
       return res.status(400).json({ error: 'Invalid end_time format' });
     }
-    if (start_time && end_time && timeToMinutes(start_time) >= timeToMinutes(end_time)) {
+    if (
+      normalizedStartTime
+      && normalizedEndTime
+      && timeToMinutes(normalizedStartTime) >= timeToMinutes(normalizedEndTime)
+    ) {
       return res.status(400).json({ error: 'End time must be after start time' });
     }
     if (max_capacity !== undefined && Number(max_capacity) < 1) {
@@ -1336,8 +1346,11 @@ router.put('/:id',
              end_time = COALESCE($4, end_time),
              max_capacity = COALESCE($5, max_capacity),
              is_open = COALESCE($6, is_open),
-             notes = COALESCE($7, notes)
-         WHERE id = $8
+             notes = CASE
+               WHEN $7 THEN $8
+               ELSE notes
+             END
+         WHERE id = $9
          RETURNING *`,
         [
           title,
@@ -1346,7 +1359,8 @@ router.put('/:id',
           end_time,
           max_capacity,
           is_open,
-          notes,
+          hasNotesField,
+          notes ?? null,
           id,
         ]
       );

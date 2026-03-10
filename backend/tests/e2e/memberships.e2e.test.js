@@ -242,6 +242,17 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   process.env.JWT_SECRET = 'test-secret';
   const h = createMembershipsHarness();
 
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/customer/:customerId',
+    params: { customerId: '9' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push({
+    rows: [{ id: 9 }],
+  });
   h.queryQueue.push({
     rows: [{
       id: 10,
@@ -250,7 +261,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
       remaining_sessions: 3,
     }],
   });
-  let res = await h.runRoute({
+  res = await h.runRoute({
     method: 'get',
     routePath: '/customer/:customerId',
     params: { customerId: '9' },
@@ -261,7 +272,10 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body[0].total_sessions, 10);
   assert.equal(res.body[0].consumed_sessions, 4);
 
-  h.queryQueue.push(new Error('customer memberships fail'));
+  h.queryQueue.push(
+    { rows: [{ id: 9 }] },
+    new Error('customer memberships fail')
+  );
   res = await h.runRoute({
     method: 'get',
     routePath: '/customer/:customerId',
@@ -372,6 +386,17 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 200);
 
+  h.queryQueue.push({ rows: [{ id: 201, notes: null }] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { notes: null },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.notes, null);
+
   h.queryQueue.push(
     { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] },
     { rows: [{ id: 202, remaining_sessions: 5, is_active: false }] }
@@ -419,6 +444,16 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { is_active: 'false' },
   });
   assert.equal(res.status, 400);
+
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '202' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: -1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'remaining_sessions must be a non-negative integer or null');
 
   h.queryQueue.push(new Error('update membership fail'));
   res = await h.runRoute({

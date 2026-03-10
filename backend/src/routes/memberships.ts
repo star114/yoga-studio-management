@@ -1,10 +1,18 @@
 import express from 'express';
 import { body } from 'express-validator';
 import pool from '../config/database';
-import { authenticate, requireAdmin } from '../middleware/auth';
+import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
+
+const hasCustomerAccess = async (customerId: string, userId: number) => {
+  const checkResult = await pool.query(
+    'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
+    [customerId, userId]
+  );
+  return checkResult.rows.length > 0;
+};
 
 // 회원권 종류 조회
 router.get('/types', authenticate, async (req, res) => {
@@ -109,8 +117,15 @@ router.delete('/types/:id', authenticate, requireAdmin, async (req, res) => {
 });
 
 // 특정 고객의 회원권 조회
-router.get('/customer/:customerId', authenticate, async (req, res) => {
+router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) => {
   const { customerId } = req.params;
+
+  if (req.user!.role !== 'admin') {
+    const allowed = await hasCustomerAccess(customerId, req.user!.id);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  }
 
   try {
     const result = await pool.query(`
@@ -247,6 +262,14 @@ router.put('/:id',
     const hasIsActive = Object.prototype.hasOwnProperty.call(requestBody, 'is_active');
     const hasNotes = Object.prototype.hasOwnProperty.call(requestBody, 'notes');
 
+    if (
+      hasRemainingSessions
+      && remaining_sessions !== null
+      && (!Number.isInteger(remaining_sessions) || Number(remaining_sessions) < 0)
+    ) {
+      return res.status(400).json({ error: 'remaining_sessions must be a non-negative integer or null' });
+    }
+
     if (hasIsActive && typeof is_active !== 'boolean') {
       return res.status(400).json({ error: 'is_active must be boolean' });
     }
@@ -262,7 +285,7 @@ router.put('/:id',
                  ELSE remaining_sessions
                END,
                notes = CASE
-                 WHEN $3 THEN COALESCE($4, notes)
+                 WHEN $3 THEN $4
                  ELSE notes
                END
            WHERE id = $5

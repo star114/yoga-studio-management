@@ -350,6 +350,17 @@ test('classes list/detail/registrations/comment/update/delete cover main branche
   });
   assert.equal(res.status, 200);
 
+  h.queryQueue.push({ rows: [{ id: 1, title: 'u2', notes: null }] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '1' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { notes: null },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.notes, null);
+
   h.queryQueue.push(new Error('update fail'));
   res = await h.runRoute({
     method: 'put',
