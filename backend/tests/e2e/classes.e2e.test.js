@@ -538,7 +538,6 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
-    { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 1 }] },
     { rows: [], rowCount: 0 }
   );
@@ -552,8 +551,8 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 400);
 
-  const quotaExceededClient = h.createDbClientMock();
-  quotaExceededClient.queryQueue.push(
+  const remainingSessionsClient = h.createDbClientMock();
+  remainingSessionsClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     {
       rows: [
@@ -569,10 +568,12 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 2, is_title_match: true }] },
-    { rows: [{ reserved_count: 2 }] },
+    { rows: [{ count: 0 }] },
+    { rows: [{ id: 188, class_id: 11, customer_id: 1, membership_id: 501 }] },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
-  h.connectQueue.push(quotaExceededClient);
+  h.connectQueue.push(remainingSessionsClient);
   res = await h.runRoute({
     method: 'post',
     routePath: '/:id/registrations',
@@ -580,19 +581,11 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { customer_id: 1 },
   });
-  assert.equal(res.status, 400);
-  assert.equal(res.body.reason, 'MEMBERSHIP_RESERVATION_LIMIT_REACHED');
-  assert.equal(res.body.checks.has_reservation_quota, false);
-  const reservedCountQuery = quotaExceededClient.queryCalls.find(
-    ([queryText]) =>
-      typeof queryText === 'string'
-      && queryText.includes('AS reserved_count')
-      && queryText.includes('CURRENT_DATE')
+  assert.equal(res.status, 201);
+  const reservedCountQuery = remainingSessionsClient.queryCalls.find(
+    ([queryText]) => typeof queryText === 'string' && queryText.includes('AS reserved_count')
   );
-  assert.ok(reservedCountQuery);
-  assert.match(reservedCountQuery[0], /c\.class_date > CURRENT_DATE/);
-  assert.match(reservedCountQuery[0], /c\.class_date = CURRENT_DATE/);
-  assert.match(reservedCountQuery[0], /c\.end_time >= CURRENT_TIME/);
+  assert.equal(reservedCountQuery, undefined);
 
   const crossMembershipConfirmClient = h.createDbClientMock();
   crossMembershipConfirmClient.queryQueue.push(
@@ -645,7 +638,6 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 778, remaining_sessions: 3, is_title_match: false }] },
-    { rows: [{ reserved_count: 1 }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 199, class_id: 11, customer_id: 1, membership_id: 778 }] },
     { rows: [], rowCount: 1 },
@@ -661,13 +653,9 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 201);
   const crossMembershipReservedCountQuery = crossMembershipAllowedClient.queryCalls.find(
-    ([queryText]) =>
-      typeof queryText === 'string'
-      && queryText.includes('AS reserved_count')
-      && queryText.includes('CURRENT_DATE')
+    ([queryText]) => typeof queryText === 'string' && queryText.includes('AS reserved_count')
   );
-  assert.ok(crossMembershipReservedCountQuery);
-  assert.doesNotMatch(crossMembershipReservedCountQuery[0], /COALESCE\(c\.title/);
+  assert.equal(crossMembershipReservedCountQuery, undefined);
 
   const dupClient = h.createDbClientMock();
   dupClient.queryQueue.push(
@@ -686,7 +674,6 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
-    { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 0 }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
@@ -734,7 +721,6 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
-    { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 99, class_id: 11, customer_id: 1, membership_id: 501 }] },
     { rows: [], rowCount: 1 },
@@ -955,6 +941,7 @@ test('registration status change reconciles attendance row and membership usage'
           id: 90,
           class_id: 11,
           customer_id: 2,
+          membership_id: 77,
           attendance_status: 'attended',
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
@@ -962,7 +949,6 @@ test('registration status change reconciles attendance row and membership usage'
       ],
     },
     { rows: [{ id: 501, membership_id: 77 }] },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     {
       rows: [
@@ -990,12 +976,13 @@ test('registration status change reconciles attendance row and membership usage'
 
   assert.equal(res.status, 200);
   assert.equal(res.body.attendance_status, 'absent');
-  assert.ok(
+  assert.equal(
     client.queryCalls.some(
       ([sql]) =>
         typeof sql === 'string'
         && sql.includes('UPDATE yoga_memberships')
-    )
+    ),
+    false
   );
   assert.ok(
     client.queryCalls.some(
@@ -1061,6 +1048,60 @@ test('registration status change reconciles attendance row and membership usage'
   });
   assert.equal(attendedWithoutAttendanceRes.status, 400);
 
+  const revertToReservedClient = h.createDbClientMock();
+  revertToReservedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 94,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 501,
+          attendance_status: 'attended',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 601, membership_id: 77 },
+        { id: 602, membership_id: 501 },
+      ],
+    },
+    { rows: [{ id: 77, remaining_sessions: 2 }] },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 94,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 501,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(revertToReservedClient);
+  const revertToReservedRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(revertToReservedRes.status, 200);
+  assert.ok(
+    revertToReservedClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
+    )
+  );
+
   const absentWithNullMembershipClient = h.createDbClientMock();
   absentWithNullMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -1070,6 +1111,7 @@ test('registration status change reconciles attendance row and membership usage'
           id: 95,
           class_id: 11,
           customer_id: 2,
+          membership_id: 88,
           attendance_status: 'attended',
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
@@ -1082,8 +1124,6 @@ test('registration status change reconciles attendance row and membership usage'
         { id: 702, membership_id: 88 },
       ],
     },
-    { rows: [{ id: 88, remaining_sessions: 3 }] },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     {
       rows: [
@@ -1091,6 +1131,7 @@ test('registration status change reconciles attendance row and membership usage'
           id: 95,
           class_id: 11,
           customer_id: 2,
+          membership_id: 88,
           attendance_status: 'absent',
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
@@ -1108,6 +1149,12 @@ test('registration status change reconciles attendance row and membership usage'
     body: { attendance_status: 'absent' },
   });
   assert.equal(absentWithNullMembershipRes.status, 200);
+  assert.equal(
+    absentWithNullMembershipClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
+    ),
+    false
+  );
 
   const noRegistrationClient = h.createDbClientMock();
   noRegistrationClient.queryQueue.push(
@@ -1322,8 +1369,8 @@ test('class registration diagnostics and recurring creation cover remaining bran
   assert.equal(res.body.reason, 'CLASS_TITLE_MISMATCH');
   assert.equal(res.body.checks.has_alternative_membership, true);
 
-  const crossMembershipQuotaExceededClient = h.createDbClientMock();
-  crossMembershipQuotaExceededClient.queryQueue.push(
+  const crossMembershipRemainingClient = h.createDbClientMock();
+  crossMembershipRemainingClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     {
       rows: [
@@ -1340,10 +1387,12 @@ test('class registration diagnostics and recurring creation cover remaining bran
       ],
     },
     { rows: [{ id: 801, remaining_sessions: 1, is_title_match: false }] },
-    { rows: [{ reserved_count: 1 }] },
+    { rows: [{ count: 0 }] },
+    { rows: [{ id: 501, class_id: 11, customer_id: 1, membership_id: 801 }] },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
-  h.connectQueue.push(crossMembershipQuotaExceededClient);
+  h.connectQueue.push(crossMembershipRemainingClient);
   res = await h.runRoute({
     method: 'post',
     routePath: '/:id/registrations',
@@ -1351,9 +1400,7 @@ test('class registration diagnostics and recurring creation cover remaining bran
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { customer_id: 1, allow_cross_membership_registration: true },
   });
-  assert.equal(res.status, 400);
-  assert.equal(res.body.reason, 'MEMBERSHIP_RESERVATION_LIMIT_REACHED');
-  assert.equal(res.body.checks.quota_scope, 'all_memberships');
+  assert.equal(res.status, 201);
 
   const unlimitedCrossMembershipClient = h.createDbClientMock();
   unlimitedCrossMembershipClient.queryQueue.push(
@@ -1373,7 +1420,6 @@ test('class registration diagnostics and recurring creation cover remaining bran
       ],
     },
     { rows: [{ id: 802, remaining_sessions: null, is_title_match: false }] },
-    { rows: [] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 299, class_id: 11, customer_id: 1 }] },
     { rows: [], rowCount: 0 }
