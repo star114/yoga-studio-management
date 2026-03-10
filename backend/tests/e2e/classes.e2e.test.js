@@ -770,6 +770,7 @@ test('class registration and recurring routes cover core branches', async () => 
   cancelSelfSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
@@ -783,6 +784,12 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 200);
+  assert.equal(
+    cancelSelfSuccessClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('DELETE FROM yoga_attendances')
+    ),
+    false
+  );
 
   const cancelSelfErrorClient = h.createDbClientMock();
   cancelSelfErrorClient.queryQueue.push(
@@ -836,6 +843,7 @@ test('class registration and recurring routes cover core branches', async () => 
   cancelAdminSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
@@ -848,6 +856,31 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
+
+  const cancelAdminAttendedClient = h.createDbClientMock();
+  cancelAdminAttendedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 2, membership_id: 501, attendance_status: 'attended' }] },
+    { rows: [{ id: 91, membership_id: 501 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminAttendedClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    cancelAdminAttendedClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('DELETE FROM yoga_attendances')
+    ),
+    true
+  );
 
   const cancelAdminErrorClient = h.createDbClientMock();
   cancelAdminErrorClient.queryQueue.push(

@@ -65,6 +65,62 @@ const restoreMembershipSessions = async (
   );
 };
 
+const cancelRegistrationAndRelatedAttendance = async (
+  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
+  registration: {
+    id: number;
+    membership_id: number | null;
+    attendance_status: 'reserved' | 'attended' | 'absent';
+  },
+  classId: string,
+  customerId: number | string
+) => {
+  const attendanceResult = await client.query(
+    `SELECT id, membership_id
+     FROM yoga_attendances
+     WHERE class_id = $1
+       AND customer_id = $2
+     FOR UPDATE`,
+    [classId, customerId]
+  );
+
+  const attendanceRows = attendanceResult.rows as Array<{ id: number; membership_id: number | null }>;
+  const membershipUsage = new Map<number, number>();
+
+  attendanceRows.forEach((attendanceRow) => {
+    if (attendanceRow.membership_id === null) {
+      return;
+    }
+    const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
+    membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
+  });
+
+  if (
+    registration.membership_id !== null
+    && !membershipUsage.has(registration.membership_id)
+  ) {
+    membershipUsage.set(registration.membership_id, 1);
+  }
+
+  for (const [membershipId, usedCount] of membershipUsage.entries()) {
+    for (let index = 0; index < usedCount; index += 1) {
+      await restoreMembershipSessions(client, membershipId);
+    }
+  }
+
+  if (attendanceRows.length > 0) {
+    await client.query(
+      'DELETE FROM yoga_attendances WHERE id = ANY($1::int[])',
+      [attendanceRows.map((attendanceRow) => attendanceRow.id)]
+    );
+  }
+
+  await client.query(
+    'DELETE FROM yoga_class_registrations WHERE id = $1',
+    [registration.id]
+  );
+};
+
 // 수업 목록 조회
 router.get('/',
   authenticate,
@@ -1077,14 +1133,7 @@ router.delete('/:id/registrations/me',
           attendance_status: 'reserved' | 'attended' | 'absent';
         };
 
-        if (registration.attendance_status === 'reserved') {
-          await restoreMembershipSessions(client, registration.membership_id);
-        }
-
-        await client.query(
-          'DELETE FROM yoga_class_registrations WHERE id = $1',
-          [registration.id]
-        );
+        await cancelRegistrationAndRelatedAttendance(client, registration, String(id), customerId);
 
         await client.query('COMMIT');
         res.json({ message: 'Registration canceled successfully' });
@@ -1132,14 +1181,7 @@ router.delete('/:id/registrations/:customerId',
           attendance_status: 'reserved' | 'attended' | 'absent';
         };
 
-        if (registration.attendance_status === 'reserved') {
-          await restoreMembershipSessions(client, registration.membership_id);
-        }
-
-        await client.query(
-          'DELETE FROM yoga_class_registrations WHERE id = $1',
-          [registration.id]
-        );
+        await cancelRegistrationAndRelatedAttendance(client, registration, String(id), customerId);
 
         await client.query('COMMIT');
         res.json({ message: 'Registration canceled successfully' });
