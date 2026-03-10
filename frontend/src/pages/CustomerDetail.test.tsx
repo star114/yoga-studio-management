@@ -1,4 +1,5 @@
 import React from 'react';
+import { AxiosError } from 'axios';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -19,6 +20,8 @@ const {
   updateMembershipMock,
   deleteMembershipMock,
   parseApiErrorMock,
+  shouldConfirmCrossMembershipRegistrationMock,
+  getCrossMembershipConfirmationMessageMock,
 } = vi.hoisted(() => ({
   getByIdMock: vi.fn(),
   getClassActivitiesMock: vi.fn(),
@@ -34,6 +37,8 @@ const {
   updateMembershipMock: vi.fn(),
   deleteMembershipMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
+  shouldConfirmCrossMembershipRegistrationMock: vi.fn(() => false),
+  getCrossMembershipConfirmationMessageMock: vi.fn(() => '회원권이 없는데 등록하시겠어요? 다른 회원권에서 1회 차감됩니다.'),
 }));
 
 let routeId = '1';
@@ -70,6 +75,8 @@ vi.mock('../services/api', () => ({
 
 vi.mock('../utils/apiError', () => ({
   parseApiError: parseApiErrorMock,
+  shouldConfirmCrossMembershipRegistration: shouldConfirmCrossMembershipRegistrationMock,
+  getCrossMembershipConfirmationMessage: getCrossMembershipConfirmationMessageMock,
 }));
 
 const renderPage = () => render(
@@ -107,10 +114,12 @@ describe('CustomerDetail page', () => {
     vi.resetAllMocks();
     routeId = '1';
     seedLoadSuccess();
+    vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('shows invalid id error', async () => {
@@ -1129,6 +1138,198 @@ describe('CustomerDetail page', () => {
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  it('retries quick reserve after cross-membership confirmation', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 37,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 801,
+          title: '저녁 아쉬탕가',
+          class_date: '2026-03-22',
+          start_time: '18:00:00',
+          end_time: '19:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: false,
+        },
+      ],
+    });
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    classRegisterMock
+      .mockRejectedValueOnce(crossMembershipError)
+      .mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButton);
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(1, 801, { customer_id: 1 }));
+    await waitFor(() => expect(globalThis.confirm).toHaveBeenCalledWith('회원권이 없는데 등록하시겠어요? 다른 회원권에서 1회 차감됩니다.'));
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(2, 801, {
+      customer_id: 1,
+      allow_cross_membership_registration: true,
+    }));
+    await waitFor(() => expect(screen.getByText('다른 회원권 차감으로 수업을 예약했습니다.')).toBeTruthy());
+  });
+
+  it('updates only the selected recommendation after cross-membership retry success', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 40,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 804,
+          title: '아침 아쉬탕가',
+          class_date: '2026-03-25',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: false,
+        },
+        {
+          id: 805,
+          title: '저녁 아쉬탕가',
+          class_date: '2026-03-25',
+          start_time: '18:00:00',
+          end_time: '19:00:00',
+          remaining_seats: 2,
+          current_enrollment: 4,
+          is_registered: false,
+        },
+      ],
+    });
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    classRegisterMock
+      .mockRejectedValueOnce(crossMembershipError)
+      .mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const quickReserveButtons = await screen.findAllByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButtons[1]);
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(2, 805, {
+      customer_id: 1,
+      allow_cross_membership_registration: true,
+    }));
+    await waitFor(() => expect(screen.getByText('아침 아쉬탕가')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
+  });
+
+  it('shows error when cross-membership retry fails during quick reserve', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    const retryError = new Error('retry failed');
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 38,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 802,
+          title: '저녁 아쉬탕가',
+          class_date: '2026-03-23',
+          start_time: '18:00:00',
+          end_time: '19:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: false,
+        },
+      ],
+    });
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    classRegisterMock
+      .mockRejectedValueOnce(crossMembershipError)
+      .mockRejectedValueOnce(retryError);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButton);
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(parseApiErrorMock).toHaveBeenCalledWith(retryError));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+  });
+
+  it('stops quick reserve retry when cross-membership confirmation is canceled', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 39,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 803,
+          title: '저녁 아쉬탕가',
+          class_date: '2026-03-24',
+          start_time: '18:00:00',
+          end_time: '19:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: false,
+        },
+      ],
+    });
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    (globalThis.confirm as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+    classRegisterMock.mockRejectedValueOnce(crossMembershipError);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
+    fireEvent.click(quickReserveButton);
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledTimes(1));
+    expect(parseApiErrorMock).not.toHaveBeenCalled();
   });
 
   it('disables quick reserve when membership has no remaining sessions', async () => {

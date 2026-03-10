@@ -1,6 +1,10 @@
 import { AxiosError } from 'axios';
 import { describe, expect, it } from 'vitest';
-import { parseApiError } from './apiError';
+import {
+  getCrossMembershipConfirmationMessage,
+  parseApiError,
+  shouldConfirmCrossMembershipRegistration,
+} from './apiError';
 
 const makeAxiosError = (data: unknown) => {
   const error = new AxiosError('request failed');
@@ -42,5 +46,34 @@ describe('parseApiError', () => {
   it('returns fallback when axios payload has no usable message', () => {
     const error = makeAxiosError({ error: '' });
     expect(parseApiError(error, 'fallback')).toBe('fallback');
+  });
+
+  it('detects cross-membership confirmation state', () => {
+    const error = makeAxiosError({
+      error: 'No valid membership for this class',
+      reason: 'CROSS_MEMBERSHIP_CONFIRM_REQUIRED',
+      checks: {
+        has_alternative_membership: true,
+        requires_confirmation: true,
+      },
+    });
+
+    expect(shouldConfirmCrossMembershipRegistration(error)).toBe(true);
+  });
+
+  it('returns cross-membership confirmation message when provided', () => {
+    const error = makeAxiosError({
+      checks: {
+        cross_membership_message: '회원권이 없는데 등록하시겠어요?',
+      },
+    });
+
+    expect(getCrossMembershipConfirmationMessage(error)).toBe('회원권이 없는데 등록하시겠어요?');
+  });
+
+  it('returns default cross-membership confirmation message when payload message is missing', () => {
+    const error = makeAxiosError({ checks: {} });
+
+    expect(getCrossMembershipConfirmationMessage(error)).toBe('회원권이 없는데 등록하시겠어요? 다른 회원권에서 1회 차감됩니다.');
   });
 });

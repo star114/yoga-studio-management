@@ -388,6 +388,46 @@ test('classes list/detail/registrations/comment/update/delete cover main branche
   assert.equal(res.status, 500);
 });
 
+test('GET /registrations/me covers admin, missing customer, success, and error', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness();
+
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/registrations/me',
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/registrations/me',
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ registration_id: 1, class_id: 11, title: '아쉬탕가' }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/registrations/me',
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.length, 1);
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, new Error('my registrations fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/registrations/me',
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
 test('class registration and recurring routes cover core branches', async () => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createClassesHarness();
@@ -497,7 +537,7 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
-    { rows: [{ id: 501, remaining_sessions: 5 }] },
+    { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
     { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 1 }] },
     { rows: [], rowCount: 0 }
@@ -528,7 +568,7 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
-    { rows: [{ id: 501, remaining_sessions: 2 }] },
+    { rows: [{ id: 501, remaining_sessions: 2, is_title_match: true }] },
     { rows: [{ reserved_count: 2 }] },
     { rows: [], rowCount: 0 }
   );
@@ -554,8 +594,8 @@ test('class registration and recurring routes cover core branches', async () => 
   assert.match(reservedCountQuery[0], /c\.class_date = CURRENT_DATE/);
   assert.match(reservedCountQuery[0], /c\.end_time >= CURRENT_TIME/);
 
-  const noMembershipClient = h.createDbClientMock();
-  noMembershipClient.queryQueue.push(
+  const crossMembershipConfirmClient = h.createDbClientMock();
+  crossMembershipConfirmClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     {
       rows: [
@@ -570,20 +610,10 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
-    { rows: [] },
-    {
-      rows: [
-        {
-          total_memberships: 1,
-          active_memberships: 1,
-          remaining_memberships: 1,
-          title_matched_memberships: 0,
-        },
-      ],
-    },
+    { rows: [{ id: 777, remaining_sessions: 3, is_title_match: false }] },
     { rows: [], rowCount: 0 }
   );
-  h.connectQueue.push(noMembershipClient);
+  h.connectQueue.push(crossMembershipConfirmClient);
   res = await h.runRoute({
     method: 'post',
     routePath: '/:id/registrations',
@@ -593,8 +623,50 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'No valid membership for this class');
-  assert.equal(res.body.reason, 'CLASS_TITLE_MISMATCH');
+  assert.equal(res.body.reason, 'CROSS_MEMBERSHIP_CONFIRM_REQUIRED');
   assert.equal(res.body.checks.has_matching_membership_type, false);
+  assert.equal(res.body.checks.has_alternative_membership, true);
+  assert.equal(res.body.checks.requires_confirmation, true);
+
+  const crossMembershipAllowedClient = h.createDbClientMock();
+  crossMembershipAllowedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 778, remaining_sessions: 3, is_title_match: false }] },
+    { rows: [{ reserved_count: 1 }] },
+    { rows: [{ count: 1 }] },
+    { rows: [{ id: 199, class_id: 11, customer_id: 1 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(crossMembershipAllowedClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, allow_cross_membership_registration: true },
+  });
+  assert.equal(res.status, 201);
+  const crossMembershipReservedCountQuery = crossMembershipAllowedClient.queryCalls.find(
+    ([queryText]) =>
+      typeof queryText === 'string'
+      && queryText.includes('AS reserved_count')
+      && queryText.includes('CURRENT_DATE')
+  );
+  assert.ok(crossMembershipReservedCountQuery);
+  assert.doesNotMatch(crossMembershipReservedCountQuery[0], /COALESCE\(c\.title/);
 
   const dupClient = h.createDbClientMock();
   dupClient.queryQueue.push(
@@ -612,7 +684,7 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
-    { rows: [{ id: 501, remaining_sessions: 5 }] },
+    { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
     { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 0 }] },
     { rows: [] },
@@ -660,7 +732,7 @@ test('class registration and recurring routes cover core branches', async () => 
         },
       ],
     },
-    { rows: [{ id: 501, remaining_sessions: 5 }] },
+    { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
     { rows: [{ reserved_count: 0 }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 99, class_id: 11, customer_id: 1 }] },
@@ -854,6 +926,507 @@ test('registration status change reconciles attendance row and membership usage'
         && sql.includes('DELETE FROM yoga_attendances')
     )
   );
+
+  const sameStatusClient = h.createDbClientMock();
+  sameStatusClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 91,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(sameStatusClient);
+  const sameStatusRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(sameStatusRes.status, 200);
+  assert.equal(sameStatusRes.body.attendance_status, 'reserved');
+
+  const attendedWithoutAttendanceClient = h.createDbClientMock();
+  attendedWithoutAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 92,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(attendedWithoutAttendanceClient);
+  const attendedWithoutAttendanceRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'attended' },
+  });
+  assert.equal(attendedWithoutAttendanceRes.status, 400);
+
+  const absentWithNullMembershipClient = h.createDbClientMock();
+  absentWithNullMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 95,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'attended',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 701, membership_id: null },
+        { id: 702, membership_id: 88 },
+      ],
+    },
+    { rows: [{ id: 88, remaining_sessions: 3 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 95,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'absent',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(absentWithNullMembershipClient);
+  const absentWithNullMembershipRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'absent' },
+  });
+  assert.equal(absentWithNullMembershipRes.status, 200);
+
+  const noRegistrationClient = h.createDbClientMock();
+  noRegistrationClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(noRegistrationClient);
+  const noRegistrationRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'absent' },
+  });
+  assert.equal(noRegistrationRes.status, 404);
+
+  const statusErrorClient = h.createDbClientMock();
+  statusErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    new Error('status change fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(statusErrorClient);
+  const statusErrorRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'absent' },
+  });
+  assert.equal(statusErrorRes.status, 500);
+});
+
+test('class registration diagnostics and recurring creation cover remaining branches', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness({
+    classScheduleOverride: {
+      getRecurringClassDates: (...args) => {
+        const [startDate] = args;
+        if (startDate === '2026-03-15') {
+          throw new Error('Invalid recurrence rule');
+        }
+        if (startDate === '2026-03-17') {
+          throw 'bad recurrence';
+        }
+        if (startDate === '2026-03-16') {
+          return [];
+        }
+        return ['2026-03-03', '2026-03-05'];
+      },
+      isValidTime: (value) => /^\d{2}:\d{2}$/.test(value),
+      timeToMinutes: (value) => {
+        const [hour, minute] = value.split(':').map(Number);
+        return hour * 60 + minute;
+      },
+    },
+  });
+
+  const noMembershipDiagnosticClient = h.createDbClientMock();
+  noMembershipDiagnosticClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: null,
+          is_open: true,
+          max_capacity: 10,
+          class_date: '2999-01-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+        },
+      ],
+    },
+    { rows: [] },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(noMembershipDiagnosticClient);
+  let res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.reason, 'NO_MEMBERSHIP');
+
+  const noActiveDiagnosticClient = h.createDbClientMock();
+  noActiveDiagnosticClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          class_date: '2999-01-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+        },
+      ],
+    },
+    { rows: [] },
+    {
+      rows: [
+        {
+          total_memberships: 1,
+          active_memberships: 0,
+          remaining_memberships: 1,
+          eligible_memberships: 0,
+          title_matched_memberships: 1,
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(noActiveDiagnosticClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.reason, 'NO_ACTIVE_MEMBERSHIP');
+
+  const noRemainingDiagnosticClient = h.createDbClientMock();
+  noRemainingDiagnosticClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          class_date: '2999-01-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+        },
+      ],
+    },
+    { rows: [] },
+    {
+      rows: [
+        {
+          total_memberships: 1,
+          active_memberships: 1,
+          remaining_memberships: 0,
+          eligible_memberships: 0,
+          title_matched_memberships: 1,
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(noRemainingDiagnosticClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.reason, 'NO_REMAINING_SESSIONS');
+
+  const alternativeDiagnosticClient = h.createDbClientMock();
+  alternativeDiagnosticClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: null,
+          is_open: true,
+          max_capacity: 10,
+          class_date: '2999-01-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+        },
+      ],
+    },
+    { rows: [] },
+    {
+      rows: [
+        {
+          total_memberships: 1,
+          active_memberships: 1,
+          remaining_memberships: 1,
+          eligible_memberships: 1,
+          title_matched_memberships: 0,
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(alternativeDiagnosticClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.reason, 'CLASS_TITLE_MISMATCH');
+  assert.equal(res.body.checks.has_alternative_membership, true);
+
+  const crossMembershipQuotaExceededClient = h.createDbClientMock();
+  crossMembershipQuotaExceededClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: null,
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 801, remaining_sessions: 1, is_title_match: false }] },
+    { rows: [{ reserved_count: 1 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(crossMembershipQuotaExceededClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, allow_cross_membership_registration: true },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.reason, 'MEMBERSHIP_RESERVATION_LIMIT_REACHED');
+  assert.equal(res.body.checks.quota_scope, 'all_memberships');
+
+  const unlimitedCrossMembershipClient = h.createDbClientMock();
+  unlimitedCrossMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 802, remaining_sessions: null, is_title_match: false }] },
+    { rows: [] },
+    { rows: [{ count: 1 }] },
+    { rows: [{ id: 299, class_id: 11, customer_id: 1 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(unlimitedCrossMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, allow_cross_membership_registration: true },
+  });
+  assert.equal(res.status, 201);
+
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/recurring',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {
+      title: '반복수업',
+      recurrence_start_date: '2026-03-01',
+      recurrence_end_date: '2026-03-31',
+      weekdays: [1],
+      start_time: '11:00',
+      end_time: '10:00',
+      max_capacity: 10,
+    },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'End time must be after start time');
+
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/recurring',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {
+      title: '반복수업',
+      recurrence_start_date: '2026-03-15',
+      recurrence_end_date: '2026-03-31',
+      weekdays: [1],
+      start_time: '09:00',
+      end_time: '10:00',
+      max_capacity: 10,
+    },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid recurrence rule');
+
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/recurring',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {
+      title: '반복수업',
+      recurrence_start_date: '2026-03-17',
+      recurrence_end_date: '2026-03-31',
+      weekdays: [1],
+      start_time: '09:00',
+      end_time: '10:00',
+      max_capacity: 10,
+    },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid recurrence rule');
+
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/recurring',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {
+      title: '반복수업',
+      recurrence_start_date: '2026-03-16',
+      recurrence_end_date: '2026-03-31',
+      weekdays: [1],
+      start_time: '09:00',
+      end_time: '10:00',
+      max_capacity: 10,
+    },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'No classes to create for the given recurrence rule');
+
+  const recurringSuccessClient = h.createDbClientMock();
+  recurringSuccessClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(recurringSuccessClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/recurring',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {
+      title: '반복수업',
+      recurrence_start_date: '2026-03-01',
+      recurrence_end_date: '2026-03-31',
+      weekdays: [1, 1, 3],
+      start_time: '09:00',
+      end_time: '10:00',
+      max_capacity: 10,
+      is_open: false,
+      notes: 'memo',
+    },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.created_count, 2);
+
+  const recurringErrorClient = h.createDbClientMock();
+  recurringErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    new Error('recurring fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(recurringErrorClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/recurring',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {
+      title: '반복수업',
+      recurrence_start_date: '2026-03-01',
+      recurrence_end_date: '2026-03-31',
+      weekdays: [1],
+      start_time: '09:00',
+      end_time: '10:00',
+      max_capacity: 10,
+    },
+  });
+  assert.equal(res.status, 500);
 });
 
 test('customer class detail endpoint covers main branches', async () => {
@@ -921,6 +1494,15 @@ test('attendance comment-thread routes cover customer/admin success and failures
   });
   assert.equal(res.status, 400);
 
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/me/comment-thread',
+    params: { id: '11' },
+    body: { message: '메시지' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+
   h.queryQueue.push({ rows: [] });
   res = await h.runRoute({
     method: 'get',
@@ -983,6 +1565,36 @@ test('attendance comment-thread routes cover customer/admin success and failures
   assert.equal(res.status, 201);
   assert.equal(res.body.message, '메시지');
 
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/me/comment-thread',
+    params: { id: '11' },
+    body: { message: '메시지' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/me/comment-thread',
+    params: { id: '11' },
+    body: { message: '메시지' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [{ id: 501 }] }, new Error('customer thread write fail'));
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/me/comment-thread',
+    params: { id: '11' },
+    body: { message: '메시지' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+
   h.queryQueue.push({ rows: [{ id: 501 }] }, { rows: [{ id: 61, message: 'admin 메시지' }] });
   res = await h.runRoute({
     method: 'post',
@@ -1012,6 +1624,25 @@ test('attendance comment-thread routes cover customer/admin success and failures
   });
   assert.equal(res.status, 404);
 
+  h.queryQueue.push({ rows: [{ id: 501 }] }, new Error('admin thread fetch fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/registrations/:customerId/comment-thread',
+    params: { id: '11', customerId: '7' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations/:customerId/comment-thread',
+    params: { id: '11', customerId: '7' },
+    body: { message: 'admin 메시지' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 404);
+
   h.queryQueue.push({ rows: [{ id: 501 }] }, new Error('admin thread write fail'));
   res = await h.runRoute({
     method: 'post',
@@ -1019,6 +1650,93 @@ test('attendance comment-thread routes cover customer/admin success and failures
     params: { id: '11', customerId: '7' },
     body: { message: 'admin 메시지' },
     headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
+test('customer registration comment routes cover self-service branches', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness();
+
+  let res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/me/comment',
+    params: { id: '11' },
+    body: { registration_comment: '메모' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/me/comment',
+    params: { id: '11' },
+    body: { registration_comment: '메모' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/me/comment',
+    params: { id: '11' },
+    body: { registration_comment: '메모' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 1, class_id: 11, customer_id: 7, registration_comment: null }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/me/comment',
+    params: { id: '11' },
+    body: {},
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(h.queryCalls.at(-1)[1][2], null);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 1, class_id: 11, customer_id: 7, registration_comment: null }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/me/comment',
+    params: { id: '11' },
+    body: { registration_comment: '   ' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(h.queryCalls.at(-1)[1][2], null);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 1, class_id: 11, customer_id: 7, registration_comment: null }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/me/comment',
+    params: { id: '11' },
+    body: { registration_comment: '  셀프 메모  ' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.registration_comment, null);
+  assert.equal(h.queryCalls.at(-1)[1][2], '셀프 메모');
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, new Error('self comment fail'));
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/me/comment',
+    params: { id: '11' },
+    body: { registration_comment: '메모' },
+    headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 500);
 });

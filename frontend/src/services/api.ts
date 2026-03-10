@@ -4,6 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
 type QueryParams = Record<string, string | number | boolean | null | undefined>;
 type ClassRegistrationPayload = {
   customer_id?: number;
+  allow_cross_membership_registration?: boolean;
 };
 
 const api = axios.create({

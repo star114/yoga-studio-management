@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { classAPI, customerAPI, membershipAPI } from '../services/api';
-import { parseApiError } from '../utils/apiError';
+import {
+  getCrossMembershipConfirmationMessage,
+  parseApiError,
+  shouldConfirmCrossMembershipRegistration,
+} from '../utils/apiError';
 import { formatKoreanDate, formatKoreanDateTime } from '../utils/dateFormat';
 
 interface Customer {
@@ -368,6 +372,39 @@ const CustomerDetail: React.FC = () => {
       showNotice('수업을 예약했습니다.');
     } catch (reserveError: unknown) {
       console.error('Failed to reserve class from membership card:', reserveError);
+      if (shouldConfirmCrossMembershipRegistration(reserveError)) {
+        const ok = window.confirm(getCrossMembershipConfirmationMessage(reserveError));
+        if (ok) {
+          try {
+            await classAPI.register(classId, {
+              customer_id: customerId,
+              allow_cross_membership_registration: true,
+            });
+            setMembershipRecommendedClasses((prev) => {
+              const classes = prev[membershipId] as RecommendedClass[];
+              return {
+                ...prev,
+                [membershipId]: classes.map((item) => {
+                  if (item.id !== classId) return item;
+                  return {
+                    ...item,
+                    is_registered: true,
+                    remaining_seats: Math.max(0, item.remaining_seats - 1),
+                    current_enrollment: item.current_enrollment + 1,
+                  };
+                }),
+              };
+            });
+            showNotice('다른 회원권 차감으로 수업을 예약했습니다.');
+            return;
+          } catch (retryError: unknown) {
+            console.error('Failed to reserve class with alternative membership:', retryError);
+            setError(parseApiError(retryError));
+            return;
+          }
+        }
+        return;
+      }
       setError(parseApiError(reserveError));
     } finally {
       setClassReservationLoading((prev) => ({ ...prev, [classId]: false }));

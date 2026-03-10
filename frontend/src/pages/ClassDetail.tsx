@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { attendanceAPI, classAPI, customerAPI } from '../services/api';
-import { parseApiError } from '../utils/apiError';
+import {
+  getCrossMembershipConfirmationMessage,
+  parseApiError,
+  shouldConfirmCrossMembershipRegistration,
+} from '../utils/apiError';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 
 interface YogaClassDetail {
@@ -295,16 +299,38 @@ const ClassDetail: React.FC = () => {
       return;
     }
 
+    const customerId = Number(selectedCustomerId);
+
     try {
       setError('');
       setNotice('');
       setIsRegisterSubmitting(true);
-      await classAPI.register(classId, { customer_id: Number(selectedCustomerId) });
+      await classAPI.register(classId, { customer_id: customerId });
       setSelectedCustomerId('');
       await refreshClassAndRegistrations();
       setNotice('수동 신청이 등록되었습니다.');
     } catch (registerError: unknown) {
       console.error('Failed to register customer:', registerError);
+      if (shouldConfirmCrossMembershipRegistration(registerError)) {
+        const ok = window.confirm(getCrossMembershipConfirmationMessage(registerError));
+        if (ok) {
+          try {
+            await classAPI.register(classId, {
+              customer_id: customerId,
+              allow_cross_membership_registration: true,
+            });
+            setSelectedCustomerId('');
+            await refreshClassAndRegistrations();
+            setNotice('다른 회원권 차감으로 수동 신청이 등록되었습니다.');
+            return;
+          } catch (retryError: unknown) {
+            console.error('Failed to register customer with alternative membership:', retryError);
+            setError(parseApiError(retryError));
+            return;
+          }
+        }
+        return;
+      }
       setError(parseApiError(registerError));
     } finally {
       setIsRegisterSubmitting(false);
