@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { classAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { parseApiError } from '../utils/apiError';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 
@@ -49,6 +50,33 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: '토' },
 ];
 const PAGE_SIZE = 10;
+const CLASS_FILTER_STORAGE_KEY = 'class-management-filters';
+
+interface StoredClassFilters {
+  showOpenOnly: boolean;
+  dateFromFilter: string;
+  dateToFilter: string;
+}
+
+const getClassFilterStorageKey = (userId: number) => `${CLASS_FILTER_STORAGE_KEY}:${userId}`;
+
+const readStoredClassFilters = (userId: number): StoredClassFilters | null => {
+  try {
+    const raw = localStorage.getItem(getClassFilterStorageKey(userId));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<StoredClassFilters>;
+    return {
+      showOpenOnly: Boolean(parsed.showOpenOnly),
+      dateFromFilter: typeof parsed.dateFromFilter === 'string' ? parsed.dateFromFilter : '',
+      dateToFilter: typeof parsed.dateToFilter === 'string' ? parsed.dateToFilter : '',
+    };
+  } catch {
+    return null;
+  }
+};
 
 export const buildRecurringDates = (startDate: string, endDate: string, weekdays: number[]): string[] => {
   const start = new Date(`${startDate}T00:00:00`);
@@ -92,6 +120,7 @@ const STATUS_LEGEND = [
 ] as const;
 
 const ClassManagement: React.FC = () => {
+  const { user } = useAuth();
   const [classes, setClasses] = useState<YogaClass[]>([]);
   const [form, setForm] = useState<ClassForm>(INITIAL_FORM);
   const [search, setSearch] = useState('');
@@ -102,6 +131,7 @@ const ClassManagement: React.FC = () => {
   const [draftShowOpenOnly, setDraftShowOpenOnly] = useState(false);
   const [draftDateFromFilter, setDraftDateFromFilter] = useState('');
   const [draftDateToFilter, setDraftDateToFilter] = useState('');
+  const [hasHydratedFilters, setHasHydratedFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -192,8 +222,51 @@ const ClassManagement: React.FC = () => {
   }, [dateFromFilter, dateToFilter]);
 
   useEffect(() => {
+    if (user?.role !== 'admin' || typeof user.id !== 'number') {
+      setHasHydratedFilters(true);
+      return;
+    }
+
+    const storedFilters = readStoredClassFilters(user.id);
+    if (storedFilters) {
+      setShowOpenOnly(storedFilters.showOpenOnly);
+      setDateFromFilter(storedFilters.dateFromFilter);
+      setDateToFilter(storedFilters.dateToFilter);
+      setDraftShowOpenOnly(storedFilters.showOpenOnly);
+      setDraftDateFromFilter(storedFilters.dateFromFilter);
+      setDraftDateToFilter(storedFilters.dateToFilter);
+    } else {
+      setShowOpenOnly(false);
+      setDateFromFilter('');
+      setDateToFilter('');
+      setDraftShowOpenOnly(false);
+      setDraftDateFromFilter('');
+      setDraftDateToFilter('');
+    }
+    setHasHydratedFilters(true);
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!hasHydratedFilters) {
+      return;
+    }
     void loadClasses(true);
-  }, [loadClasses]);
+  }, [hasHydratedFilters, loadClasses]);
+
+  useEffect(() => {
+    if (!hasHydratedFilters || user?.role !== 'admin' || typeof user.id !== 'number') {
+      return;
+    }
+
+    localStorage.setItem(
+      getClassFilterStorageKey(user.id),
+      JSON.stringify({
+        showOpenOnly,
+        dateFromFilter,
+        dateToFilter,
+      } satisfies StoredClassFilters)
+    );
+  }, [dateFromFilter, dateToFilter, hasHydratedFilters, showOpenOnly, user?.id, user?.role]);
 
   useEffect(() => {
     setPage(1);

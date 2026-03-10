@@ -10,12 +10,17 @@ const {
   createRecurringMock,
   deleteMock,
   parseApiErrorMock,
+  useAuthMock,
 } = vi.hoisted(() => ({
   getAllMock: vi.fn(),
   createMock: vi.fn(),
   createRecurringMock: vi.fn(),
   deleteMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
+  useAuthMock: vi.fn(() => ({
+    user: { id: 1, login_id: 'admin1', role: 'admin' },
+    customerInfo: null,
+  })),
 }));
 
 vi.mock('../services/api', () => ({
@@ -31,21 +36,53 @@ vi.mock('../utils/apiError', () => ({
   parseApiError: parseApiErrorMock,
 }));
 
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: useAuthMock,
+}));
+
 const renderPage = () => render(
   <MemoryRouter>
     <ClassManagement />
   </MemoryRouter>
 );
 
+const createMemoryStorage = () => {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+  };
+};
+
+const clearStoredClassFilters = () => {
+  localStorage.removeItem('class-management-filters:1');
+  localStorage.removeItem('class-management-filters:2');
+};
+
 describe('ClassManagement page', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.resetAllMocks();
+    Object.defineProperty(window, 'localStorage', {
+      value: createMemoryStorage(),
+      configurable: true,
+    });
+    useAuthMock.mockReturnValue({
+      user: { id: 1, login_id: 'admin1', role: 'admin' },
+      customerInfo: null,
+    });
+    clearStoredClassFilters();
     getAllMock.mockResolvedValue({ data: [] });
   });
 
   afterEach(() => {
     cleanup();
+    clearStoredClassFilters();
   });
 
   it('shows load error when fetching classes fails', async () => {
@@ -497,6 +534,74 @@ describe('ClassManagement page', () => {
     fireEvent.click(screen.getByRole('button', { name: '적용' }));
     await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(4));
     await waitFor(() => expect(screen.getByText('총 161건 · 1/17 페이지')).toBeTruthy());
+  });
+
+  it('persists applied filters per admin until reset is applied', async () => {
+    const allClasses = [
+      {
+        id: 1,
+        title: '오픈수업',
+        class_date: '2026-02-24',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        max_capacity: 10,
+        is_open: true,
+        class_status: 'open',
+      },
+      {
+        id: 2,
+        title: '완료수업',
+        class_date: '2026-02-25',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        max_capacity: 10,
+        is_open: true,
+        class_status: 'completed',
+      },
+    ];
+    const filteredClasses = [allClasses[0]];
+
+    getAllMock
+      .mockResolvedValueOnce({ data: allClasses })
+      .mockResolvedValueOnce({ data: filteredClasses })
+      .mockResolvedValueOnce({ data: filteredClasses })
+      .mockResolvedValueOnce({ data: allClasses });
+
+    const { unmount } = renderPage();
+    await waitFor(() => expect(screen.getByText('오픈수업')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.click(screen.getByLabelText('오픈 수업만 보기'));
+    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-02-01' } });
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+
+    await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(2));
+    expect(getAllMock.mock.calls[1][0]).toEqual({ date_from: '2026-02-01' });
+    expect(screen.queryByText('완료수업')).toBeNull();
+    expect(localStorage.getItem('class-management-filters:1')).toBe(JSON.stringify({
+      showOpenOnly: true,
+      dateFromFilter: '2026-02-01',
+      dateToFilter: '',
+    }));
+
+    unmount();
+    renderPage();
+    await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(3));
+    expect(getAllMock.mock.calls[2][0]).toEqual({ date_from: '2026-02-01' });
+    expect(screen.queryByText('완료수업')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '필터' }));
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
+    fireEvent.click(screen.getByRole('button', { name: '적용' }));
+
+    await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(4));
+    expect(getAllMock.mock.calls[3][0]).toBeUndefined();
+    await waitFor(() => expect(screen.getByText('완료수업')).toBeTruthy());
+    expect(localStorage.getItem('class-management-filters:1')).toBe(JSON.stringify({
+      showOpenOnly: false,
+      dateFromFilter: '',
+      dateToFilter: '',
+    }));
   });
 
   it('shows validation error when date range is invalid', async () => {
