@@ -274,75 +274,84 @@ router.put('/:id',
       return res.status(400).json({ error: 'is_active must be boolean' });
     }
 
+    let client: {
+      query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }>;
+      release: () => void;
+    } | null = null;
+
     try {
-      let membershipRow: any = null;
+      client = await pool.connect();
+      await client.query('BEGIN');
 
-      if (hasIsActive) {
-        const existingResult = await pool.query(
-          'SELECT * FROM yoga_memberships WHERE id = $1',
-          [id]
-        );
+      const existingResult = await client.query(
+        `SELECT *
+         FROM yoga_memberships
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
 
-        if (existingResult.rows.length === 0) {
-          return res.status(404).json({ error: 'Membership not found' });
-        }
-
-        membershipRow = existingResult.rows[0];
-
-        if (membershipRow.remaining_sessions !== null) {
-          return res.status(400).json({
-            error: 'is_active can only be set manually for unlimited memberships',
-          });
-        }
+      if (existingResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Membership not found' });
       }
 
-      if (hasRemainingSessions || hasNotes) {
-        const updateResult = await pool.query(
-          `UPDATE yoga_memberships 
-           SET remaining_sessions = CASE
-                 WHEN $1 THEN $2
-                 ELSE remaining_sessions
-               END,
-               notes = CASE
-                 WHEN $3 THEN $4
-                 ELSE notes
-               END
-           WHERE id = $5
-           RETURNING *`,
-          [hasRemainingSessions, remaining_sessions, hasNotes, notes, id]
-        );
+      const currentMembership = existingResult.rows[0] as {
+        remaining_sessions: number | null;
+      };
+      const nextRemainingSessions = hasRemainingSessions
+        ? remaining_sessions as number | null
+        : currentMembership.remaining_sessions;
 
-        if (updateResult.rows.length === 0) {
-          return res.status(404).json({ error: 'Membership not found' });
-        }
-        membershipRow = updateResult.rows[0];
-      } else if (membershipRow === null) {
-        const existingResult = await pool.query(
-          'SELECT * FROM yoga_memberships WHERE id = $1',
-          [id]
-        );
-
-        if (existingResult.rows.length === 0) {
-          return res.status(404).json({ error: 'Membership not found' });
-        }
-        membershipRow = existingResult.rows[0];
+      if (hasIsActive && nextRemainingSessions !== null) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'is_active can only be set manually for unlimited memberships',
+        });
       }
 
-      if (hasIsActive) {
-        const activeResult = await pool.query(
-          `UPDATE yoga_memberships
-           SET is_active = $1
-           WHERE id = $2
-           RETURNING *`,
-          [is_active, id]
-        );
-        membershipRow = activeResult.rows[0];
+      if (!hasRemainingSessions && !hasNotes && !hasIsActive) {
+        await client.query('COMMIT');
+        return res.json(currentMembership);
       }
 
-      res.json(membershipRow);
+      const updateResult = await client.query(
+        `UPDATE yoga_memberships
+         SET remaining_sessions = CASE
+               WHEN $1 THEN $2
+               ELSE remaining_sessions
+             END,
+             notes = CASE
+               WHEN $3 THEN $4
+               ELSE notes
+             END,
+             is_active = CASE
+               WHEN $5 THEN $6
+               ELSE is_active
+             END
+         WHERE id = $7
+         RETURNING *`,
+        [
+          hasRemainingSessions,
+          remaining_sessions,
+          hasNotes,
+          notes,
+          hasIsActive,
+          is_active,
+          id,
+        ]
+      );
+
+      await client.query('COMMIT');
+      res.json(updateResult.rows[0]);
     } catch (error) {
+      if (client) {
+        await client.query('ROLLBACK');
+      }
       console.error('Update membership error:', error);
       res.status(500).json({ error: 'Server error' });
+    } finally {
+      client?.release();
     }
   }
 );

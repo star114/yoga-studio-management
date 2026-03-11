@@ -412,7 +412,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 500);
 
-  h.queryQueue.push({ rows: [] });
+  const updateNotFoundClient = h.createDbClientMock();
+  updateNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateNotFoundClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -432,7 +438,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'Request body must be an object');
 
-  h.queryQueue.push({ rows: [{ id: 201, notes: 'x2' }] });
+  const updateNotesClient = h.createDbClientMock();
+  updateNotesClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: 'old' }] },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: 'x2' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateNotesClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -442,7 +455,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 200);
 
-  h.queryQueue.push({ rows: [{ id: 201, notes: null }] });
+  const updateNullNotesClient = h.createDbClientMock();
+  updateNullNotesClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: 'x2' }] },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateNullNotesClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -453,10 +473,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(res.body.notes, null);
 
-  h.queryQueue.push(
-    { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] }
+  const updateFinalStateValidationClient = h.createDbClientMock();
+  updateFinalStateValidationClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 202, remaining_sessions: null, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
   );
-  const queryCallCountBeforeLimitedOverride = h.queryCalls.length;
+  h.connectQueue.push(updateFinalStateValidationClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -466,17 +489,20 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'is_active can only be set manually for unlimited memberships');
-  assert.equal(h.queryCalls.length - queryCallCountBeforeLimitedOverride, 1);
   assert.equal(
-    h.queryCalls.slice(queryCallCountBeforeLimitedOverride).some(([queryText]) =>
+    updateFinalStateValidationClient.queryCalls.some(([queryText]) =>
       String(queryText).includes('SET remaining_sessions = CASE')
     ),
     false
   );
 
-  h.queryQueue.push(
-    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] }
+  const updateLimitedOverrideClient = h.createDbClientMock();
+  updateLimitedOverrideClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
   );
+  h.connectQueue.push(updateLimitedOverrideClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -487,10 +513,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'is_active can only be set manually for unlimited memberships');
 
-  h.queryQueue.push(
+  const updateUnlimitedOverrideClient = h.createDbClientMock();
+  updateUnlimitedOverrideClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
     { rows: [{ id: 204, remaining_sessions: null, is_active: true, notes: null }] },
-    { rows: [{ id: 204, remaining_sessions: null, is_active: false, notes: null }] }
+    { rows: [{ id: 204, remaining_sessions: null, is_active: false, notes: null }] },
+    { rows: [], rowCount: 0 }
   );
+  h.connectQueue.push(updateUnlimitedOverrideClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -502,7 +532,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body.id, 204);
   assert.equal(res.body.is_active, false);
 
-  h.queryQueue.push({ rows: [] });
+  const updateMissingMembershipClient = h.createDbClientMock();
+  updateMissingMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateMissingMembershipClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -512,7 +548,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 205, remaining_sessions: 3, is_active: true, notes: 'memo' }] });
+  const updateEmptyBodyClient = h.createDbClientMock();
+  updateEmptyBodyClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 205, remaining_sessions: 3, is_active: true, notes: 'memo' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateEmptyBodyClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -523,7 +565,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(res.body.id, 205);
 
-  h.queryQueue.push({ rows: [] });
+  const updateEmptyBodyMissingClient = h.createDbClientMock();
+  updateEmptyBodyMissingClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateEmptyBodyMissingClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -552,7 +600,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'remaining_sessions must be a non-negative integer or null');
 
-  h.queryQueue.push(new Error('update membership fail'));
+  const updateErrorClient = h.createDbClientMock();
+  updateErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: null }] },
+    new Error('update membership fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateErrorClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -561,6 +616,12 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { notes: 'x3' },
   });
   assert.equal(res.status, 500);
+  assert.equal(
+    updateErrorClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('ROLLBACK')
+    ),
+    true
+  );
 
   const deleteNotFoundClient = h.createDbClientMock();
   deleteNotFoundClient.queryQueue.push(
