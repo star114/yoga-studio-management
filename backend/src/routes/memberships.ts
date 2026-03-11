@@ -344,6 +344,16 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
+    const membershipResult = await client.query(
+      'SELECT id FROM yoga_memberships WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+
+    if (membershipResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Membership not found' });
+    }
+
     await client.query(
       `UPDATE yoga_attendances
        SET membership_id = NULL
@@ -370,11 +380,6 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       'DELETE FROM yoga_memberships WHERE id = $1 RETURNING id',
       [id]
     );
-
-    if (result.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Membership not found' });
-    }
 
     await client.query('COMMIT');
     res.json({ message: 'Membership deleted successfully' });

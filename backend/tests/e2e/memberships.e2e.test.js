@@ -519,8 +519,6 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteNotFoundClient = h.createDbClientMock();
   deleteNotFoundClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [], rowCount: 0 },
-    { rows: [], rowCount: 0 },
     { rows: [] },
     { rows: [], rowCount: 0 }
   );
@@ -536,6 +534,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteSuccessClient = h.createDbClientMock();
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 201 }] },
     { rows: [], rowCount: 2 },
     { rows: [], rowCount: 3 },
     { rows: [], rowCount: 1 },
@@ -550,6 +549,12 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
+  assert.equal(
+    deleteSuccessClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('SELECT id FROM yoga_memberships WHERE id = $1 FOR UPDATE')
+    ),
+    true
+  );
   assert.equal(
     deleteSuccessClient.queryCalls.some(([queryText]) =>
       String(queryText).includes('UPDATE yoga_attendances')
@@ -572,6 +577,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteErrorClient = h.createDbClientMock();
   deleteErrorClient.queryQueue.push(
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 201 }] },
     new Error('delete membership fail'),
     { rows: [], rowCount: 0 }
   );
