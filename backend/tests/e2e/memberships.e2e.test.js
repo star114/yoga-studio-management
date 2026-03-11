@@ -49,6 +49,9 @@ const createMembershipsHarness = () => {
       if (!client) {
         throw new Error('No mock client queued');
       }
+      if (client instanceof Error) {
+        throw client;
+      }
       return client;
     },
   };
@@ -280,6 +283,15 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 403);
 
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/customer/:customerId',
+    params: { customerId: 'abc' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid customerId');
+
   h.queryQueue.push({
     rows: [{ id: 9 }],
   });
@@ -287,7 +299,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     rows: [{
       id: 10,
       total_sessions: 10,
-      consumed_sessions: 4,
+      consumed_sessions: 5,
       remaining_sessions: 3,
     }],
   });
@@ -300,7 +312,16 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
   assert.equal(res.body[0].total_sessions, 10);
-  assert.equal(res.body[0].consumed_sessions, 4);
+  assert.equal(res.body[0].consumed_sessions, 5);
+
+  h.queryQueue.push(new Error('access check fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/customer/:customerId',
+    params: { customerId: '9' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
 
   h.queryQueue.push(
     { rows: [{ id: 9 }] },
@@ -555,6 +576,15 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(deleteErrorClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  h.connectQueue.push(new Error('pool connect fail'));
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
