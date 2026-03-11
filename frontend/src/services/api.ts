@@ -61,9 +61,6 @@ export const customerAPI = {
   getById: (id: number) => 
     api.get(`/customers/${id}`),
 
-  getAttendances: (id: number, params?: QueryParams) =>
-    api.get(`/customers/${id}/attendances`, { params }),
-
   getClassActivities: (id: number, params?: QueryParams) =>
     api.get(`/customers/${id}/class-activities`, { params }),
 

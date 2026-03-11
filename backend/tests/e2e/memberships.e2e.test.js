@@ -449,8 +449,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body.notes, null);
 
   h.queryQueue.push(
-    { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] },
-    { rows: [{ id: 202, remaining_sessions: 5, is_active: false }] }
+    { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] }
   );
   res = await h.runRoute({
     method: 'put',
@@ -459,12 +458,11 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { remaining_sessions: 5, is_active: false },
   });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.is_active, false);
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'is_active can only be set manually for unlimited memberships');
 
   h.queryQueue.push(
-    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] },
-    { rows: [{ id: 203, remaining_sessions: 8, is_active: false, notes: null }] }
+    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] }
   );
   res = await h.runRoute({
     method: 'put',
@@ -473,8 +471,22 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { is_active: false },
   });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'is_active can only be set manually for unlimited memberships');
+
+  h.queryQueue.push(
+    { rows: [{ id: 204, remaining_sessions: null, is_active: true, notes: null }] },
+    { rows: [{ id: 204, remaining_sessions: null, is_active: false, notes: null }] }
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '204' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { is_active: false },
+  });
   assert.equal(res.status, 200);
-  assert.equal(res.body.id, 203);
+  assert.equal(res.body.id, 204);
   assert.equal(res.body.is_active, false);
 
   h.queryQueue.push({ rows: [] });

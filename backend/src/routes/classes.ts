@@ -783,7 +783,15 @@ router.post('/:id/registrations',
       await client.query('BEGIN');
 
       const classResult = await client.query(
-        `SELECT id, title, is_open, max_capacity, class_date, start_time, end_time
+        `SELECT
+           id,
+           title,
+           is_open,
+           max_capacity,
+           class_date,
+           start_time,
+           end_time,
+           (class_date::timestamp + end_time) <= CURRENT_TIMESTAMP AS is_completed
          FROM yoga_classes
          WHERE id = $1
          FOR UPDATE`,
@@ -797,11 +805,7 @@ router.post('/:id/registrations',
 
       const yogaClass = classResult.rows[0];
 
-      const now = new Date();
-      const normalizedClassDate = String(yogaClass.class_date).slice(0, 10);
-      const normalizedEndTime = String(yogaClass.end_time).slice(0, 8);
-      const classEndAt = new Date(`${normalizedClassDate}T${normalizedEndTime}`);
-      const isCompletedClass = classEndAt <= now;
+      const isCompletedClass = yogaClass.is_completed === true;
       const markAttendedAfterRegister = req.user?.role === 'admin'
         && req.body.mark_attended_after_register === true;
       const shouldCreateImmediateAttendance = isCompletedClass && markAttendedAfterRegister;
@@ -1032,9 +1036,33 @@ router.post('/:id/registrations',
 
       if (shouldCreateImmediateAttendance) {
         await client.query(
-          `INSERT INTO yoga_attendances (customer_id, membership_id, class_id, attendance_date, instructor_id, class_type)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [customerId, selectedMembership.id, id, classEndAt, req.user!.id, yogaClass.title || null]
+          `INSERT INTO yoga_attendances (
+             customer_id,
+             membership_id,
+             class_id,
+             attendance_date,
+             instructor_id,
+             class_type,
+             session_deducted
+           )
+           VALUES (
+             $1,
+             $2,
+             $3,
+             ($4::date::timestamp + $5::time),
+             $6,
+             $7,
+             TRUE
+           )`,
+          [
+            customerId,
+            selectedMembership.id,
+            id,
+            yogaClass.class_date,
+            yogaClass.end_time,
+            req.user!.id,
+            yogaClass.title || null,
+          ]
         );
       }
 

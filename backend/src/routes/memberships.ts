@@ -314,6 +314,12 @@ router.put('/:id',
       }
 
       if (hasIsActive) {
+        if (membershipRow.remaining_sessions !== null) {
+          return res.status(400).json({
+            error: 'is_active can only be set manually for unlimited memberships',
+          });
+        }
+
         const activeResult = await pool.query(
           `UPDATE yoga_memberships
            SET is_active = $1
@@ -376,7 +382,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       [id]
     );
 
-    const result = await client.query(
+    await client.query(
       'DELETE FROM yoga_memberships WHERE id = $1 RETURNING id',
       [id]
     );

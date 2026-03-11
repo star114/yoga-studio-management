@@ -71,6 +71,7 @@ test('worker starts with fallback interval, runs query, and stops', async (t) =>
   assert.equal(queryMock.mock.calls.length, 2);
   const firstQuery = String(queryMock.mock.calls[0].arguments[0]);
   assert.match(firstQuery, /INSERT INTO yoga_attendances/i);
+  assert.match(firstQuery, /session_deducted/i);
   assert.equal(typeof capturedCallback, 'function');
   const initialLogs = logMock.mock.calls.map((call) => String(call.arguments[0]));
   assert.equal(initialLogs.some((line) => /Auto-processed 2 attendance/.test(line)), true);

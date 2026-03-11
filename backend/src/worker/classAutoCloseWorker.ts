@@ -99,12 +99,19 @@ export const startClassAutoCloseWorker = () => {
            WHERE rn = 1
          ),
          inserted AS (
-           INSERT INTO yoga_attendances (customer_id, membership_id, class_id, class_type)
+           INSERT INTO yoga_attendances (
+             customer_id,
+             membership_id,
+             class_id,
+             class_type,
+             session_deducted
+           )
            SELECT
              sm.customer_id,
              sm.membership_id,
              sm.class_id,
-             sm.class_title
+             sm.class_title,
+             sm.should_decrement_membership
            FROM selected_memberships sm
            WHERE NOT EXISTS (
              SELECT 1

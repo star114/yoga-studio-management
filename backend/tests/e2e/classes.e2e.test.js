@@ -572,6 +572,7 @@ test('class registration and recurring routes cover core branches', async () => 
           id: 11,
           title: null,
           is_open: false,
+          is_completed: true,
           max_capacity: 1,
           is_excluded: false,
           class_date: '2000-01-01',
@@ -610,8 +611,10 @@ test('class registration and recurring routes cover core branches', async () => 
   const completedAttendanceInsertCall = completedManualAttendanceClient.queryCalls.find(([queryText]) =>
     String(queryText).includes('INSERT INTO yoga_attendances')
   );
-  assert.equal(String(completedAttendanceInsertCall?.[1]?.[3]?.toISOString?.() || ''), '2000-01-01T03:00:00.000Z');
-  assert.equal(completedAttendanceInsertCall?.[1]?.[5], null);
+  assert.match(String(completedAttendanceInsertCall?.[0]), /session_deducted/i);
+  assert.equal(completedAttendanceInsertCall?.[1]?.[3], '2000-01-01');
+  assert.equal(completedAttendanceInsertCall?.[1]?.[4], '12:00:00');
+  assert.equal(completedAttendanceInsertCall?.[1]?.[6], null);
 
   const fullClient = h.createDbClientMock();
   fullClient.queryQueue.push(
@@ -652,6 +655,7 @@ test('class registration and recurring routes cover core branches', async () => 
           id: 11,
           title: '아쉬탕가',
           is_open: true,
+          is_completed: false,
           max_capacity: 10,
           is_excluded: false,
           class_date: '2999-01-01',
@@ -1285,12 +1289,12 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
-	    {
-	      rows: [
-	        { id: 601, membership_id: 77, session_deducted: true },
-	        { id: 602, membership_id: 501, session_deducted: false },
-	      ],
-	    },
+    {
+      rows: [
+        { id: 601, membership_id: 77, session_deducted: true },
+        { id: 602, membership_id: 501, session_deducted: false },
+      ],
+    },
     { rows: [{ id: 77, remaining_sessions: 2 }] },
     { rows: [], rowCount: 1 },
     {
@@ -1339,12 +1343,12 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
-	    {
-	      rows: [
-	        { id: 701, membership_id: null, session_deducted: false },
-	        { id: 702, membership_id: 88, session_deducted: false },
-	      ],
-	    },
+    {
+      rows: [
+        { id: 701, membership_id: null, session_deducted: false },
+        { id: 702, membership_id: 88, session_deducted: false },
+      ],
+    },
     { rows: [], rowCount: 1 },
     {
       rows: [
