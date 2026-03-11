@@ -677,7 +677,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   assert.equal(res.status, 201);
   assert.equal(
     reservedMembershipClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions - 1')
+      String(queryText).includes('UPDATE yoga_memberships')
     ),
     true
   );
@@ -797,7 +797,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   assert.equal(res.status, 200);
   assert.equal(
     deleteSuccessClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
+      String(queryText).includes('UPDATE yoga_memberships')
     ),
     true
   );

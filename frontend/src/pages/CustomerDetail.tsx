@@ -310,6 +310,7 @@ const CustomerDetail: React.FC = () => {
     setError('');
     try {
       await classAPI.cancelRegistration(item.class_id as number, customerId);
+      await loadMemberships();
       setActivityReloadToken((prev) => prev + 1);
       showNotice('예약을 취소했습니다.');
     } catch (cancelError: unknown) {

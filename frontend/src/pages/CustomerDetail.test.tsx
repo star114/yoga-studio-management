@@ -614,6 +614,20 @@ describe('CustomerDetail page', () => {
   });
 
   it('allows canceling reserved class from activity list', async () => {
+    getByCustomerMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 81,
+            membership_type_name: '아쉬탕가',
+            remaining_sessions: 5,
+            available_sessions: 5,
+            is_active: true,
+            notes: null,
+          },
+        ],
+      });
     getClassActivitiesMock
       .mockResolvedValueOnce({
         data: {
@@ -643,6 +657,7 @@ describe('CustomerDetail page', () => {
     fireEvent.click(cancelButton);
 
     await waitFor(() => expect(classCancelRegistrationMock).toHaveBeenCalledWith(55, 1));
+    await waitFor(() => expect(getByCustomerMock).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByText('예약을 취소했습니다.')).toBeTruthy());
   });
 

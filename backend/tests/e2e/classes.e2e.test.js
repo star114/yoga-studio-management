@@ -1248,7 +1248,7 @@ test('class registration and recurring routes cover core branches', async () => 
     cancelAdminDuplicateDeductionClient.queryCalls.filter(([queryText]) =>
       String(queryText).includes('remaining_sessions = remaining_sessions +')
     ).length,
-    2
+    1
   );
 
   const cancelAdminNullMembershipClient = h.createDbClientMock();

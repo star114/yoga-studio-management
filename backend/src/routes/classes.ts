@@ -3,6 +3,7 @@ import { body, param, query } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
+import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -41,22 +42,6 @@ const getLatestAttendanceIdByClassCustomer = async (
   return Number(attendanceResult.rows[0].id);
 };
 
-const restoreMembershipSessions = async (
-  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
-  membershipId: number
-) => {
-  await client.query(
-    `UPDATE yoga_memberships
-     SET remaining_sessions = remaining_sessions + 1,
-         is_active = CASE
-           WHEN (remaining_sessions + 1) > 0 THEN TRUE
-           ELSE FALSE
-         END
-     WHERE id = $1`,
-    [membershipId]
-  );
-};
-
 const cancelRegistrationAndRelatedAttendance = async (
   client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
   registration: {
@@ -65,7 +50,8 @@ const cancelRegistrationAndRelatedAttendance = async (
     attendance_status: 'reserved' | 'attended' | 'absent';
   },
   classId: string,
-  customerId: number | string
+  customerId: number | string,
+  actorUserId?: number | null
 ) => {
   const attendanceResult = await client.query(
     `SELECT id, membership_id, session_deducted
@@ -100,9 +86,15 @@ const cancelRegistrationAndRelatedAttendance = async (
   }
 
   for (const [membershipId, usedCount] of membershipUsage.entries()) {
-    for (let index = 0; index < usedCount; index += 1) {
-      await restoreMembershipSessions(client, membershipId);
-    }
+    await refundMembershipSessions(client, {
+      membershipId,
+      changeAmount: usedCount,
+      actorUserId,
+      classId: Number(classId),
+      registrationId: registration.id,
+      reason: 'registration_cancel_refund',
+      note: `Canceled registration with status ${registration.attendance_status}`,
+    });
   }
 
   if (attendanceRows.length > 0) {
@@ -125,7 +117,7 @@ router.get('/',
   query('date_to').optional().isDate(),
   query('is_open').optional().isBoolean(),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const { date_from, date_to, is_open } = req.query;
 
     try {
@@ -228,7 +220,7 @@ router.get('/:id',
   requireAdmin,
   param('id').isInt({ min: 1 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
 
     try {
@@ -335,7 +327,7 @@ router.get('/:id/registrations',
   requireAdmin,
   param('id').isInt({ min: 1 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
 
     try {
@@ -479,7 +471,7 @@ router.get('/:id/registrations/:customerId/comment-thread',
   param('id').isInt({ min: 1 }),
   param('customerId').isInt({ min: 1 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
     const customerId = Number(req.params.customerId);
 
@@ -600,7 +592,7 @@ router.put('/:id/registrations/:customerId/comment',
   param('customerId').isInt({ min: 1 }),
   body('registration_comment').optional({ values: 'falsy' }).isString().isLength({ max: 500 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
     const customerId = Number(req.params.customerId);
     const comment = typeof req.body.registration_comment === 'string'
@@ -636,7 +628,7 @@ router.put('/:id/registrations/:customerId/status',
   param('customerId').isInt({ min: 1 }),
   body('attendance_status').isIn(['reserved', 'attended', 'absent']),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
     const customerId = Number(req.params.customerId);
     const attendanceStatus = String(req.body.attendance_status);
@@ -684,20 +676,16 @@ router.put('/:id/registrations/:customerId/status',
           return res.status(400).json({ error: 'Registration membership not found' });
         }
 
-        const membershipUpdateResult = await client.query(
-          `UPDATE yoga_memberships
-           SET remaining_sessions = remaining_sessions - 1,
-               is_active = CASE
-                 WHEN (remaining_sessions - 1) <= 0 THEN FALSE
-                 ELSE TRUE
-               END
-           WHERE id = $1
-             AND remaining_sessions > 0
-           RETURNING id`,
-          [currentRegistration.membership_id]
-        );
+        const membershipUpdateResult = await deductMembershipSessions(client, {
+          membershipId: currentRegistration.membership_id,
+          changeAmount: 1,
+          actorUserId: req.user!.id,
+          classId,
+          registrationId: currentRegistration.id,
+          reason: 'registration_status_absent_deduction',
+        });
 
-        if (membershipUpdateResult.rows.length === 0) {
+        if (!membershipUpdateResult) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'Membership sessions exhausted' });
         }
@@ -737,16 +725,15 @@ router.put('/:id/registrations/:customerId/status',
             }
 
             for (const [membershipId, usedCount] of membershipUsage.entries()) {
-              await client.query(
-                `UPDATE yoga_memberships
-                 SET remaining_sessions = remaining_sessions + $2,
-                     is_active = CASE
-                       WHEN (remaining_sessions + $2) > 0 THEN TRUE
-                       ELSE FALSE
-                     END
-                 WHERE id = $1`,
-                [membershipId, usedCount]
-              );
+              await refundMembershipSessions(client, {
+                membershipId,
+                changeAmount: usedCount,
+                actorUserId: req.user!.id,
+                classId,
+                registrationId: currentRegistration.id,
+                reason: 'registration_status_reserved_refund',
+                note: `Status changed from ${currentRegistration.attendance_status} to reserved`,
+              });
             }
           }
 
@@ -1068,20 +1055,16 @@ router.post('/:id/registrations',
       }
 
       if (shouldCreateImmediateAttendance) {
-        const membershipUpdateResult = await client.query(
-          `UPDATE yoga_memberships
-           SET remaining_sessions = remaining_sessions - 1,
-               is_active = CASE
-                 WHEN (remaining_sessions - 1) <= 0 THEN FALSE
-                 ELSE TRUE
-               END
-           WHERE id = $1
-             AND remaining_sessions > 0
-           RETURNING id`,
-          [selectedMembership.id]
-        );
+        const membershipUpdateResult = await deductMembershipSessions(client, {
+          membershipId: selectedMembership.id,
+          changeAmount: 1,
+          actorUserId: req.user!.id,
+          classId: Number(id),
+          registrationId: Number(registrationResult.rows[0].id),
+          reason: 'completed_class_immediate_attendance',
+        });
 
-        if (membershipUpdateResult.rows.length === 0) {
+        if (!membershipUpdateResult) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'Membership sessions exhausted' });
         }
@@ -1174,7 +1157,13 @@ router.delete('/:id/registrations/me',
           return res.status(400).json({ error: 'Only reserved registrations can be canceled by customer' });
         }
 
-        await cancelRegistrationAndRelatedAttendance(client, registration, String(id), customerId);
+        await cancelRegistrationAndRelatedAttendance(
+          client,
+          registration,
+          String(id),
+          customerId,
+          req.user!.id
+        );
 
         await client.query('COMMIT');
         res.json({ message: 'Registration canceled successfully' });
@@ -1195,7 +1184,7 @@ router.delete('/:id/registrations/me',
 router.delete('/:id/registrations/:customerId',
   authenticate,
   requireAdmin,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const { id, customerId } = req.params;
 
     try {
@@ -1222,7 +1211,13 @@ router.delete('/:id/registrations/:customerId',
           attendance_status: 'reserved' | 'attended' | 'absent';
         };
 
-        await cancelRegistrationAndRelatedAttendance(client, registration, String(id), customerId);
+        await cancelRegistrationAndRelatedAttendance(
+          client,
+          registration,
+          String(id),
+          customerId,
+          req.user!.id
+        );
 
         await client.query('COMMIT');
         res.json({ message: 'Registration canceled successfully' });

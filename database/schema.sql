@@ -92,11 +92,32 @@ CREATE TABLE IF NOT EXISTS yoga_class_registrations (
     UNIQUE (class_id, customer_id)
 );
 
+-- 회원권 잔여 횟수 감사 로그
+CREATE TABLE IF NOT EXISTS yoga_membership_usage_audit_logs (
+    id SERIAL PRIMARY KEY,
+    membership_id INTEGER NOT NULL REFERENCES yoga_memberships(id) ON DELETE CASCADE,
+    customer_id INTEGER NOT NULL REFERENCES yoga_customers(id) ON DELETE CASCADE,
+    class_id INTEGER REFERENCES yoga_classes(id) ON DELETE SET NULL,
+    registration_id INTEGER REFERENCES yoga_class_registrations(id) ON DELETE SET NULL,
+    attendance_id INTEGER REFERENCES yoga_attendances(id) ON DELETE SET NULL,
+    actor_user_id INTEGER REFERENCES yoga_users(id) ON DELETE SET NULL,
+    change_amount INTEGER NOT NULL,
+    remaining_before INTEGER NOT NULL CHECK (remaining_before >= 0),
+    remaining_after INTEGER NOT NULL CHECK (remaining_after >= 0),
+    reason VARCHAR(100) NOT NULL,
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 인덱스 생성
 CREATE INDEX IF NOT EXISTS idx_customers_user_id ON yoga_customers(user_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON yoga_customers(phone);
 CREATE INDEX IF NOT EXISTS idx_memberships_customer_id ON yoga_memberships(customer_id);
 CREATE INDEX IF NOT EXISTS idx_memberships_active ON yoga_memberships(is_active);
+CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_membership_created
+    ON yoga_membership_usage_audit_logs(membership_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_customer_created
+    ON yoga_membership_usage_audit_logs(customer_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_attendances_customer_id ON yoga_attendances(customer_id);
 CREATE INDEX IF NOT EXISTS idx_attendances_date ON yoga_attendances(attendance_date);
 CREATE INDEX IF NOT EXISTS idx_attendances_class_id ON yoga_attendances(class_id);

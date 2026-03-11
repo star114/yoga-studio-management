@@ -2,6 +2,7 @@ import express from 'express';
 import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -182,7 +183,7 @@ router.post('/',
 
       const classId = Number(class_id);
       const classResult = await client.query(
-        `SELECT cls.id, cls.title, reg.membership_id
+        `SELECT cls.id, cls.title, reg.id AS registration_id, reg.membership_id
          FROM yoga_classes cls
          INNER JOIN yoga_class_registrations reg ON reg.class_id = cls.id
          WHERE cls.id = $1 AND reg.customer_id = $2
@@ -305,20 +306,17 @@ router.post('/',
       if (
         shouldDeductAtAttendance
       ) {
-        const membershipUpdateResult = await client.query(
-          `UPDATE yoga_memberships 
-           SET remaining_sessions = remaining_sessions - 1,
-               is_active = CASE
-                 WHEN (remaining_sessions - 1) <= 0 THEN false
-                 ELSE true
-               END
-           WHERE id = $1
-             AND remaining_sessions > 0
-           RETURNING id`,
-          [activeMembership.id]
-        );
+        const membershipUpdateResult = await deductMembershipSessions(client, {
+          membershipId: activeMembership.id,
+          changeAmount: 1,
+          actorUserId: req.user!.id,
+          classId: resolvedClassId,
+          registrationId: Number((classResult.rows[0] as { registration_id: number }).registration_id),
+          attendanceId: Number((attendanceResult.rows[0] as { id: number }).id),
+          reason: 'attendance_check_in',
+        });
 
-        if (membershipUpdateResult.rows.length === 0) {
+        if (!membershipUpdateResult) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'Membership sessions exhausted' });
         }
@@ -482,7 +480,7 @@ router.put('/:id',
 );
 
 // 출석 기록 삭제 (관리자)
-router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   const { id } = req.params;
 
   const client = await pool.connect();
@@ -517,16 +515,14 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       const membership = membershipResult.rows[0];
 
       if (attendance.session_deducted) {
-        await client.query(
-          `UPDATE yoga_memberships 
-           SET remaining_sessions = remaining_sessions + 1,
-               is_active = CASE
-                 WHEN (remaining_sessions + 1) > 0 THEN true
-                 ELSE false
-               END
-           WHERE id = $1`,
-          [membership.id]
-        );
+        await refundMembershipSessions(client, {
+          membershipId: membership.id,
+          changeAmount: 1,
+          actorUserId: req.user!.id,
+          classId: attendance.class_id,
+          attendanceId: Number(id),
+          reason: 'attendance_delete_refund',
+        });
       }
     }
 

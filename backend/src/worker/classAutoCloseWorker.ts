@@ -136,6 +136,21 @@ export const startClassAutoCloseWorker = () => {
            WHERE sm.should_decrement_membership = TRUE
            GROUP BY i.membership_id
          ),
+         membership_usage_events AS (
+           SELECT
+             i.membership_id,
+             i.customer_id,
+             i.class_id,
+             ROW_NUMBER() OVER (
+               PARTITION BY i.membership_id
+               ORDER BY i.class_id ASC, i.id ASC
+             ) AS event_index
+           FROM inserted i
+           INNER JOIN selected_memberships sm
+             ON sm.class_id = i.class_id
+            AND sm.customer_id = i.customer_id
+           WHERE sm.should_decrement_membership = TRUE
+         ),
          updated_memberships AS (
            UPDATE yoga_memberships m
            SET remaining_sessions = m.remaining_sessions - u.used_count,
@@ -145,7 +160,36 @@ export const startClassAutoCloseWorker = () => {
                END
            FROM membership_usage u
            WHERE m.id = u.membership_id
-           RETURNING m.id
+           RETURNING
+             m.id,
+             m.customer_id,
+             u.used_count,
+             m.remaining_sessions + u.used_count AS remaining_before,
+             m.remaining_sessions AS remaining_after
+         ),
+         audit_logs AS (
+           INSERT INTO yoga_membership_usage_audit_logs (
+             membership_id,
+             customer_id,
+             class_id,
+             change_amount,
+             remaining_before,
+             remaining_after,
+             reason,
+             note
+           )
+           SELECT
+             ume.membership_id,
+             ume.customer_id,
+             ume.class_id,
+             -1,
+             um.remaining_before - (ume.event_index - 1),
+             um.remaining_before - ume.event_index,
+             'auto_close_attendance',
+             'Auto-closed completed class attendance'
+           FROM membership_usage_events ume
+           INNER JOIN updated_memberships um ON um.id = ume.membership_id
+           RETURNING id
          )
          SELECT
            (SELECT COUNT(*)::int FROM eligible) AS eligible_count,
@@ -153,7 +197,8 @@ export const startClassAutoCloseWorker = () => {
            (SELECT COUNT(*)::int FROM selected_memberships) AS selected_count,
            (SELECT COUNT(*)::int FROM inserted) AS inserted_count,
            (SELECT COUNT(*)::int FROM updated_registrations) AS updated_registration_count,
-           (SELECT COUNT(*)::int FROM updated_memberships) AS updated_membership_count`
+           (SELECT COUNT(*)::int FROM updated_memberships) AS updated_membership_count,
+           (SELECT COUNT(*)::int FROM audit_logs) AS audit_log_count`
       );
 
       const attendanceSummary = attendanceSyncResult.rows[0] ?? {

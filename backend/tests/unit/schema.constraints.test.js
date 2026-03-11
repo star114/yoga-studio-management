@@ -68,3 +68,18 @@ test('memberships schema prevents negative remaining sessions', () => {
     /remaining_sessions\s+INTEGER\s+NOT NULL\s+CHECK\s+\(remaining_sessions >= 0\)/i
   );
 });
+
+test('membership usage audit schema exists with required constraints', () => {
+  const schemaPath = path.resolve(__dirname, '../../../database/schema.sql');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS yoga_membership_usage_audit_logs/i);
+  assert.match(schema, /membership_id\s+INTEGER\s+NOT NULL\s+REFERENCES\s+yoga_memberships\(id\)\s+ON DELETE CASCADE/i);
+  assert.match(schema, /customer_id\s+INTEGER\s+NOT NULL\s+REFERENCES\s+yoga_customers\(id\)\s+ON DELETE CASCADE/i);
+  assert.match(schema, /change_amount\s+INTEGER\s+NOT NULL/i);
+  assert.match(schema, /remaining_before\s+INTEGER\s+NOT NULL\s+CHECK\s+\(remaining_before >= 0\)/i);
+  assert.match(schema, /remaining_after\s+INTEGER\s+NOT NULL\s+CHECK\s+\(remaining_after >= 0\)/i);
+  assert.match(schema, /reason\s+VARCHAR\(100\)\s+NOT NULL/i);
+  assert.match(schema, /CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_membership_created/i);
+  assert.match(schema, /CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_customer_created/i);
+});
