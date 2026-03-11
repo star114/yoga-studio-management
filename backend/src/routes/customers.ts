@@ -63,15 +63,19 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
 router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   const { id } = req.params;
 
-  // 일반 사용자는 자기 정보만 조회 가능
-  if (req.user!.role !== 'admin') {
-    const hasAccess = await hasCustomerAccess(id, req.user!.id);
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid customerId' });
   }
 
   try {
+    // 일반 사용자는 자기 정보만 조회 가능
+    if (req.user!.role !== 'admin') {
+      const hasAccess = await hasCustomerAccess(id, req.user!.id);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
     const customerResult = await pool.query(`
       SELECT
         c.*,
@@ -387,18 +391,22 @@ router.get('/:id/attendances', authenticate, async (req: AuthRequest, res) => {
     : 20;
   const offset = (page - 1) * pageSize;
 
-  // 일반 사용자는 자기 정보만 조회 가능
-  if (req.user!.role !== 'admin') {
-    const checkResult = await pool.query(
-      'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
-      [id, req.user!.id]
-    );
-    if (checkResult.rows.length === 0) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid customerId' });
   }
 
   try {
+    // 일반 사용자는 자기 정보만 조회 가능
+    if (req.user!.role !== 'admin') {
+      const checkResult = await pool.query(
+        'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
+        [id, req.user!.id]
+      );
+      if (checkResult.rows.length === 0) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
     const whereClauses = ['a.customer_id = $1'];
     const queryParams: Array<number | string> = [id];
 
