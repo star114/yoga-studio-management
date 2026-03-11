@@ -47,12 +47,8 @@ const restoreMembershipSessions = async (
 ) => {
   await client.query(
     `UPDATE yoga_memberships
-     SET remaining_sessions = CASE
-           WHEN remaining_sessions IS NULL THEN NULL
-           ELSE remaining_sessions + 1
-         END,
+     SET remaining_sessions = remaining_sessions + 1,
          is_active = CASE
-           WHEN remaining_sessions IS NULL THEN is_active
            WHEN (remaining_sessions + 1) > 0 THEN TRUE
            ELSE FALSE
          END
@@ -97,6 +93,7 @@ const cancelRegistrationAndRelatedAttendance = async (
 
   if (
     registration.membership_id !== null
+    && registration.attendance_status !== 'reserved'
     && !membershipUsage.has(registration.membership_id)
   ) {
     membershipUsage.set(registration.membership_id, 1);
@@ -681,6 +678,29 @@ router.put('/:id/registrations/:customerId/status',
           await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Attendance record not found; use check-in endpoint first' });
         }
+      } else if (attendanceStatus === 'absent' && currentRegistration.attendance_status === 'reserved') {
+        if (currentRegistration.membership_id === null) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Registration membership not found' });
+        }
+
+        const membershipUpdateResult = await client.query(
+          `UPDATE yoga_memberships
+           SET remaining_sessions = remaining_sessions - 1,
+               is_active = CASE
+                 WHEN (remaining_sessions - 1) <= 0 THEN FALSE
+                 ELSE TRUE
+               END
+           WHERE id = $1
+             AND remaining_sessions > 0
+           RETURNING id`,
+          [currentRegistration.membership_id]
+        );
+
+        if (membershipUpdateResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Membership sessions exhausted' });
+        }
       } else {
         const attendanceResult = await client.query(
           `SELECT id, membership_id, session_deducted
@@ -708,15 +728,19 @@ router.put('/:id/registrations/:customerId/status',
               membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
             });
 
+            if (
+              currentRegistration.attendance_status === 'absent'
+              && currentRegistration.membership_id !== null
+              && !membershipUsage.has(currentRegistration.membership_id)
+            ) {
+              membershipUsage.set(currentRegistration.membership_id, 1);
+            }
+
             for (const [membershipId, usedCount] of membershipUsage.entries()) {
               await client.query(
                 `UPDATE yoga_memberships
-                 SET remaining_sessions = CASE
-                       WHEN remaining_sessions IS NULL THEN NULL
-                       ELSE remaining_sessions + $2
-                     END,
+                 SET remaining_sessions = remaining_sessions + $2,
                      is_active = CASE
-                       WHEN remaining_sessions IS NULL THEN is_active
                        WHEN (remaining_sessions + $2) > 0 THEN TRUE
                        ELSE FALSE
                      END
@@ -831,6 +855,7 @@ router.post('/:id/registrations',
         `SELECT
            m.id,
            m.remaining_sessions,
+           COALESCE(reservations.reserved_count, 0) AS reserved_count,
            CASE
              WHEN regexp_replace(
                     trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
@@ -848,9 +873,15 @@ router.post('/:id/registrations',
            END AS is_title_match
          FROM yoga_memberships m
          INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*)::int AS reserved_count
+           FROM yoga_class_registrations rr
+           WHERE rr.membership_id = m.id
+             AND rr.attendance_status = 'reserved'
+         ) reservations ON true
          WHERE m.customer_id = $1
            AND m.is_active = TRUE
-           AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
+           AND (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
          ORDER BY
            CASE
              WHEN regexp_replace(
@@ -873,7 +904,8 @@ router.post('/:id/registrations',
 
       const eligibleMembershipRows = membershipResult.rows as Array<{
         id: number;
-        remaining_sessions: number | null;
+        remaining_sessions: number;
+        reserved_count: number;
         is_title_match: boolean;
       }>;
       const requestedMembership = requestedMembershipId === null
@@ -916,11 +948,11 @@ router.post('/:id/registrations',
              COUNT(*)::int AS total_memberships,
              COUNT(*) FILTER (WHERE m.is_active = TRUE)::int AS active_memberships,
              COUNT(*) FILTER (
-               WHERE m.remaining_sessions IS NULL OR m.remaining_sessions > 0
+               WHERE (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
              )::int AS remaining_memberships,
              COUNT(*) FILTER (
                WHERE m.is_active = TRUE
-                 AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
+                 AND (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
              )::int AS eligible_memberships,
              COUNT(*) FILTER (
                WHERE regexp_replace(
@@ -937,6 +969,12 @@ router.post('/:id/registrations',
              )::int AS title_matched_memberships
            FROM yoga_memberships m
            LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*)::int AS reserved_count
+             FROM yoga_class_registrations rr
+             WHERE rr.membership_id = m.id
+               AND rr.attendance_status = 'reserved'
+           ) reservations ON true
            WHERE m.customer_id = $1`,
             [customerId, yogaClass.title]
           );
@@ -1029,7 +1067,7 @@ router.post('/:id/registrations',
         return res.status(400).json({ error: 'Customer already registered' });
       }
 
-      if (selectedMembership?.remaining_sessions !== null) {
+      if (shouldCreateImmediateAttendance) {
         const membershipUpdateResult = await client.query(
           `UPDATE yoga_memberships
            SET remaining_sessions = remaining_sessions - 1,
@@ -1047,9 +1085,7 @@ router.post('/:id/registrations',
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'Membership sessions exhausted' });
         }
-      }
 
-      if (shouldCreateImmediateAttendance) {
         await client.query(
           `INSERT INTO yoga_attendances (
              customer_id,
@@ -1077,7 +1113,7 @@ router.post('/:id/registrations',
             yogaClass.end_time,
             req.user!.id,
             yogaClass.title || null,
-            false,
+            true,
           ]
         );
       }

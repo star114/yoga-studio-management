@@ -755,6 +755,31 @@ describe('CustomerDetail page', () => {
     confirmSpy.mockRestore();
   });
 
+  it('replaces pending notice timer and clears notice after timeout', async () => {
+    resetPasswordMock.mockResolvedValue(undefined);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('비밀번호 초기화')).toBeTruthy());
+    vi.useFakeTimers();
+
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 초기화' }));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(screen.getByText('고객 비밀번호를 기본값(12345)으로 초기화했습니다.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 초기화' }));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resetPasswordMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(screen.queryByText('고객 비밀번호를 기본값(12345)으로 초기화했습니다.')).toBeNull();
+
+    confirmSpy.mockRestore();
+  });
+
   it('shows parsed error when reset password fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     resetPasswordMock.mockRejectedValueOnce(new Error('reset failed'));
@@ -867,8 +892,9 @@ describe('CustomerDetail page', () => {
         data: [
           {
             id: 8,
-            membership_type_name: '프리패스',
+            membership_type_name: '20회권',
             remaining_sessions: 5,
+            total_sessions: 20,
             is_active: true,
             notes: null,
           },
@@ -878,8 +904,9 @@ describe('CustomerDetail page', () => {
         data: [
           {
             id: 8,
-            membership_type_name: '프리패스',
-            remaining_sessions: null,
+            membership_type_name: '20회권',
+            remaining_sessions: 0,
+            total_sessions: 20,
             is_active: false,
             notes: '변경됨',
           },
@@ -888,17 +915,15 @@ describe('CustomerDetail page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('20회권')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '0' } });
     fireEvent.change(document.getElementById('edit-notes-8') as HTMLTextAreaElement, { target: { value: '변경됨' } });
-    fireEvent.click(screen.getByLabelText('활성 상태'));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(updateMembershipMock).toHaveBeenCalledWith(8, {
-      remaining_sessions: null,
-      is_active: false,
+      remaining_sessions: 0,
       notes: '변경됨',
     }));
 
@@ -907,6 +932,46 @@ describe('CustomerDetail page', () => {
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.click(screen.getByRole('button', { name: '취소' }));
     expect(screen.queryByRole('button', { name: '저장' })).toBeNull();
+  });
+
+  it('omits is_active when editing a limited membership', async () => {
+    updateMembershipMock.mockResolvedValueOnce(undefined);
+    getByCustomerMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 18,
+            membership_type_name: '10회권',
+            remaining_sessions: 4,
+            is_active: true,
+            notes: '기존 메모',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 18,
+            membership_type_name: '10회권',
+            remaining_sessions: 4,
+            is_active: true,
+            notes: '메모 수정',
+          },
+        ],
+      });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('10회권').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: '수정' }));
+    fireEvent.change(document.getElementById('edit-notes-18') as HTMLTextAreaElement, { target: { value: '메모 수정' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(updateMembershipMock).toHaveBeenCalledWith(18, {
+      remaining_sessions: 4,
+      notes: '메모 수정',
+    }));
   });
 
   it('renders membership start/end dates when provided', async () => {
@@ -928,7 +993,7 @@ describe('CustomerDetail page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByText('날짜있음권')).toBeTruthy());
-    expect(screen.getByText('예약 가능 잔여: 3')).toBeTruthy();
+    expect(screen.getByText('예약 가능 잔여: 3회')).toBeTruthy();
     expect(screen.getByText('소진 횟수: 4 / 10회')).toBeTruthy();
     expect(screen.getByText('시작일: 2026년 2월 1일')).toBeTruthy();
     expect(screen.getByText('예상 종료일: 2026년 3월 5일')).toBeTruthy();
@@ -1446,7 +1511,8 @@ describe('CustomerDetail page', () => {
         {
           id: 35,
           membership_type_name: '아쉬탕가',
-          remaining_sessions: null,
+          remaining_sessions: 5,
+          total_sessions: 10,
           is_active: true,
           notes: null,
         },

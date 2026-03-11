@@ -139,6 +139,7 @@ describe('api service', () => {
     membershipAPI.createType(payload);
     membershipAPI.updateType(1, payload);
     membershipAPI.deactivateType(1);
+    membershipAPI.deleteType(1);
     membershipAPI.getByCustomer(1);
     membershipAPI.create(payload);
     membershipAPI.update(1, payload);
@@ -193,9 +194,10 @@ describe('api service', () => {
     expect(putMock).toHaveBeenCalledWith('/admin-accounts/5/password', { password: 'new-pass' });
     expect(deleteMock).toHaveBeenCalledWith('/admin-accounts/5');
 
-    expect(getMock).toHaveBeenCalledWith('/memberships/types');
+    expect(getMock).toHaveBeenCalledWith('/memberships/types', { params: undefined });
     expect(postMock).toHaveBeenCalledWith('/memberships/types', payload);
     expect(putMock).toHaveBeenCalledWith('/memberships/types/1', payload);
+    expect(postMock).toHaveBeenCalledWith('/memberships/types/1/deactivate');
     expect(deleteMock).toHaveBeenCalledWith('/memberships/types/1');
     expect(getMock).toHaveBeenCalledWith('/memberships/customer/1');
     expect(postMock).toHaveBeenCalledWith('/memberships', payload);

@@ -91,14 +91,14 @@ describe('CustomerMemberships page', () => {
     expect(screen.getByText('해당 날짜에 등록된 수업이 없습니다.')).toBeTruthy();
   });
 
-  it('renders active membership info including unlimited sessions', async () => {
+  it('renders active membership info with finite sessions', async () => {
     membershipGetByCustomerMock.mockResolvedValueOnce({
       data: [
         {
           id: 1,
-          membership_type_name: '프리패스',
-          remaining_sessions: null,
-          total_sessions: null,
+          membership_type_name: '20회권',
+          remaining_sessions: 13,
+          total_sessions: 20,
           consumed_sessions: 7,
           is_active: true,
           start_date: '2026-02-01',
@@ -109,9 +109,9 @@ describe('CustomerMemberships page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
-    expect(screen.getByText('무제한')).toBeTruthy();
-    expect(screen.getByText('7회')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('20회권')).toBeTruthy());
+    expect(screen.getByText('13회')).toBeTruthy();
+    expect(screen.getByText('7 / 20회')).toBeTruthy();
     expect(screen.getByText('2026년 2월 1일')).toBeTruthy();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });

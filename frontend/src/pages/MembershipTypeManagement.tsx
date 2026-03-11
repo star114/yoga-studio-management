@@ -6,7 +6,7 @@ interface MembershipType {
   id: number;
   name: string;
   description?: string | null;
-  total_sessions?: number | null;
+  total_sessions: number;
   is_active: boolean;
 }
 
@@ -44,7 +44,7 @@ const MembershipTypeManagement: React.FC = () => {
     try {
       setError('');
       setIsLoading(true);
-      const response = await membershipAPI.getTypes();
+      const response = await membershipAPI.getTypes({ includeInactive: true });
       setTypes(response.data);
     } catch (loadError) {
       console.error('Failed to load membership types:', loadError);
@@ -64,7 +64,7 @@ const MembershipTypeManagement: React.FC = () => {
     setForm({
       name: type.name,
       description: type.description || '',
-      total_sessions: type.total_sessions === null || type.total_sessions === undefined ? '' : String(type.total_sessions),
+      total_sessions: String(type.total_sessions),
     });
   };
 
@@ -77,7 +77,7 @@ const MembershipTypeManagement: React.FC = () => {
       const payload = {
         name: form.name,
         description: form.description || null,
-        total_sessions: form.total_sessions ? Number(form.total_sessions) : null,
+        total_sessions: Number(form.total_sessions),
       };
 
       if (editingTypeId) {
@@ -115,11 +115,28 @@ const MembershipTypeManagement: React.FC = () => {
     }
   };
 
+  const handleDelete = async (type: MembershipType) => {
+    const ok = window.confirm(`"${type.name}" 회원권 관리 항목을 완전히 삭제할까요?`);
+    if (!ok) return;
+
+    try {
+      await membershipAPI.deleteType(type.id);
+      await loadTypes();
+      if (editingTypeId === type.id) {
+        resetForm();
+      }
+      showSuccess('회원권 관리 항목을 삭제했습니다.');
+    } catch (deleteError: unknown) {
+      console.error('Failed to delete membership type:', deleteError);
+      setError(parseApiError(deleteError));
+    }
+  };
+
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-display font-bold text-primary-800">회원권 관리</h1>
-        <p className="text-warm-600">현재 운영 중인 회원권 관리 항목을 추가/수정/비활성화합니다.</p>
+        <p className="text-warm-600">활성/비활성 회원권 관리 항목을 모두 확인하고 수정, 비활성화, 삭제할 수 있습니다.</p>
       </div>
 
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
@@ -149,6 +166,8 @@ const MembershipTypeManagement: React.FC = () => {
                 className="input-field"
                 value={form.total_sessions}
                 onChange={(e) => setForm((prev) => ({ ...prev, total_sessions: e.target.value }))}
+                min={1}
+                required
               />
             </div>
             <div>
@@ -174,11 +193,11 @@ const MembershipTypeManagement: React.FC = () => {
         </section>
 
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">운영 중인 회원권 관리</h2>
+          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">회원권 관리 목록</h2>
           {isLoading ? (
             <p className="text-warm-600 py-8 text-center">목록을 불러오는 중...</p>
           ) : types.length === 0 ? (
-            <p className="text-warm-600 py-8 text-center">운영 중인 회원권 관리 항목이 없습니다.</p>
+            <p className="text-warm-600 py-8 text-center">등록된 회원권 관리 항목이 없습니다.</p>
           ) : (
             <div className="space-y-3">
               {types.map((type) => (
@@ -187,17 +206,25 @@ const MembershipTypeManagement: React.FC = () => {
                     <div>
                       <p className="font-semibold text-primary-800">{type.name}</p>
                       <p className="text-sm text-warm-600">
-                        횟수: {type.total_sessions ?? '무제한'}
+                        횟수: {type.total_sessions}회
                       </p>
                       {type.description && <p className="text-sm text-warm-700 mt-1">{type.description}</p>}
                     </div>
+                    <span className={`px-2.5 py-1 text-xs rounded-full ${type.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                      {type.is_active ? '활성' : '비활성'}
+                    </span>
                   </div>
                   <div className="flex gap-2 mt-3">
                     <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEdit(type)}>
                       수정
                     </button>
-                    <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDeactivate(type)}>
-                      비활성화
+                    {type.is_active ? (
+                      <button type="button" className="px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200" onClick={() => void handleDeactivate(type)}>
+                        비활성화
+                      </button>
+                    ) : null}
+                    <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDelete(type)}>
+                      삭제
                     </button>
                   </div>
                 </div>

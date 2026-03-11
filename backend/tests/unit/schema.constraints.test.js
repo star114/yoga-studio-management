@@ -61,6 +61,10 @@ test('memberships schema prevents negative remaining sessions', () => {
 
   assert.match(
     schema,
-    /remaining_sessions\s+INTEGER\s+CHECK\s+\(remaining_sessions IS NULL OR remaining_sessions >= 0\)/i
+    /total_sessions\s+INTEGER\s+NOT NULL\s+CHECK\s+\(total_sessions > 0\)/i
+  );
+  assert.match(
+    schema,
+    /remaining_sessions\s+INTEGER\s+NOT NULL\s+CHECK\s+\(remaining_sessions >= 0\)/i
   );
 });

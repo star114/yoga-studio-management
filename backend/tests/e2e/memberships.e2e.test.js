@@ -71,6 +71,7 @@ const createMembershipsHarness = () => {
     method,
     routePath,
     params = {},
+    query = {},
     body = {},
     headers = {},
   }) => {
@@ -93,6 +94,7 @@ const createMembershipsHarness = () => {
       method: method.toUpperCase(),
       path: routePath,
       params,
+      query,
       body,
       headers: reqHeaders,
       get(name) {
@@ -167,6 +169,16 @@ test('types routes cover success/not-found/validation/error', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body[0].name, '10회');
 
+  h.queryQueue.push({ rows: [{ id: 2, name: '중지권', is_active: false }] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/types',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    query: { include_inactive: 'true' },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body[0].is_active, false);
+
   h.queryQueue.push(new Error('types fail'));
   res = await h.runRoute({
     method: 'get',
@@ -199,7 +211,7 @@ test('types routes cover success/not-found/validation/error', async () => {
     method: 'post',
     routePath: '/types',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'X' },
+    body: { name: 'X', total_sessions: 5 },
   });
   assert.equal(res.status, 500);
 
@@ -233,6 +245,17 @@ test('types routes cover success/not-found/validation/error', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body.name, 'updated');
 
+  h.queryQueue.push({ rows: [{ id: 3, name: 'updated', total_sessions: 12 }] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/types/:id',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { total_sessions: 12 },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.total_sessions, 12);
+
   h.queryQueue.push(new Error('update type fail'));
   res = await h.runRoute({
     method: 'put',
@@ -240,6 +263,33 @@ test('types routes cover success/not-found/validation/error', async () => {
     params: { id: '3' },
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { name: 'x2' },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types/:id/deactivate',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push({ rows: [{ id: 3 }] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types/:id/deactivate',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+
+  h.queryQueue.push(new Error('deactivate type fail'));
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types/:id/deactivate',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);
 
@@ -260,6 +310,16 @@ test('types routes cover success/not-found/validation/error', async () => {
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
+
+  h.queryQueue.push(Object.assign(new Error('in use'), { code: '23503' }));
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/types/:id',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Membership type cannot be deleted while memberships still reference it');
 
   h.queryQueue.push(new Error('delete type fail'));
   res = await h.runRoute({
@@ -371,8 +431,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body.id, 101);
 
   h.queryQueue.push(
-    { rows: [{ id: 2, total_sessions: null }] },
-    { rows: [{ id: 102, customer_id: 2 }] }
+    { rows: [{ id: 2, total_sessions: 0 }] }
   );
   res = await h.runRoute({
     method: 'post',
@@ -384,11 +443,11 @@ test('memberships routes cover list/create/update/delete branches', async () => 
       notes: 'memo',
     },
   });
-  assert.equal(res.status, 201);
-  assert.equal(res.body.id, 102);
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Membership type must have a positive total_sessions value');
 
   h.queryQueue.push(
-    { rows: [{ id: 3, total_sessions: null }] },
+    { rows: [{ id: 3, total_sessions: 4 }] },
     { rows: [{ id: 103, customer_id: 3 }] }
   );
   res = await h.runRoute({
@@ -473,13 +532,6 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(res.body.notes, null);
 
-  const updateFinalStateValidationClient = h.createDbClientMock();
-  updateFinalStateValidationClient.queryQueue.push(
-    { rows: [], rowCount: 0 },
-    { rows: [{ id: 202, remaining_sessions: null, is_active: true, notes: null }] },
-    { rows: [], rowCount: 0 }
-  );
-  h.connectQueue.push(updateFinalStateValidationClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -488,21 +540,8 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { remaining_sessions: 5, is_active: false },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'is_active can only be set manually for unlimited memberships');
-  assert.equal(
-    updateFinalStateValidationClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('SET remaining_sessions = CASE')
-    ),
-    false
-  );
+  assert.equal(res.body.error, 'is_active is managed automatically from remaining_sessions');
 
-  const updateLimitedOverrideClient = h.createDbClientMock();
-  updateLimitedOverrideClient.queryQueue.push(
-    { rows: [], rowCount: 0 },
-    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] },
-    { rows: [], rowCount: 0 }
-  );
-  h.connectQueue.push(updateLimitedOverrideClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -511,26 +550,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { is_active: false },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'is_active can only be set manually for unlimited memberships');
-
-  const updateUnlimitedOverrideClient = h.createDbClientMock();
-  updateUnlimitedOverrideClient.queryQueue.push(
-    { rows: [], rowCount: 0 },
-    { rows: [{ id: 204, remaining_sessions: null, is_active: true, notes: null }] },
-    { rows: [{ id: 204, remaining_sessions: null, is_active: false, notes: null }] },
-    { rows: [], rowCount: 0 }
-  );
-  h.connectQueue.push(updateUnlimitedOverrideClient);
-  res = await h.runRoute({
-    method: 'put',
-    routePath: '/:id',
-    params: { id: '204' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-    body: { is_active: false },
-  });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.id, 204);
-  assert.equal(res.body.is_active, false);
+  assert.equal(res.body.error, 'is_active is managed automatically from remaining_sessions');
 
   const updateMissingMembershipClient = h.createDbClientMock();
   updateMissingMembershipClient.queryQueue.push(
@@ -544,7 +564,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     routePath: '/:id',
     params: { id: '999' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { is_active: false },
+    body: { notes: 'x' },
   });
   assert.equal(res.status, 404);
 
@@ -598,7 +618,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { remaining_sessions: -1 },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'remaining_sessions must be a non-negative integer or null');
+  assert.equal(res.body.error, 'remaining_sessions must be a non-negative integer');
 
   const updateErrorClient = h.createDbClientMock();
   updateErrorClient.queryQueue.push(

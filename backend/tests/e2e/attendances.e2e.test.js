@@ -472,8 +472,10 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '빈야사' }] },
     { rows: [] },
-    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 9, remaining_sessions: 5, end_date: null }] },
     { rows: [{ id: 13, membership_id: 9 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 9 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(explicitMembershipClient);
@@ -490,8 +492,10 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: null }] },
     { rows: [] },
-    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 9, remaining_sessions: 5, end_date: null }] },
     { rows: [{ id: 14, membership_id: 9, class_type: null }] },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 9 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(blankTitleClient);
@@ -540,8 +544,10 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [] },
-    { rows: [{ id: 9, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 9, remaining_sessions: 5, end_date: null }] },
     { rows: [{ id: 15, membership_id: 9, class_id: 5, class_type: '아쉬탕가' }] },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 9 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(classMatchClient);
@@ -592,7 +598,10 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [] },
-    { rows: [{ id: 1, remaining_sessions: null, end_date: '2000-01-01' }] },
+    { rows: [{ id: 1, remaining_sessions: 2, end_date: '2000-01-01' }] },
+    { rows: [{ id: 17, membership_id: 1 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 1 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(expiredClient);
@@ -612,6 +621,8 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [{ id: 1, remaining_sessions: 5, end_date: null }] },
     { rows: [{ id: 11, membership_id: 1 }] },
     { rows: [], rowCount: 1 },
+    { rows: [{ id: 1 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(successClient);
@@ -630,8 +641,10 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가' }] },
     { rows: [] },
-    { rows: [{ id: 2, remaining_sessions: null, end_date: null }] },
+    { rows: [{ id: 2, remaining_sessions: 1, end_date: null }] },
     { rows: [{ id: 12, membership_id: 2 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 2 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(successNoRemainClient);
@@ -648,9 +661,10 @@ test('attendance check/create and delete routes cover transaction branches', asy
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, title: '아쉬탕가', membership_id: 77 }] },
     { rows: [] },
-    { rows: [{ id: 77, remaining_sessions: 0, is_active: false }] },
+    { rows: [{ id: 77, remaining_sessions: 1, is_active: true }] },
     { rows: [{ id: 16, membership_id: 77, class_id: 5, class_type: '아쉬탕가' }] },
     { rows: [], rowCount: 1 },
+    { rows: [{ id: 77 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(reservedMembershipClient);
@@ -665,8 +679,29 @@ test('attendance check/create and delete routes cover transaction branches', asy
     reservedMembershipClient.queryCalls.some(([queryText]) =>
       String(queryText).includes('remaining_sessions = remaining_sessions - 1')
     ),
-    false
+    true
   );
+
+  const reservedMembershipExhaustedClient = h.createDbClientMock();
+  reservedMembershipExhaustedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가', membership_id: 78 }] },
+    { rows: [] },
+    { rows: [{ id: 78, remaining_sessions: 0, is_active: false }] },
+    { rows: [{ id: 18, membership_id: 78, class_id: 5, class_type: '아쉬탕가' }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(reservedMembershipExhaustedClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body?.error, 'Membership sessions exhausted');
 
   const reservedMembershipMissingClient = h.createDbClientMock();
   reservedMembershipMissingClient.queryQueue.push(

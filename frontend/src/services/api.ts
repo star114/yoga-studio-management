@@ -98,8 +98,10 @@ export const adminAccountAPI = {
 
 // Membership API
 export const membershipAPI = {
-  getTypes: () => 
-    api.get('/memberships/types'),
+  getTypes: (options?: { includeInactive?: boolean }) => 
+    api.get('/memberships/types', {
+      params: options?.includeInactive ? { include_inactive: true } : undefined,
+    }),
   
   createType: (data: unknown) => 
     api.post('/memberships/types', data),
@@ -108,6 +110,9 @@ export const membershipAPI = {
     api.put(`/memberships/types/${id}`, data),
 
   deactivateType: (id: number) =>
+    api.post(`/memberships/types/${id}/deactivate`),
+
+  deleteType: (id: number) =>
     api.delete(`/memberships/types/${id}`),
   
   getByCustomer: (customerId: number) => 

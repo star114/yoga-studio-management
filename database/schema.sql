@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS yoga_membership_types (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    total_sessions INTEGER,  -- 횟수제의 경우 총 횟수
+    total_sessions INTEGER NOT NULL CHECK (total_sessions > 0),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES yoga_customers(id) ON DELETE CASCADE,
     membership_type_id INTEGER REFERENCES yoga_membership_types(id),
-    remaining_sessions INTEGER CHECK (remaining_sessions IS NULL OR remaining_sessions >= 0),  -- 잔여 횟수
+    remaining_sessions INTEGER NOT NULL CHECK (remaining_sessions >= 0),
     is_active BOOLEAN DEFAULT TRUE,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -121,9 +121,7 @@ $$ language 'plpgsql';
 CREATE OR REPLACE FUNCTION sync_membership_active_from_remaining()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.remaining_sessions IS NOT NULL THEN
-        NEW.is_active = NEW.remaining_sessions > 0;
-    END IF;
+    NEW.is_active = NEW.remaining_sessions > 0;
     RETURN NEW;
 END;
 $$ language 'plpgsql';

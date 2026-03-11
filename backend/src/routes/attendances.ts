@@ -268,8 +268,7 @@ router.post('/',
 
       // 횟수제 회원권인 경우 잔여 횟수 확인
       if (
-        (reservedMembershipId === null || reservedMembershipId === undefined)
-        && activeMembership.remaining_sessions !== null
+        reservedMembershipId === null || reservedMembershipId === undefined
       ) {
         if (activeMembership.remaining_sessions <= 0) {
           await client.query('ROLLBACK');
@@ -277,10 +276,7 @@ router.post('/',
         }
       }
 
-      const shouldDeductAtAttendance = (
-        reservedMembershipId === null
-        || reservedMembershipId === undefined
-      ) && activeMembership.remaining_sessions !== null;
+      const shouldDeductAtAttendance = true;
 
       // 출석 기록 생성
       const attendanceResult = await client.query(
@@ -309,16 +305,23 @@ router.post('/',
       if (
         shouldDeductAtAttendance
       ) {
-        await client.query(
+        const membershipUpdateResult = await client.query(
           `UPDATE yoga_memberships 
            SET remaining_sessions = remaining_sessions - 1,
                is_active = CASE
                  WHEN (remaining_sessions - 1) <= 0 THEN false
                  ELSE true
                END
-           WHERE id = $1`,
+           WHERE id = $1
+             AND remaining_sessions > 0
+           RETURNING id`,
           [activeMembership.id]
         );
+
+        if (membershipUpdateResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Membership sessions exhausted' });
+        }
       }
 
       await client.query('COMMIT');
@@ -512,12 +515,8 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
 
     if (membershipResult.rows.length > 0) {
       const membership = membershipResult.rows[0];
-      
-      // 횟수제 회원권인 경우 잔여 횟수 복원
-      if (
-        membership.remaining_sessions !== null
-        && attendance.session_deducted
-      ) {
+
+      if (attendance.session_deducted) {
         await client.query(
           `UPDATE yoga_memberships 
            SET remaining_sessions = remaining_sessions + 1,

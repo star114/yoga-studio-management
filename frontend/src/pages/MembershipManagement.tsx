@@ -17,8 +17,8 @@ interface MembershipType {
 interface Membership {
   id: number;
   membership_type_name: string;
-  remaining_sessions?: number | null;
-  total_sessions?: number | null;
+  remaining_sessions: number;
+  total_sessions: number;
   consumed_sessions?: number;
   is_active: boolean;
   notes?: string | null;
@@ -33,7 +33,6 @@ interface NewMembershipForm {
 
 interface EditMembershipForm {
   remaining_sessions: string;
-  is_active: boolean;
   notes: string;
 }
 
@@ -45,10 +44,14 @@ const MEMBERSHIPS_PAGE_SIZE = 5;
 
 const formatConsumedSummary = (membership: Membership) => {
   const consumedSessions = membership.consumed_sessions ?? 0;
-  if (membership.total_sessions === null || membership.total_sessions === undefined) {
-    return `${consumedSessions}회`;
-  }
   return `${consumedSessions} / ${membership.total_sessions}회`;
+};
+
+const buildMembershipUpdatePayload = (form: EditMembershipForm) => {
+  return {
+    remaining_sessions: Number(form.remaining_sessions),
+    notes: form.notes || null,
+  };
 };
 
 const MembershipManagement: React.FC = () => {
@@ -60,7 +63,6 @@ const MembershipManagement: React.FC = () => {
   const [editingMembershipId, setEditingMembershipId] = useState<number | null>(null);
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
     remaining_sessions: '',
-    is_active: true,
     notes: '',
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -172,11 +174,7 @@ const MembershipManagement: React.FC = () => {
   const startEditMembership = (membership: Membership) => {
     setEditingMembershipId(membership.id);
     setEditMembershipForm({
-      remaining_sessions:
-        membership.remaining_sessions === null || membership.remaining_sessions === undefined
-          ? ''
-          : String(membership.remaining_sessions),
-      is_active: membership.is_active,
+      remaining_sessions: String(membership.remaining_sessions),
       notes: membership.notes || '',
     });
   };
@@ -184,11 +182,7 @@ const MembershipManagement: React.FC = () => {
   const handleUpdateMembership = async (membershipId: number) => {
     setError('');
     try {
-      await membershipAPI.update(membershipId, {
-        remaining_sessions: editMembershipForm.remaining_sessions === '' ? null : Number(editMembershipForm.remaining_sessions),
-        is_active: editMembershipForm.is_active,
-        notes: editMembershipForm.notes || null,
-      });
+      await membershipAPI.update(membershipId, buildMembershipUpdatePayload(editMembershipForm));
 
       if (selectedCustomerId) {
         await loadMemberships(selectedCustomerId);
@@ -316,6 +310,8 @@ const MembershipManagement: React.FC = () => {
                           className="input-field"
                           value={editMembershipForm.remaining_sessions}
                           onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
+                          min={0}
+                          required
                         />
                       </div>
                       <div>
@@ -327,14 +323,6 @@ const MembershipManagement: React.FC = () => {
                           onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, notes: e.target.value }))}
                         />
                       </div>
-                      <label className="inline-flex items-center gap-2 text-sm text-warm-700">
-                        <input
-                          type="checkbox"
-                          checked={editMembershipForm.is_active}
-                          onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, is_active: e.target.checked }))}
-                        />
-                        활성 상태
-                      </label>
                       <div className="flex gap-2">
                         <button type="button" className="btn-primary" onClick={() => void handleUpdateMembership(membership.id)}>저장</button>
                         <button type="button" className="btn-secondary" onClick={() => setEditingMembershipId(null)}>취소</button>
@@ -350,7 +338,7 @@ const MembershipManagement: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.remaining_sessions ?? '무제한'}</p>
+                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.remaining_sessions}회</p>
                       <p className="text-sm text-warm-700">소진 횟수: {formatConsumedSummary(membership)}</p>
                       <p className="text-sm text-warm-700">
                         시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}

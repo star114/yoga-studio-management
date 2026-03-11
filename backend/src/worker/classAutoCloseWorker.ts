@@ -39,7 +39,7 @@ export const startClassAutoCloseWorker = () => {
            INNER JOIN yoga_classes c ON c.id = r.class_id
            WHERE c.is_open = TRUE
              AND r.attendance_status = 'reserved'
-             AND (c.class_date::timestamp + c.start_time + INTERVAL '15 minutes') <= CURRENT_TIMESTAMP
+             AND (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP
            FOR UPDATE OF r SKIP LOCKED
          ),
          without_attendance AS (
@@ -59,10 +59,7 @@ export const startClassAutoCloseWorker = () => {
              wa.customer_id,
              wa.class_title,
              m.id AS membership_id,
-             CASE
-               WHEN wa.reserved_membership_id IS NULL THEN TRUE
-               ELSE FALSE
-             END AS should_decrement_membership,
+             TRUE AS should_decrement_membership,
              ROW_NUMBER() OVER (
                PARTITION BY wa.registration_id
                ORDER BY
@@ -82,7 +79,7 @@ export const startClassAutoCloseWorker = () => {
                wa.reserved_membership_id IS NULL
                AND m.customer_id = wa.customer_id
                AND m.is_active = TRUE
-               AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
+               AND m.remaining_sessions > 0
              )
            )
            LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
@@ -141,12 +138,8 @@ export const startClassAutoCloseWorker = () => {
          ),
          updated_memberships AS (
            UPDATE yoga_memberships m
-           SET remaining_sessions = CASE
-                 WHEN m.remaining_sessions IS NULL THEN NULL
-                 ELSE m.remaining_sessions - u.used_count
-               END,
+           SET remaining_sessions = m.remaining_sessions - u.used_count,
                is_active = CASE
-                 WHEN m.remaining_sessions IS NULL THEN m.is_active
                  WHEN (m.remaining_sessions - u.used_count) <= 0 THEN FALSE
                  ELSE TRUE
                END
@@ -194,11 +187,11 @@ export const startClassAutoCloseWorker = () => {
       }
 
       const result = await pool.query(
-        `UPDATE yoga_classes
-         SET is_open = FALSE,
-             updated_at = CURRENT_TIMESTAMP
+         `UPDATE yoga_classes
+          SET is_open = FALSE,
+              updated_at = CURRENT_TIMESTAMP
          WHERE is_open = TRUE
-           AND (class_date::timestamp + start_time + INTERVAL '15 minutes') <= CURRENT_TIMESTAMP
+           AND (class_date::timestamp + end_time) <= CURRENT_TIMESTAMP
          RETURNING id`
       );
 
