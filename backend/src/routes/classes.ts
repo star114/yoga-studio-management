@@ -1316,10 +1316,18 @@ router.put('/:id',
       is_open,
       notes,
     } = requestBody;
+    const hasStartTimeField = Object.prototype.hasOwnProperty.call(requestBody, 'start_time');
+    const hasEndTimeField = Object.prototype.hasOwnProperty.call(requestBody, 'end_time');
     const hasNotesField = Object.prototype.hasOwnProperty.call(requestBody, 'notes');
     const normalizedStartTime = typeof start_time === 'string' ? start_time : null;
     const normalizedEndTime = typeof end_time === 'string' ? end_time : null;
 
+    if (hasStartTimeField && start_time !== null && typeof start_time !== 'string') {
+      return res.status(400).json({ error: 'start_time must be a string' });
+    }
+    if (hasEndTimeField && end_time !== null && typeof end_time !== 'string') {
+      return res.status(400).json({ error: 'end_time must be a string' });
+    }
     if (normalizedStartTime && !isValidTime(normalizedStartTime)) {
       return res.status(400).json({ error: 'Invalid start_time format' });
     }
@@ -1355,8 +1363,8 @@ router.put('/:id',
         [
           title,
           class_date,
-          start_time,
-          end_time,
+          normalizedStartTime,
+          normalizedEndTime,
           max_capacity,
           is_open,
           hasNotesField,

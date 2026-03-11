@@ -308,9 +308,29 @@ test('classes list/detail/registrations/comment/update/delete cover main branche
     routePath: '/:id',
     params: { id: '1' },
     headers: { authorization: `Bearer ${adminToken()}` },
+    body: { start_time: true },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'start_time must be a string');
+
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '1' },
+    headers: { authorization: `Bearer ${adminToken()}` },
     body: { end_time: 'bad' },
   });
   assert.equal(res.status, 400);
+
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '1' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { end_time: true },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'end_time must be a string');
 
   res = await h.runRoute({
     method: 'put',
