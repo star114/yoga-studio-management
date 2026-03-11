@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.2](https://github.com/star114/yoga-studio-management/compare/v2.4.1...v2.4.2) (2026-03-11)
+
+
+### Bug Fixes
+
+* paginate memberships and preserve attendance on delete ([#43](https://github.com/star114/yoga-studio-management/issues/43)) ([a7db1ee](https://github.com/star114/yoga-studio-management/commit/a7db1eecdce3a5be9fb037559b78c6fe04ef5407))
+
 ## [2.4.1](https://github.com/star114/yoga-studio-management/compare/v2.4.0...v2.4.1) (2026-03-10)
 
 
