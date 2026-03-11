@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/star114/yoga-studio-management/compare/v2.4.0...v2.4.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* address review followups ([#41](https://github.com/star114/yoga-studio-management/issues/41)) ([cd1f927](https://github.com/star114/yoga-studio-management/commit/cd1f9277798618a264c58bb4c5d66bc5d3b7d088))
+
 ## [2.4.0](https://github.com/star114/yoga-studio-management/compare/v2.3.5...v2.4.0) (2026-03-10)
 
 
