@@ -159,6 +159,16 @@ test('attendances list/update/today routes cover success and errors', async () =
   });
   assert.equal(res.status, 403);
 
+  h.queryQueue.push({ rows: [{ id: 9 }] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { customer_id: '3' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error, 'Access denied');
+
   h.queryQueue.push(
     { rows: [{ id: 9 }] },
     { rows: [{ id: 1 }] }

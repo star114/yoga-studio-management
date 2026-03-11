@@ -220,6 +220,31 @@ describe('MembershipManagement page', () => {
     expect(screen.getByText('예상 종료일: 2026년 3월 1일')).toBeTruthy();
   });
 
+  it('paginates memberships with numbered buttons', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        { id: 101, membership_type_name: '회원권 1', remaining_sessions: 10, is_active: true, notes: null },
+        { id: 102, membership_type_name: '회원권 2', remaining_sessions: 9, is_active: true, notes: null },
+        { id: 103, membership_type_name: '회원권 3', remaining_sessions: 8, is_active: true, notes: null },
+        { id: 104, membership_type_name: '회원권 4', remaining_sessions: 7, is_active: true, notes: null },
+        { id: 105, membership_type_name: '회원권 5', remaining_sessions: 6, is_active: true, notes: null },
+        { id: 106, membership_type_name: '회원권 6', remaining_sessions: 5, is_active: true, notes: null },
+      ],
+    });
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('회원권 1')).toBeTruthy());
+    expect(screen.getByRole('button', { name: '1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '2' })).toBeTruthy();
+    expect(screen.queryByText('회원권 6')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+
+    await waitFor(() => expect(screen.getByText('회원권 6')).toBeTruthy());
+    expect(screen.queryByText('회원권 1')).toBeNull();
+  });
+
   it('shows parsed error when update fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     membershipUpdateMock.mockRejectedValueOnce(new Error('update failed'));

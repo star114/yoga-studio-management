@@ -199,6 +199,15 @@ test('GET /:id covers forbidden, not found, and success', async () => {
   });
   assert.equal(res.status, 403);
 
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id',
+    params: { id: 'abc' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid customerId');
+
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
     { rows: [] }
@@ -227,6 +236,15 @@ test('GET /:id covers forbidden, not found, and success', async () => {
   assert.equal(res.body.customer.name, 'C5');
   assert.equal(res.body.memberships.length, 1);
   assert.equal(res.body.recentAttendances.length, 1);
+
+  h.queryQueue.push(new Error('access-check-fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
@@ -448,6 +466,24 @@ test('GET /:id/attendances covers forbidden, success, filters, and error', async
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 403);
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/attendances',
+    params: { id: 'abc' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid customerId');
+
+  h.queryQueue.push(new Error('attendance access fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/attendances',
+    params: { id: '5' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },

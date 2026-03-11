@@ -120,14 +120,18 @@ router.delete('/types/:id', authenticate, requireAdmin, async (req, res) => {
 router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) => {
   const { customerId } = req.params;
 
-  if (req.user!.role !== 'admin') {
-    const allowed = await hasCustomerAccess(customerId, req.user!.id);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
+  if (!/^\d+$/.test(customerId)) {
+    return res.status(400).json({ error: 'Invalid customerId' });
   }
 
   try {
+    if (req.user!.role !== 'admin') {
+      const allowed = await hasCustomerAccess(customerId, req.user!.id);
+      if (!allowed) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
     const result = await pool.query(`
       SELECT
         m.*,
@@ -143,7 +147,7 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
         SELECT COUNT(*)::int AS consumed_sessions
         FROM yoga_class_registrations r
         WHERE r.membership_id = m.id
-          AND r.attendance_status IN ('attended', 'absent')
+          AND r.attendance_status IN ('reserved', 'attended', 'absent')
       ) usage_summary ON true
       LEFT JOIN LATERAL (
         SELECT MIN(events.class_date) AS start_date
@@ -332,20 +336,61 @@ router.put('/:id',
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   const { id } = req.params;
 
+  let client: {
+    query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }>;
+    release: () => void;
+  } | null = null;
   try {
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const membershipResult = await client.query(
+      'SELECT id FROM yoga_memberships WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+
+    if (membershipResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Membership not found' });
+    }
+
+    await client.query(
+      `UPDATE yoga_attendances
+       SET membership_id = NULL
+       WHERE membership_id = $1`,
+      [id]
+    );
+
+    await client.query(
+      `DELETE FROM yoga_class_registrations
+       WHERE membership_id = $1
+         AND attendance_status = 'reserved'`,
+      [id]
+    );
+
+    await client.query(
+      `UPDATE yoga_class_registrations
+       SET membership_id = NULL
+       WHERE membership_id = $1
+         AND attendance_status IN ('attended', 'absent')`,
+      [id]
+    );
+
+    const result = await client.query(
       'DELETE FROM yoga_memberships WHERE id = $1 RETURNING id',
       [id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Membership not found' });
-    }
-
+    await client.query('COMMIT');
     res.json({ message: 'Membership deleted successfully' });
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
     console.error('Delete membership error:', error);
     res.status(500).json({ error: 'Server error' });
+  } finally {
+    client?.release();
   }
 });
 
