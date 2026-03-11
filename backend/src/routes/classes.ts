@@ -1067,7 +1067,7 @@ router.post('/:id/registrations',
              ($4::date::timestamp + $5::time),
              $6,
              $7,
-             TRUE
+             $8
            )`,
           [
             customerId,
@@ -1077,6 +1077,7 @@ router.post('/:id/registrations',
             yogaClass.end_time,
             req.user!.id,
             yogaClass.title || null,
+            false,
           ]
         );
       }

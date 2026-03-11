@@ -214,6 +214,33 @@ test('attendances list/update/today routes cover success and errors', async () =
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'end_date must be a valid ISO date or datetime');
 
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: '2026-02-28T24:00:00' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'start_date must be a valid ISO date or datetime');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: '2026-02-28T10:60:00' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'start_date must be a valid ISO date or datetime');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: '2026-02-28T10:30:61' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'start_date must be a valid ISO date or datetime');
+
   h.queryQueue.push(
     { rows: [{ id: 9 }] },
     { rows: [{ id: 1 }] }
@@ -236,6 +263,26 @@ test('attendances list/update/today routes cover success and errors', async () =
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: '2026-01-02 03:04:05' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.length, 0);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: '2026-01-02T03:04' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.length, 0);
 
   h.queryQueue.push(new Error('list fail'));
   res = await h.runRoute({

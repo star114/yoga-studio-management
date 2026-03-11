@@ -277,6 +277,25 @@ router.put('/:id',
     try {
       let membershipRow: any = null;
 
+      if (hasIsActive) {
+        const existingResult = await pool.query(
+          'SELECT * FROM yoga_memberships WHERE id = $1',
+          [id]
+        );
+
+        if (existingResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Membership not found' });
+        }
+
+        membershipRow = existingResult.rows[0];
+
+        if (membershipRow.remaining_sessions !== null) {
+          return res.status(400).json({
+            error: 'is_active can only be set manually for unlimited memberships',
+          });
+        }
+      }
+
       if (hasRemainingSessions || hasNotes) {
         const updateResult = await pool.query(
           `UPDATE yoga_memberships 
@@ -297,7 +316,7 @@ router.put('/:id',
           return res.status(404).json({ error: 'Membership not found' });
         }
         membershipRow = updateResult.rows[0];
-      } else {
+      } else if (membershipRow === null) {
         const existingResult = await pool.query(
           'SELECT * FROM yoga_memberships WHERE id = $1',
           [id]
@@ -310,12 +329,6 @@ router.put('/:id',
       }
 
       if (hasIsActive) {
-        if (membershipRow.remaining_sessions !== null) {
-          return res.status(400).json({
-            error: 'is_active can only be set manually for unlimited memberships',
-          });
-        }
-
         const activeResult = await pool.query(
           `UPDATE yoga_memberships
            SET is_active = $1

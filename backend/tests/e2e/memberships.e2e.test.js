@@ -456,6 +456,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   h.queryQueue.push(
     { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] }
   );
+  const queryCallCountBeforeLimitedOverride = h.queryCalls.length;
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -465,6 +466,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'is_active can only be set manually for unlimited memberships');
+  assert.equal(h.queryCalls.length - queryCallCountBeforeLimitedOverride, 1);
+  assert.equal(
+    h.queryCalls.slice(queryCallCountBeforeLimitedOverride).some(([queryText]) =>
+      String(queryText).includes('SET remaining_sessions = CASE')
+    ),
+    false
+  );
 
   h.queryQueue.push(
     { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] }
@@ -501,6 +509,27 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     params: { id: '999' },
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { is_active: false },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push({ rows: [{ id: 205, remaining_sessions: 3, is_active: true, notes: 'memo' }] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '205' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {},
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.id, 205);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '206' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {},
   });
   assert.equal(res.status, 404);
 
