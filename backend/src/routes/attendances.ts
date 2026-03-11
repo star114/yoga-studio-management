@@ -39,11 +39,29 @@ const isValidAttendanceDateFilter = (value: string): boolean => {
   }
 
   const normalizedValue = value.includes(' ') ? value.replace(' ', 'T') : value;
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})?$/.test(normalizedValue)) {
+  const match = normalizedValue.match(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?(?:Z|[+-]\d{2}:\d{2})?$/
+  );
+
+  if (!match) {
     return false;
   }
 
-  return !Number.isNaN(Date.parse(normalizedValue));
+  const [, datePart, hourText, minuteText, secondText] = match;
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = secondText === undefined ? 0 : Number(secondText);
+
+  if (!isValidIsoDate(datePart)) {
+    return false;
+  }
+
+  return hour >= 0
+    && hour <= 23
+    && minute >= 0
+    && minute <= 59
+    && second >= 0
+    && second <= 59;
 };
 
 // 출석 기록 조회 (필터링 가능)

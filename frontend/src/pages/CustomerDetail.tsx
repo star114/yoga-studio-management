@@ -383,7 +383,7 @@ const CustomerDetail: React.FC = () => {
     setClassReservationLoading((prev) => ({ ...prev, [classId]: true }));
     setError('');
     try {
-      await classAPI.register(classId, { customer_id: customerId });
+      await classAPI.register(classId, { customer_id: customerId, membership_id: membershipId });
       setMembershipRecommendedClasses((prev) => {
         const classes = prev[membershipId] as RecommendedClass[];
         return {
@@ -408,6 +408,7 @@ const CustomerDetail: React.FC = () => {
           try {
             await classAPI.register(classId, {
               customer_id: customerId,
+              membership_id: membershipId,
               allow_cross_membership_registration: true,
             });
             setMembershipRecommendedClasses((prev) => {

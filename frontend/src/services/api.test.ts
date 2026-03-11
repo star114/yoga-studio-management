@@ -160,6 +160,7 @@ describe('api service', () => {
     classAPI.update(2, payload);
     classAPI.register(2);
     classAPI.register(2, { customer_id: 7 });
+    classAPI.register(2, { customer_id: 7, membership_id: 9 });
     classAPI.register(2, { customer_id: 7, allow_cross_membership_registration: true });
     classAPI.updateRegistrationComment(2, 7, 'note');
     classAPI.updateMyRegistrationComment(2, 'self note');
@@ -217,6 +218,7 @@ describe('api service', () => {
     expect(putMock).toHaveBeenCalledWith('/classes/2', payload);
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', {});
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7 });
+    expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7, membership_id: 9 });
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7, allow_cross_membership_registration: true });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment', { registration_comment: 'note' });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/me/comment', { registration_comment: 'self note' });

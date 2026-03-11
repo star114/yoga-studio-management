@@ -717,6 +717,77 @@ test('class registration and recurring routes cover core branches', async () => 
     true
   );
 
+  const explicitMembershipClient = h.createDbClientMock();
+  explicitMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 501, remaining_sessions: 5, is_title_match: true },
+        { id: 777, remaining_sessions: 2, is_title_match: true },
+      ],
+    },
+    { rows: [{ count: 0 }] },
+    { rows: [{ id: 288, class_id: 11, customer_id: 1, membership_id: 777 }] },
+    { rows: [{ id: 777 }], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(explicitMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, membership_id: 777 },
+  });
+  assert.equal(res.status, 201);
+  const explicitMembershipInsertCall = explicitMembershipClient.queryCalls.find(
+    ([queryText]) => typeof queryText === 'string' && queryText.includes('INSERT INTO yoga_class_registrations')
+  );
+  assert.equal(explicitMembershipInsertCall?.[1]?.[2], 777);
+
+  const invalidMembershipClient = h.createDbClientMock();
+  invalidMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(invalidMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, membership_id: 999 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid or unavailable membership');
+
   const exhaustedAfterSelectionClient = h.createDbClientMock();
   exhaustedAfterSelectionClient.queryQueue.push(
     { rows: [], rowCount: 0 },

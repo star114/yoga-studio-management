@@ -190,7 +190,25 @@ test('attendances list/update/today routes cover success and errors', async () =
   res = await h.runRoute({
     method: 'get',
     routePath: '/',
+    query: { start_date: '2026-02-30T10:00:00Z' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'start_date must be a valid ISO date or datetime');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
     query: { end_date: '2026/01/31' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'end_date must be a valid ISO date or datetime');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { end_date: '2026-02-29T10:00:00+09:00' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);

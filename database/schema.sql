@@ -145,4 +145,5 @@ CREATE TRIGGER sync_yoga_memberships_active_from_remaining
 CREATE TRIGGER update_yoga_classes_updated_at BEFORE UPDATE ON yoga_classes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 초기 관리자 계정은 백엔드 시작 시 .env의 ADMIN_ID / ADMIN_PASSWORD 값으로 생성/갱신됨
+-- 초기 관리자 계정은 백엔드 시작 시 .env의 ADMIN_ID / ADMIN_PASSWORD 값으로 생성되며,
+-- 같은 login_id가 있으면 비밀번호는 유지하고 role만 admin으로 승격한다.

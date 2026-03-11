@@ -1084,7 +1084,10 @@ describe('CustomerDetail page', () => {
 
     const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
     fireEvent.click(quickReserveButton);
-    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(500, { customer_id: 1 }));
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(500, {
+      customer_id: 1,
+      membership_id: 31,
+    }));
     await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
   });
 
@@ -1134,7 +1137,10 @@ describe('CustomerDetail page', () => {
     const quickReserveButtons = screen.getAllByRole('button', { name: '바로 예약' });
     fireEvent.click(quickReserveButtons[1]);
 
-    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(702, { customer_id: 1 }));
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(702, {
+      customer_id: 1,
+      membership_id: 36,
+    }));
     await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
   });
 
@@ -1241,10 +1247,14 @@ describe('CustomerDetail page', () => {
     const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
     fireEvent.click(quickReserveButton);
 
-    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(1, 801, { customer_id: 1 }));
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(1, 801, {
+      customer_id: 1,
+      membership_id: 37,
+    }));
     await waitFor(() => expect(globalThis.confirm).toHaveBeenCalledWith('회원권이 없는데 등록하시겠어요? 다른 회원권에서 1회 차감됩니다.'));
     await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(2, 801, {
       customer_id: 1,
+      membership_id: 37,
       allow_cross_membership_registration: true,
     }));
     await waitFor(() => expect(screen.getByText('다른 회원권 차감으로 수업을 예약했습니다.')).toBeTruthy());
@@ -1301,6 +1311,7 @@ describe('CustomerDetail page', () => {
 
     await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(2, 805, {
       customer_id: 1,
+      membership_id: 40,
       allow_cross_membership_registration: true,
     }));
     await waitFor(() => expect(screen.getByText('아침 아쉬탕가')).toBeTruthy());

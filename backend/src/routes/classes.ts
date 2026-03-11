@@ -758,6 +758,7 @@ router.put('/:id/registrations/:customerId/status',
 router.post('/:id/registrations',
   authenticate,
   body('customer_id').optional().isInt({ min: 1 }),
+  body('membership_id').optional().isInt({ min: 1 }),
   body('allow_cross_membership_registration').optional().isBoolean(),
   body('mark_attended_after_register').optional().isBoolean(),
   validateRequest,
@@ -825,6 +826,7 @@ router.post('/:id/registrations',
         return res.status(400).json({ error: 'Class is closed' });
       }
 
+      const requestedMembershipId = req.body.membership_id ? Number(req.body.membership_id) : null;
       const membershipResult = await client.query(
         `SELECT
            m.id,
@@ -874,11 +876,21 @@ router.post('/:id/registrations',
         remaining_sessions: number | null;
         is_title_match: boolean;
       }>;
+      const requestedMembership = requestedMembershipId === null
+        ? null
+        : eligibleMembershipRows.find((row) => row.id === requestedMembershipId) ?? null;
       const matchingMembershipRows = eligibleMembershipRows.filter((row) => row.is_title_match);
       const alternativeMembershipRows = eligibleMembershipRows.filter((row) => !row.is_title_match);
-      const hasAlternativeMembership = matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
+      const hasAlternativeMembership = requestedMembership
+        ? !requestedMembership.is_title_match
+        : matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
 
-      if (matchingMembershipRows.length === 0) {
+      if (requestedMembershipId !== null && !requestedMembership) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Invalid or unavailable membership' });
+      }
+
+      if ((requestedMembership && !requestedMembership.is_title_match) || matchingMembershipRows.length === 0) {
         if (hasAlternativeMembership && !allowCrossMembershipRegistration) {
           await client.query('ROLLBACK');
           return res.status(400).json({
@@ -984,7 +996,9 @@ router.post('/:id/registrations',
         }
       }
 
-      const usesAlternativeMembership = matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
+      const usesAlternativeMembership = requestedMembership
+        ? !requestedMembership.is_title_match
+        : matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
 
       if (!shouldCreateImmediateAttendance) {
         const countResult = await client.query(
@@ -999,7 +1013,8 @@ router.post('/:id/registrations',
         }
       }
 
-      const selectedMembership = (usesAlternativeMembership ? eligibleMembershipRows : matchingMembershipRows)[0];
+      const selectedMembership = requestedMembership
+        ?? (usesAlternativeMembership ? alternativeMembershipRows[0] : matchingMembershipRows[0]);
 
       const registrationResult = await client.query(
         `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id, attendance_status)

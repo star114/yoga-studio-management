@@ -162,10 +162,8 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
           SELECT cls.class_date
           FROM yoga_class_registrations r
           INNER JOIN yoga_classes cls ON cls.id = r.class_id
-          WHERE r.customer_id = m.customer_id
+          WHERE r.membership_id = m.id
             AND r.attendance_status = 'reserved'
-            AND mt.name IS NOT NULL
-            AND cls.title = mt.name
         ) events
       ) usage ON true
       LEFT JOIN LATERAL (
@@ -178,10 +176,8 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
             ) AS row_num
           FROM yoga_class_registrations r
           INNER JOIN yoga_classes cls ON cls.id = r.class_id
-          WHERE r.customer_id = m.customer_id
+          WHERE r.membership_id = m.id
             AND r.attendance_status = 'reserved'
-            AND mt.name IS NOT NULL
-            AND cls.title = mt.name
             AND cls.class_date >= CURRENT_DATE
         ) projected
         WHERE m.remaining_sessions IS NOT NULL
