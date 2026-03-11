@@ -275,6 +275,15 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/class-activities',
+    params: { id: 'abc' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid customerId');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
     params: { id: '5' },
     query: { date_from: '2026-99-99' },
     headers: { authorization: `Bearer ${customerToken()}` },
@@ -391,6 +400,16 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: 'abc' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid customerId');
 
   h.queryQueue.push({ rows: [] });
   res = await h.runRoute({

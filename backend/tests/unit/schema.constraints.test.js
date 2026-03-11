@@ -19,6 +19,10 @@ test('attendance class_id does not conflict with ON DELETE SET NULL', () => {
     schema,
     /membership_id\s+INTEGER\s+REFERENCES\s+yoga_memberships\(id\)\s+ON DELETE SET NULL/i
   );
+  assert.match(
+    schema,
+    /session_deducted\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+FALSE/i
+  );
 });
 
 test('attendance schema does not include deprecated comment columns', () => {

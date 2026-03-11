@@ -1285,12 +1285,12 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
-    {
-      rows: [
-        { id: 601, membership_id: 77 },
-        { id: 602, membership_id: 501 },
-      ],
-    },
+	    {
+	      rows: [
+	        { id: 601, membership_id: 77, session_deducted: true },
+	        { id: 602, membership_id: 501, session_deducted: false },
+	      ],
+	    },
     { rows: [{ id: 77, remaining_sessions: 2 }] },
     { rows: [], rowCount: 1 },
     {
@@ -1339,12 +1339,12 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
-    {
-      rows: [
-        { id: 701, membership_id: null },
-        { id: 702, membership_id: 88 },
-      ],
-    },
+	    {
+	      rows: [
+	        { id: 701, membership_id: null, session_deducted: false },
+	        { id: 702, membership_id: 88, session_deducted: false },
+	      ],
+	    },
     { rows: [], rowCount: 1 },
     {
       rows: [

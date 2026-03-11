@@ -19,6 +19,33 @@ const getCustomerIdFromUser = async (userId: number): Promise<number | null> => 
   return Number(result.rows[0].id);
 };
 
+const isValidIsoDate = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+};
+
+const isValidAttendanceDateFilter = (value: string): boolean => {
+  if (isValidIsoDate(value)) {
+    return true;
+  }
+
+  const normalizedValue = value.includes(' ') ? value.replace(' ', 'T') : value;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})?$/.test(normalizedValue)) {
+    return false;
+  }
+
+  return !Number.isNaN(Date.parse(normalizedValue));
+};
+
 // 출석 기록 조회 (필터링 가능)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   const { customer_id, start_date, end_date, limit = 50 } = req.query;
@@ -36,6 +63,16 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       typeof end_date === 'string' && end_date.trim() !== ''
         ? end_date.trim()
         : null;
+
+    if (customerIdFilter && !/^\d+$/.test(customerIdFilter)) {
+      return res.status(400).json({ error: 'customer_id must be a positive integer' });
+    }
+    if (startDateFilter && !isValidAttendanceDateFilter(startDateFilter)) {
+      return res.status(400).json({ error: 'start_date must be a valid ISO date or datetime' });
+    }
+    if (endDateFilter && !isValidAttendanceDateFilter(endDateFilter)) {
+      return res.status(400).json({ error: 'end_date must be a valid ISO date or datetime' });
+    }
 
     if (req.user!.role !== 'admin') {
       const ownCustomerId = await getCustomerIdFromUser(req.user!.id);
@@ -222,17 +259,23 @@ router.post('/',
         }
       }
 
+      const shouldDeductAtAttendance = (
+        reservedMembershipId === null
+        || reservedMembershipId === undefined
+      ) && activeMembership.remaining_sessions !== null;
+
       // 출석 기록 생성
       const attendanceResult = await client.query(
         `INSERT INTO yoga_attendances 
-         (customer_id, membership_id, class_id, instructor_id, class_type)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+         (customer_id, membership_id, class_id, instructor_id, class_type, session_deducted)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [
           customer_id,
           activeMembership.id,
           resolvedClassId,
           req.user!.id,
-          resolvedClassType || null
+          resolvedClassType || null,
+          shouldDeductAtAttendance,
         ]
       );
 
@@ -246,8 +289,7 @@ router.post('/',
 
       // 예약 시점에 차감된 회원권이면 중복 차감하지 않는다.
       if (
-        (reservedMembershipId === null || reservedMembershipId === undefined)
-        && activeMembership.remaining_sessions !== null
+        shouldDeductAtAttendance
       ) {
         await client.query(
           `UPDATE yoga_memberships 
@@ -437,20 +479,12 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Attendance record not found' });
     }
 
-    const attendance = attendanceResult.rows[0];
-    let linkedRegistrationMembershipId: number | null = null;
-
-    if (attendance.class_id) {
-      const registrationResult = await client.query(
-        `SELECT membership_id
-         FROM yoga_class_registrations
-         WHERE class_id = $1
-           AND customer_id = $2
-         LIMIT 1`,
-        [attendance.class_id, attendance.customer_id]
-      );
-      linkedRegistrationMembershipId = (registrationResult.rows[0]?.membership_id as number | null | undefined) ?? null;
-    }
+    const attendance = attendanceResult.rows[0] as {
+      membership_id: number | null;
+      class_id: number | null;
+      customer_id: number;
+      session_deducted: boolean;
+    };
 
     // 회원권 정보 조회
     const membershipResult = await client.query(
@@ -464,7 +498,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       // 횟수제 회원권인 경우 잔여 횟수 복원
       if (
         membership.remaining_sessions !== null
-        && linkedRegistrationMembershipId !== attendance.membership_id
+        && attendance.session_deducted
       ) {
         await client.query(
           `UPDATE yoga_memberships 

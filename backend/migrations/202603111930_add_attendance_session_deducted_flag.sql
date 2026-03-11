@@ -1,0 +1,2 @@
+ALTER TABLE yoga_attendances
+  ADD COLUMN IF NOT EXISTS session_deducted BOOLEAN NOT NULL DEFAULT FALSE;

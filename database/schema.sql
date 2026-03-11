@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS yoga_attendances (
     attendance_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     instructor_id INTEGER REFERENCES yoga_users(id),
     class_type VARCHAR(100),  -- 수업 종류
+    session_deducted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

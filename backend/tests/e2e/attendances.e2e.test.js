@@ -169,6 +169,33 @@ test('attendances list/update/today routes cover success and errors', async () =
   assert.equal(res.status, 403);
   assert.equal(res.body.error, 'Access denied');
 
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { customer_id: 'abc' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'customer_id must be a positive integer');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: 'not-a-date' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'start_date must be a valid ISO date or datetime');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { end_date: '2026/01/31' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'end_date must be a valid ISO date or datetime');
+
   h.queryQueue.push(
     { rows: [{ id: 9 }] },
     { rows: [{ id: 1 }] }
@@ -653,8 +680,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const deleteSuccessClient = h.createDbClientMock();
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3 }] },
-    { rows: [{ membership_id: null }] },
+    { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3, session_deducted: true }] },
     { rows: [{ id: 2, remaining_sessions: 1 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -669,13 +695,18 @@ test('attendance check/create and delete routes cover transaction branches', asy
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
-  assert.match(String(deleteSuccessClient.queryCalls[5][0]), /UPDATE yoga_class_registrations/i);
+  assert.equal(
+    deleteSuccessClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
+    ),
+    true
+  );
+  assert.match(String(deleteSuccessClient.queryCalls[4][0]), /UPDATE yoga_class_registrations/i);
 
   const deleteReservedMembershipClient = h.createDbClientMock();
   deleteReservedMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 23, membership_id: 4, class_id: 8, customer_id: 9 }] },
-    { rows: [{ membership_id: 4 }] },
+    { rows: [{ id: 23, membership_id: 4, class_id: 8, customer_id: 9, session_deducted: false }] },
     { rows: [{ id: 4, remaining_sessions: 0 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },

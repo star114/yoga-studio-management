@@ -151,6 +151,9 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
   const dateFrom = rawDateFrom.trim();
   const dateTo = rawDateTo.trim();
 
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid customerId' });
+  }
   if (dateFrom && !isValidIsoDate(dateFrom)) {
     return res.status(400).json({ error: 'date_from must be a valid YYYY-MM-DD date' });
   }
@@ -320,6 +323,9 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
     ? Math.min(Math.floor(rawLimit), 100)
     : 20;
 
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid customerId' });
+  }
   if (!membershipName) {
     return res.status(400).json({ error: 'membership_name is required' });
   }

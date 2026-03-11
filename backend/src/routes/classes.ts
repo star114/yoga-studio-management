@@ -72,7 +72,7 @@ const cancelRegistrationAndRelatedAttendance = async (
   customerId: number | string
 ) => {
   const attendanceResult = await client.query(
-    `SELECT id, membership_id
+    `SELECT id, membership_id, session_deducted
      FROM yoga_attendances
      WHERE class_id = $1
        AND customer_id = $2
@@ -80,11 +80,15 @@ const cancelRegistrationAndRelatedAttendance = async (
     [classId, customerId]
   );
 
-  const attendanceRows = attendanceResult.rows as Array<{ id: number; membership_id: number | null }>;
+  const attendanceRows = attendanceResult.rows as Array<{
+    id: number;
+    membership_id: number | null;
+    session_deducted: boolean;
+  }>;
   const membershipUsage = new Map<number, number>();
 
   attendanceRows.forEach((attendanceRow) => {
-    if (attendanceRow.membership_id === null) {
+    if (!attendanceRow.session_deducted || attendanceRow.membership_id === null) {
       return;
     }
     const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
@@ -679,24 +683,25 @@ router.put('/:id/registrations/:customerId/status',
         }
       } else {
         const attendanceResult = await client.query(
-          `SELECT id, membership_id
+          `SELECT id, membership_id, session_deducted
            FROM yoga_attendances
            WHERE class_id = $1 AND customer_id = $2
            FOR UPDATE`,
           [classId, customerId]
         );
 
-        const attendanceRows = attendanceResult.rows as Array<{ id: number; membership_id: number | null }>;
+        const attendanceRows = attendanceResult.rows as Array<{
+          id: number;
+          membership_id: number | null;
+          session_deducted: boolean;
+        }>;
 
         if (attendanceRows.length > 0) {
           const membershipUsage = new Map<number, number>();
 
           if (attendanceStatus === 'reserved') {
             attendanceRows.forEach((attendanceRow) => {
-              if (
-                attendanceRow.membership_id === null
-                || attendanceRow.membership_id === currentRegistration.membership_id
-              ) {
+              if (!attendanceRow.session_deducted || attendanceRow.membership_id === null) {
                 return;
               }
               const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
