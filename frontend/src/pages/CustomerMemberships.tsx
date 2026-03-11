@@ -26,6 +26,7 @@ interface CustomerMembership {
   id: number;
   membership_type_name: string;
   remaining_sessions: number;
+  available_sessions?: number;
   total_sessions: number;
   consumed_sessions?: number;
   is_active: boolean;
@@ -292,7 +293,7 @@ const CustomerMemberships: React.FC = () => {
                   <p>
                     <span className="text-warm-600">예약 가능 잔여:</span>{' '}
                     <span className="font-semibold text-primary-800">
-                      {membership.remaining_sessions}회
+                      {membership.available_sessions ?? membership.remaining_sessions}회
                     </span>
                   </p>
                   <p>

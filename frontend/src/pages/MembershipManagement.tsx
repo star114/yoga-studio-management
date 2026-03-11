@@ -18,6 +18,7 @@ interface Membership {
   id: number;
   membership_type_name: string;
   remaining_sessions: number;
+  available_sessions?: number;
   total_sessions: number;
   consumed_sessions?: number;
   is_active: boolean;
@@ -338,7 +339,7 @@ const MembershipManagement: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.remaining_sessions}회</p>
+                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.available_sessions ?? membership.remaining_sessions}회</p>
                       <p className="text-sm text-warm-700">소진 횟수: {formatConsumedSummary(membership)}</p>
                       <p className="text-sm text-warm-700">
                         시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}

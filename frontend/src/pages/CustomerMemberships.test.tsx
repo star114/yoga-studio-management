@@ -98,6 +98,7 @@ describe('CustomerMemberships page', () => {
           id: 1,
           membership_type_name: '20회권',
           remaining_sessions: 13,
+          available_sessions: 11,
           total_sessions: 20,
           consumed_sessions: 7,
           is_active: true,
@@ -110,7 +111,7 @@ describe('CustomerMemberships page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('20회권')).toBeTruthy());
-    expect(screen.getByText('13회')).toBeTruthy();
+    expect(screen.getByText('11회')).toBeTruthy();
     expect(screen.getByText('7 / 20회')).toBeTruthy();
     expect(screen.getByText('2026년 2월 1일')).toBeTruthy();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);

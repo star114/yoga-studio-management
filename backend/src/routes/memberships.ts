@@ -188,11 +188,19 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
         mt.name as membership_type_name,
         mt.description,
         mt.total_sessions,
+        COALESCE(reserved_summary.reserved_count, 0) AS reserved_count,
+        GREATEST(m.remaining_sessions - COALESCE(reserved_summary.reserved_count, 0), 0) AS available_sessions,
         COALESCE(usage_summary.consumed_sessions, 0) AS consumed_sessions,
         usage.start_date,
         projection.expected_end_date
       FROM yoga_memberships m
       LEFT JOIN yoga_membership_types mt ON m.membership_type_id = mt.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS reserved_count
+        FROM yoga_class_registrations r
+        WHERE r.membership_id = m.id
+          AND r.attendance_status = 'reserved'
+      ) reserved_summary ON true
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS consumed_sessions
         FROM yoga_class_registrations r

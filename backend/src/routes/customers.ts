@@ -349,15 +349,33 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
          c.is_open,
          COUNT(r.id)::int AS current_enrollment,
          GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats,
-         EXISTS (
-           SELECT 1
+         existing_usage.existing_status IS NOT NULL AS is_registered,
+         existing_usage.existing_status
+       FROM yoga_classes c
+       LEFT JOIN yoga_class_registrations r ON r.class_id = c.id
+       LEFT JOIN LATERAL (
+         SELECT usage.status AS existing_status
+         FROM (
+           SELECT mine.attendance_status::text AS status
            FROM yoga_class_registrations mine
            WHERE mine.class_id = c.id
              AND mine.customer_id = $1
-             AND mine.attendance_status = 'reserved'
-         ) AS is_registered
-       FROM yoga_classes c
-       LEFT JOIN yoga_class_registrations r ON r.class_id = c.id
+
+           UNION ALL
+
+           SELECT 'attended'::text AS status
+           FROM yoga_attendances a
+           WHERE a.class_id = c.id
+             AND a.customer_id = $1
+         ) usage
+         ORDER BY CASE usage.status
+           WHEN 'reserved' THEN 1
+           WHEN 'attended' THEN 2
+           WHEN 'absent' THEN 3
+           ELSE 4
+         END
+         LIMIT 1
+       ) existing_usage ON true
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
          AND regexp_replace(
@@ -371,7 +389,7 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
                ' ',
                'g'
              )
-       GROUP BY c.id
+       GROUP BY c.id, existing_usage.existing_status
        ORDER BY c.class_date ASC, c.start_time ASC
        LIMIT $3`,
       [id, membershipName, limit]

@@ -26,6 +26,7 @@ interface Membership {
   id: number;
   membership_type_name: string;
   remaining_sessions: number;
+  available_sessions?: number;
   total_sessions: number;
   consumed_sessions?: number;
   is_active: boolean;
@@ -43,6 +44,7 @@ interface RecommendedClass {
   remaining_seats: number;
   current_enrollment: number;
   is_registered: boolean;
+  existing_status?: 'reserved' | 'attended' | 'absent' | null;
 }
 
 type ActivityTypeFilter = 'all' | 'attended' | 'reserved' | 'absent';
@@ -103,6 +105,18 @@ const buildMembershipUpdatePayload = (form: EditMembershipForm) => {
     remaining_sessions: Number(form.remaining_sessions),
     notes: form.notes || null,
   };
+};
+
+const getRecommendedClassStatusLabel = (item: RecommendedClass) => {
+  switch (item.existing_status) {
+    case 'attended':
+      return '출석';
+    case 'absent':
+      return '결석';
+    case 'reserved':
+    default:
+      return '예약됨';
+  }
 };
 
 const CustomerDetail: React.FC = () => {
@@ -408,6 +422,7 @@ const CustomerDetail: React.FC = () => {
             return {
               ...item,
               is_registered: true,
+              existing_status: 'reserved',
               remaining_seats: Math.max(0, item.remaining_seats - 1),
               current_enrollment: item.current_enrollment + 1,
             };
@@ -435,6 +450,7 @@ const CustomerDetail: React.FC = () => {
                   return {
                     ...item,
                     is_registered: true,
+                    existing_status: 'reserved',
                     remaining_seats: Math.max(0, item.remaining_seats - 1),
                     current_enrollment: item.current_enrollment + 1,
                   };
@@ -790,7 +806,7 @@ const CustomerDetail: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.remaining_sessions}회</p>
+                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.available_sessions ?? membership.remaining_sessions}회</p>
                       <p className="text-sm text-warm-700">소진 횟수: {formatConsumedSummary(membership)}</p>
                       <p className="text-sm text-warm-700">
                         시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
@@ -821,7 +837,8 @@ const CustomerDetail: React.FC = () => {
                           if (recommendedClasses.length === 0) {
                             return <p className="text-xs text-warm-600">예정된 같은 이름 수업이 없습니다.</p>;
                           }
-                          const hasNoRemainingSessions = typeof membership.remaining_sessions === 'number' && membership.remaining_sessions <= 0;
+                          const availableSessions = membership.available_sessions ?? membership.remaining_sessions;
+                          const hasNoRemainingSessions = typeof availableSessions === 'number' && availableSessions <= 0;
                           return (
                             <div className="space-y-2">
                               {recommendedClasses.map((item) => (
@@ -844,7 +861,11 @@ const CustomerDetail: React.FC = () => {
                                     }
                                     onClick={() => void handleQuickReserveClass(membership.id, item.id)}
                                   >
-                                    {item.is_registered ? '예약됨' : classReservationLoading[item.id] ? '예약 중...' : '바로 예약'}
+                                    {item.is_registered
+                                      ? getRecommendedClassStatusLabel(item)
+                                      : classReservationLoading[item.id]
+                                        ? '예약 중...'
+                                        : '바로 예약'}
                                   </button>
                                 </div>
                               ))}

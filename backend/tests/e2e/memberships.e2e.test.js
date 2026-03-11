@@ -361,6 +361,8 @@ test('memberships routes cover list/create/update/delete branches', async () => 
       total_sessions: 10,
       consumed_sessions: 5,
       remaining_sessions: 3,
+      reserved_count: 2,
+      available_sessions: 1,
     }],
   });
   res = await h.runRoute({
@@ -373,10 +375,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body.length, 1);
   assert.equal(res.body[0].total_sessions, 10);
   assert.equal(res.body[0].consumed_sessions, 5);
+  assert.equal(res.body[0].reserved_count, 2);
+  assert.equal(res.body[0].available_sessions, 1);
   const membershipQueryText = h.queryCalls
     .map((call) => String(call[0]))
     .find((text) => text.includes('SELECT') && text.includes('projection.expected_end_date'));
   assert.ok(membershipQueryText);
+  assert.ok(membershipQueryText.includes('reserved_count'));
   assert.ok(membershipQueryText.includes('WHERE r.membership_id = m.id'));
 
   h.queryQueue.push(new Error('access check fail'));

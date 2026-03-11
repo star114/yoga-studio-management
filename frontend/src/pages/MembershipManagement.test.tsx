@@ -242,6 +242,7 @@ describe('MembershipManagement page', () => {
           id: 71,
           membership_type_name: '날짜표시권',
           remaining_sessions: 4,
+          available_sessions: 2,
           total_sessions: 12,
           consumed_sessions: 5,
           is_active: true,
@@ -254,7 +255,7 @@ describe('MembershipManagement page', () => {
 
     render(<MembershipManagement />);
     await waitFor(() => expect(screen.getByText('날짜표시권')).toBeTruthy());
-    expect(screen.getByText('예약 가능 잔여: 4회')).toBeTruthy();
+    expect(screen.getByText('예약 가능 잔여: 2회')).toBeTruthy();
     expect(screen.getByText('소진 횟수: 5 / 12회')).toBeTruthy();
     expect(screen.getByText('시작일: 2026년 2월 1일')).toBeTruthy();
     expect(screen.getByText('예상 종료일: 2026년 3월 1일')).toBeTruthy();

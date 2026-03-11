@@ -981,6 +981,7 @@ describe('CustomerDetail page', () => {
           id: 10,
           membership_type_name: '날짜있음권',
           remaining_sessions: 3,
+          available_sessions: 1,
           total_sessions: 10,
           consumed_sessions: 4,
           is_active: true,
@@ -993,7 +994,7 @@ describe('CustomerDetail page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByText('날짜있음권')).toBeTruthy());
-    expect(screen.getByText('예약 가능 잔여: 3회')).toBeTruthy();
+    expect(screen.getByText('예약 가능 잔여: 1회')).toBeTruthy();
     expect(screen.getByText('소진 횟수: 4 / 10회')).toBeTruthy();
     expect(screen.getByText('시작일: 2026년 2월 1일')).toBeTruthy();
     expect(screen.getByText('예상 종료일: 2026년 3월 5일')).toBeTruthy();
@@ -1154,6 +1155,43 @@ describe('CustomerDetail page', () => {
       membership_id: 31,
     }));
     await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
+  });
+
+  it('shows attended classes as already processed in recommended classes', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 41,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          available_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 900,
+          title: '아쉬탕가',
+          class_date: '2026-03-10',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 3,
+          current_enrollment: 2,
+          is_registered: true,
+          existing_status: 'attended',
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const attendedButton = await screen.findByRole('button', { name: '출석' });
+    expect((attendedButton as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('updates only the selected class when quick reserving among multiple recommendations', async () => {

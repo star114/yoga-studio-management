@@ -433,7 +433,7 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
-    { rows: [{ id: 9, title: '아쉬탕가' }] }
+    { rows: [{ id: 9, title: '아쉬탕가', is_registered: true, existing_status: 'attended' }] }
   );
   res = await h.runRoute({
     method: 'get',
@@ -445,6 +445,8 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
   assert.equal(res.body[0].title, '아쉬탕가');
+  assert.equal(res.body[0].is_registered, true);
+  assert.equal(res.body[0].existing_status, 'attended');
 
   h.queryQueue.push({ rows: [{ id: 10, title: '빈야사' }] });
   res = await h.runRoute({
