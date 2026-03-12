@@ -685,7 +685,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const absentRegistrationCheckInClient = h.createDbClientMock();
   absentRegistrationCheckInClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 5, title: '아쉬탕가', registration_id: 20, membership_id: 79, attendance_status: 'absent' }] },
+    { rows: [{ id: 5, title: '아쉬탕가', registration_id: 20, membership_id: 79, attendance_status: 'absent', session_consumed: true }] },
     { rows: [] },
     { rows: [{ id: 79, remaining_sessions: 0, is_active: false }] },
     { rows: [{ id: 20, membership_id: 79, class_id: 5, class_type: '아쉬탕가', session_deducted: false }] },
@@ -810,7 +810,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3, session_deducted: true }] },
-    { rows: [{ id: 2, remaining_sessions: 1 }] },
+    { rows: [{ id: 12, membership_id: 2, session_consumed: true }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -832,16 +832,16 @@ test('attendance check/create and delete routes cover transaction branches', asy
   );
   assert.match(String(deleteSuccessClient.queryCalls[4][0]), /UPDATE yoga_class_registrations/i);
 
-  const deleteReservedMembershipClient = h.createDbClientMock();
-  deleteReservedMembershipClient.queryQueue.push(
+  const deleteAbsentPromotedAttendanceClient = h.createDbClientMock();
+  deleteAbsentPromotedAttendanceClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 23, membership_id: 4, class_id: 8, customer_id: 9, session_deducted: false }] },
-    { rows: [{ id: 4, remaining_sessions: 0 }] },
+    { rows: [{ id: 18, membership_id: 4, session_consumed: true }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
-  h.connectQueue.push(deleteReservedMembershipClient);
+  h.connectQueue.push(deleteAbsentPromotedAttendanceClient);
   res = await h.runRoute({
     method: 'delete',
     routePath: '/:id',
@@ -850,10 +850,57 @@ test('attendance check/create and delete routes cover transaction branches', asy
   });
   assert.equal(res.status, 200);
   assert.equal(
-    deleteReservedMembershipClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
+    deleteAbsentPromotedAttendanceClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    true
+  );
+
+  const deleteUndeductedAttendanceClient = h.createDbClientMock();
+  deleteUndeductedAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 24, membership_id: 5, class_id: 9, customer_id: 10, session_deducted: false }] },
+    { rows: [{ id: 19, membership_id: 5, session_consumed: false }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteUndeductedAttendanceClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '24' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    deleteUndeductedAttendanceClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
     ),
     false
+  );
+
+  const deleteDetachedAttendanceClient = h.createDbClientMock();
+  deleteDetachedAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 25, membership_id: 6, class_id: null, customer_id: 11, session_deducted: true }] },
+    { rows: [{ id: 6, remaining_sessions: 2 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteDetachedAttendanceClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '25' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    deleteDetachedAttendanceClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    true
   );
 
   const deleteErrClient = h.createDbClientMock();

@@ -48,6 +48,7 @@ const cancelRegistrationAndRelatedAttendance = async (
     id: number;
     membership_id: number | null;
     attendance_status: 'reserved' | 'attended' | 'absent';
+    session_consumed?: boolean | null;
   },
   classId: string,
   customerId: number | string,
@@ -67,20 +68,14 @@ const cancelRegistrationAndRelatedAttendance = async (
     membership_id: number | null;
     session_deducted: boolean;
   }>;
-  const membershipUsage = new Map<number, number>();
+  const refundMembershipId = registration.membership_id
+    ?? attendanceRows.find((attendanceRow) => attendanceRow.membership_id !== null)?.membership_id
+    ?? null;
 
-  attendanceRows.forEach((attendanceRow) => {
-    if (!attendanceRow.session_deducted || attendanceRow.membership_id === null) {
-      return;
-    }
-    const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
-    membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
-  });
-
-  for (const [membershipId, usedCount] of membershipUsage.entries()) {
+  if (registration.session_consumed && refundMembershipId !== null) {
     await refundMembershipSessions(client, {
-      membershipId,
-      changeAmount: usedCount,
+      membershipId: refundMembershipId,
+      changeAmount: 1,
       actorUserId,
       classId: Number(classId),
       registrationId: registration.id,
@@ -642,7 +637,17 @@ router.put('/:id/registrations/:customerId/status',
         return res.status(404).json({ error: 'Registration not found' });
       }
 
-      const currentRegistration = registrationResult.rows[0];
+      const currentRegistration = registrationResult.rows[0] as {
+        id: number;
+        class_id: number;
+        customer_id: number;
+        membership_id: number | null;
+        attendance_status: 'reserved' | 'attended' | 'absent';
+        session_consumed?: boolean | null;
+        registration_comment: string | null;
+        registered_at: string;
+      };
+      const currentSessionConsumed = Boolean(currentRegistration.session_consumed);
 
       if (currentRegistration.attendance_status === attendanceStatus) {
         await client.query('COMMIT');
@@ -668,18 +673,20 @@ router.put('/:id/registrations/:customerId/status',
           return res.status(400).json({ error: 'Registration membership not found' });
         }
 
-        const membershipUpdateResult = await deductMembershipSessions(client, {
-          membershipId: currentRegistration.membership_id,
-          changeAmount: 1,
-          actorUserId: req.user!.id,
-          classId,
-          registrationId: currentRegistration.id,
-          reason: 'registration_status_absent_deduction',
-        });
+        if (!currentSessionConsumed) {
+          const membershipUpdateResult = await deductMembershipSessions(client, {
+            membershipId: currentRegistration.membership_id,
+            changeAmount: 1,
+            actorUserId: req.user!.id,
+            classId,
+            registrationId: currentRegistration.id,
+            reason: 'registration_status_absent_deduction',
+          });
 
-        if (!membershipUpdateResult) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'Membership sessions exhausted' });
+          if (!membershipUpdateResult) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Membership sessions exhausted' });
+          }
         }
       } else {
         const attendanceResult = await client.query(
@@ -696,29 +703,15 @@ router.put('/:id/registrations/:customerId/status',
           session_deducted: boolean;
         }>;
 
-        const membershipUsage = new Map<number, number>();
-
         if (attendanceStatus === 'reserved') {
-          attendanceRows.forEach((attendanceRow) => {
-            if (!attendanceRow.session_deducted || attendanceRow.membership_id === null) {
-              return;
-            }
-            const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
-            membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
-          });
+          const refundMembershipId = currentRegistration.membership_id
+            ?? attendanceRows.find((attendanceRow) => attendanceRow.membership_id !== null)?.membership_id
+            ?? null;
 
-          if (
-            currentRegistration.attendance_status === 'absent'
-            && currentRegistration.membership_id !== null
-            && !membershipUsage.has(currentRegistration.membership_id)
-          ) {
-            membershipUsage.set(currentRegistration.membership_id, 1);
-          }
-
-          for (const [membershipId, usedCount] of membershipUsage.entries()) {
+          if (currentSessionConsumed && refundMembershipId !== null) {
             await refundMembershipSessions(client, {
-              membershipId,
-              changeAmount: usedCount,
+              membershipId: refundMembershipId,
+              changeAmount: 1,
               actorUserId: req.user!.id,
               classId,
               registrationId: currentRegistration.id,
@@ -739,10 +732,11 @@ router.put('/:id/registrations/:customerId/status',
 
       const result = await client.query(
         `UPDATE yoga_class_registrations
-         SET attendance_status = $3
+         SET attendance_status = $3,
+             session_consumed = $4
          WHERE class_id = $1 AND customer_id = $2
-         RETURNING id, class_id, customer_id, membership_id, attendance_status, registration_comment, registered_at`,
-        [classId, customerId, attendanceStatus]
+         RETURNING id, class_id, customer_id, membership_id, attendance_status, session_consumed, registration_comment, registered_at`,
+        [classId, customerId, attendanceStatus, attendanceStatus !== 'reserved']
       );
 
       await client.query('COMMIT');
@@ -1034,11 +1028,11 @@ router.post('/:id/registrations',
         ?? (usesAlternativeMembership ? alternativeMembershipRows[0] : matchingMembershipRows[0]);
 
       const registrationResult = await client.query(
-        `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id, attendance_status)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id, attendance_status, session_consumed)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (class_id, customer_id) DO NOTHING
          RETURNING *`,
-        [id, customerId, selectedMembership.id, shouldCreateImmediateAttendance ? 'attended' : 'reserved']
+        [id, customerId, selectedMembership.id, shouldCreateImmediateAttendance ? 'attended' : 'reserved', shouldCreateImmediateAttendance]
       );
 
       if (registrationResult.rows.length === 0) {
@@ -1126,7 +1120,7 @@ router.delete('/:id/registrations/me',
         await client.query('BEGIN');
 
         const registrationResult = await client.query(
-          `SELECT id, membership_id, attendance_status
+          `SELECT id, membership_id, attendance_status, session_consumed
            FROM yoga_class_registrations
            WHERE class_id = $1 AND customer_id = $2
            FOR UPDATE`,
@@ -1142,6 +1136,7 @@ router.delete('/:id/registrations/me',
           id: number;
           membership_id: number | null;
           attendance_status: 'reserved' | 'attended' | 'absent';
+          session_consumed?: boolean | null;
         };
 
         if (registration.attendance_status !== 'reserved') {
@@ -1185,7 +1180,7 @@ router.delete('/:id/registrations/:customerId',
         await client.query('BEGIN');
 
         const registrationResult = await client.query(
-          `SELECT id, membership_id, attendance_status
+          `SELECT id, membership_id, attendance_status, session_consumed
            FROM yoga_class_registrations
            WHERE class_id = $1 AND customer_id = $2
            FOR UPDATE`,
@@ -1201,6 +1196,7 @@ router.delete('/:id/registrations/:customerId',
           id: number;
           membership_id: number | null;
           attendance_status: 'reserved' | 'attended' | 'absent';
+          session_consumed?: boolean | null;
         };
 
         if (registration.attendance_status !== 'reserved') {

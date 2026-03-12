@@ -34,7 +34,8 @@ export const startClassAutoCloseWorker = () => {
              r.class_id,
              r.customer_id,
              c.title AS class_title,
-             r.membership_id AS reserved_membership_id
+             r.membership_id AS reserved_membership_id,
+             r.session_consumed
            FROM yoga_class_registrations r
            INNER JOIN yoga_classes c ON c.id = r.class_id
            WHERE c.is_open = TRUE
@@ -59,7 +60,8 @@ export const startClassAutoCloseWorker = () => {
              wa.customer_id,
              wa.class_title,
              m.id AS membership_id,
-             TRUE AS should_decrement_membership,
+             NOT wa.session_consumed AS should_decrement_membership,
+             m.remaining_sessions,
              ROW_NUMBER() OVER (
                PARTITION BY wa.registration_id
                ORDER BY
@@ -91,9 +93,47 @@ export const startClassAutoCloseWorker = () => {
              customer_id,
              class_title,
              membership_id,
-             should_decrement_membership
+             should_decrement_membership,
+             remaining_sessions
            FROM membership_candidates
            WHERE rn = 1
+         ),
+         decrementable_events AS (
+           SELECT
+             sm.registration_id,
+             sm.class_id,
+             sm.customer_id,
+             sm.class_title,
+             sm.membership_id,
+             sm.should_decrement_membership,
+             sm.remaining_sessions,
+             ROW_NUMBER() OVER (
+               PARTITION BY sm.membership_id
+               ORDER BY sm.class_id ASC, sm.customer_id ASC, sm.registration_id ASC
+             ) AS event_index
+           FROM selected_memberships sm
+           WHERE sm.should_decrement_membership = TRUE
+         ),
+         processable_selected AS (
+           SELECT
+             sm.registration_id,
+             sm.class_id,
+             sm.customer_id,
+             sm.class_title,
+             sm.membership_id,
+             sm.should_decrement_membership
+           FROM selected_memberships sm
+           WHERE sm.should_decrement_membership = FALSE
+           UNION ALL
+           SELECT
+             de.registration_id,
+             de.class_id,
+             de.customer_id,
+             de.class_title,
+             de.membership_id,
+             de.should_decrement_membership
+           FROM decrementable_events de
+           WHERE de.event_index <= de.remaining_sessions
          ),
          inserted AS (
            INSERT INTO yoga_attendances (
@@ -109,7 +149,7 @@ export const startClassAutoCloseWorker = () => {
              sm.class_id,
              sm.class_title,
              sm.should_decrement_membership
-           FROM selected_memberships sm
+           FROM processable_selected sm
            WHERE NOT EXISTS (
              SELECT 1
              FROM yoga_attendances a
@@ -121,6 +161,7 @@ export const startClassAutoCloseWorker = () => {
          updated_registrations AS (
            UPDATE yoga_class_registrations r
            SET attendance_status = 'attended'
+             , session_consumed = TRUE
            FROM inserted i
            WHERE r.class_id = i.class_id
              AND r.customer_id = i.customer_id
@@ -195,6 +236,7 @@ export const startClassAutoCloseWorker = () => {
            (SELECT COUNT(*)::int FROM eligible) AS eligible_count,
            (SELECT COUNT(*)::int FROM without_attendance) AS no_attendance_count,
            (SELECT COUNT(*)::int FROM selected_memberships) AS selected_count,
+           (SELECT COUNT(*)::int FROM processable_selected) AS processable_count,
            (SELECT COUNT(*)::int FROM inserted) AS inserted_count,
            (SELECT COUNT(*)::int FROM updated_registrations) AS updated_registration_count,
            (SELECT COUNT(*)::int FROM updated_memberships) AS updated_membership_count,

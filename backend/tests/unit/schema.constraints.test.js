@@ -52,6 +52,10 @@ test('class registrations can link to memberships for reservation restoration', 
     schema,
     /membership_id\s+INTEGER\s+REFERENCES\s+yoga_memberships\(id\)\s+ON DELETE SET NULL/i
   );
+  assert.match(
+    schema,
+    /session_consumed\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+FALSE/i
+  );
   assert.match(schema, /CREATE INDEX IF NOT EXISTS idx_class_registrations_membership_id/i);
 });
 

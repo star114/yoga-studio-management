@@ -1023,7 +1023,7 @@ test('class registration and recurring routes cover core branches', async () => 
   const cancelSelfSuccessClient = h.createDbClientMock();
   cancelSelfSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved', session_consumed: false }] },
     { rows: [] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -1134,7 +1134,7 @@ test('class registration and recurring routes cover core branches', async () => 
   const cancelAdminSuccessClient = h.createDbClientMock();
   cancelAdminSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved', session_consumed: false }] },
     { rows: [] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -1152,7 +1152,7 @@ test('class registration and recurring routes cover core branches', async () => 
   const cancelAdminRefundAttendanceClient = h.createDbClientMock();
   cancelAdminRefundAttendanceClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 8, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [{ id: 8, membership_id: 501, attendance_status: 'reserved', session_consumed: true }] },
     {
       rows: [
         { id: 901, membership_id: 501, session_deducted: true },
@@ -1192,6 +1192,65 @@ test('class registration and recurring routes cover core branches', async () => 
         && params[0].includes(902)
         && params[0].includes(903)
     )
+  );
+
+  const cancelAdminFallbackRefundClient = h.createDbClientMock();
+  cancelAdminFallbackRefundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 9, membership_id: null, attendance_status: 'reserved', session_consumed: true }] },
+    {
+      rows: [
+        { id: 904, membership_id: 888, session_deducted: true },
+      ],
+    },
+    { rows: [{ id: 888, remaining_sessions: 4 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminFallbackRefundClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '9' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.ok(
+    cancelAdminFallbackRefundClient.queryCalls.some(
+      ([queryText, params]) =>
+        String(queryText).includes('UPDATE yoga_memberships')
+        && Array.isArray(params)
+        && params[0] === 888
+    )
+  );
+
+  const cancelAdminNoRefundMembershipClient = h.createDbClientMock();
+  cancelAdminNoRefundMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 10, membership_id: null, attendance_status: 'reserved', session_consumed: true }] },
+    {
+      rows: [
+        { id: 905, membership_id: null, session_deducted: true },
+      ],
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminNoRefundMembershipClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '10' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    cancelAdminNoRefundMembershipClient.queryCalls.some(
+      ([queryText]) => String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    false
   );
 
   const cancelAdminAttendedClient = h.createDbClientMock();
@@ -1495,6 +1554,7 @@ test('registration status change reconciles attendance row and membership usage'
           customer_id: 2,
           membership_id: 77,
           attendance_status: 'reserved',
+          session_consumed: false,
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
         },
@@ -1525,6 +1585,7 @@ test('registration status change reconciles attendance row and membership usage'
           customer_id: 2,
           membership_id: 501,
           attendance_status: 'attended',
+          session_consumed: true,
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
         },
@@ -1577,8 +1638,9 @@ test('registration status change reconciles attendance row and membership usage'
           id: 96,
           class_id: 11,
           customer_id: 2,
-          membership_id: 501,
+          membership_id: null,
           attendance_status: 'attended',
+          session_consumed: true,
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
         },
@@ -1618,6 +1680,60 @@ test('registration status change reconciles attendance row and membership usage'
     revertImmediateAttendanceClient.queryCalls.some(
       ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
     ),
+    true
+  );
+
+  const revertImmediateAttendanceWithoutMembershipClient = h.createDbClientMock();
+  revertImmediateAttendanceWithoutMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 97,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: null,
+          attendance_status: 'attended',
+          session_consumed: true,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 704, membership_id: null, session_deducted: false },
+      ],
+    },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 97,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: null,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(revertImmediateAttendanceWithoutMembershipClient);
+  const revertImmediateAttendanceWithoutMembershipRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(revertImmediateAttendanceWithoutMembershipRes.status, 200);
+  assert.equal(
+    revertImmediateAttendanceWithoutMembershipClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
+    ),
     false
   );
 
@@ -1632,6 +1748,7 @@ test('registration status change reconciles attendance row and membership usage'
           customer_id: 2,
           membership_id: 502,
           attendance_status: 'absent',
+          session_consumed: true,
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
         },
@@ -1689,6 +1806,7 @@ test('registration status change reconciles attendance row and membership usage'
           customer_id: 2,
           membership_id: 503,
           attendance_status: 'absent',
+          session_consumed: true,
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
         },
