@@ -9,6 +9,7 @@ const {
   membershipGetByCustomerMock,
   membershipCreateMock,
   membershipUpdateMock,
+  membershipDeactivateMock,
   membershipDeleteMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   membershipGetByCustomerMock: vi.fn(),
   membershipCreateMock: vi.fn(),
   membershipUpdateMock: vi.fn(),
+  membershipDeactivateMock: vi.fn(),
   membershipDeleteMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '처리에 실패했습니다.'),
 }));
@@ -30,6 +32,7 @@ vi.mock('../services/api', () => ({
     getByCustomer: membershipGetByCustomerMock,
     create: membershipCreateMock,
     update: membershipUpdateMock,
+    deactivate: membershipDeactivateMock,
     delete: membershipDeleteMock,
   },
 }));
@@ -87,7 +90,7 @@ describe('MembershipManagement page', () => {
     render(<MembershipManagement />);
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
-    expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1);
+    await waitFor(() => expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1));
     expect(screen.getByText('로그인 아이디: 010-1111-2222')).toBeTruthy();
   });
 
@@ -386,6 +389,114 @@ describe('MembershipManagement page', () => {
 
     confirmSpy.mockRestore();
     consoleSpy.mockRestore();
+  });
+
+  it('shows deactivate instead of delete when reserved registrations exist', async () => {
+    membershipDeactivateMock.mockResolvedValueOnce(undefined);
+    membershipGetByCustomerMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 52,
+            membership_type_name: '예약보유',
+            remaining_sessions: 3,
+            reserved_count: 1,
+            consumed_sessions: 0,
+            total_sessions: 10,
+            is_active: true,
+            notes: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 52,
+            membership_type_name: '예약보유',
+            remaining_sessions: 3,
+            reserved_count: 1,
+            consumed_sessions: 0,
+            total_sessions: 10,
+            is_active: false,
+            notes: null,
+          },
+        ],
+      });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('예약보유')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: '삭제' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => expect(membershipDeactivateMock).toHaveBeenCalledWith(52));
+    await waitFor(() => expect(screen.getByText('회원권을 비활성화했습니다.')).toBeTruthy());
+
+    confirmSpy.mockRestore();
+  });
+
+  it('shows parsed error when deactivate fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    membershipDeactivateMock.mockRejectedValueOnce(new Error('deactivate failed'));
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 53,
+          membership_type_name: '비활성실패권',
+          remaining_sessions: 2,
+          reserved_count: 1,
+          consumed_sessions: 0,
+          total_sessions: 10,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('비활성실패권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    await waitFor(() => expect(screen.getByText('처리에 실패했습니다.')).toBeTruthy());
+    expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
+  it('does not deactivate membership when deactivation confirm is canceled', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 54,
+          membership_type_name: '비활성취소권',
+          remaining_sessions: 2,
+          reserved_count: 1,
+          consumed_sessions: 0,
+          total_sessions: 10,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('비활성취소권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(membershipDeactivateMock).not.toHaveBeenCalled();
   });
 
   it('keeps memberships empty when no customers are returned', async () => {

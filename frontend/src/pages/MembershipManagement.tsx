@@ -19,6 +19,7 @@ interface Membership {
   membership_type_name: string;
   remaining_sessions: number;
   available_sessions?: number;
+  reserved_count?: number;
   total_sessions: number;
   consumed_sessions?: number;
   is_active: boolean;
@@ -213,6 +214,23 @@ const MembershipManagement: React.FC = () => {
     }
   };
 
+  const handleDeactivateMembership = async (membership: Membership) => {
+    const ok = window.confirm(`"${membership.membership_type_name}" 회원권을 비활성화할까요?`);
+    if (!ok) return;
+
+    setError('');
+    try {
+      await membershipAPI.deactivate(membership.id);
+      if (selectedCustomerId) {
+        await loadMemberships(selectedCustomerId);
+      }
+      showSuccess('회원권을 비활성화했습니다.');
+    } catch (deactivateError: unknown) {
+      console.error('Failed to deactivate membership:', deactivateError);
+      setError(parseApiError(deactivateError));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -350,7 +368,25 @@ const MembershipManagement: React.FC = () => {
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>
-                        <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDeleteMembership(membership)}>삭제</button>
+                        {((membership.consumed_sessions ?? 0) > 0 || (membership.reserved_count ?? 0) > 0) ? (
+                          membership.is_active ? (
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300"
+                              onClick={() => void handleDeactivateMembership(membership)}
+                            >
+                              비활성화
+                            </button>
+                          ) : null
+                        ) : (
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
+                            onClick={() => void handleDeleteMembership(membership)}
+                          >
+                            삭제
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

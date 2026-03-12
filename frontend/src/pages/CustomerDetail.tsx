@@ -891,7 +891,7 @@ const CustomerDetail: React.FC = () => {
                       </div>
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>
-                        {(membership.consumed_sessions ?? 0) > 0 ? (
+                        {((membership.consumed_sessions ?? 0) > 0 || (membership.reserved_count ?? 0) > 0) ? (
                           membership.is_active ? (
                             <button
                               type="button"

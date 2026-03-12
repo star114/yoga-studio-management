@@ -150,7 +150,6 @@ describe('api service', () => {
     attendanceAPI.getAll({ limit: 10 });
     attendanceAPI.getToday();
     attendanceAPI.checkIn(payload);
-    attendanceAPI.update(1, payload);
     attendanceAPI.delete(1);
 
     classAPI.getAll({ limit: 10 });
@@ -211,7 +210,6 @@ describe('api service', () => {
     expect(getMock).toHaveBeenCalledWith('/attendances', { params: { limit: 10 } });
     expect(getMock).toHaveBeenCalledWith('/attendances/today');
     expect(postMock).toHaveBeenCalledWith('/attendances', payload);
-    expect(putMock).toHaveBeenCalledWith('/attendances/1', payload);
     expect(deleteMock).toHaveBeenCalledWith('/attendances/1');
 
     expect(getMock).toHaveBeenCalledWith('/classes', { params: { limit: 10 } });

@@ -1174,6 +1174,50 @@ describe('CustomerDetail page', () => {
     confirmSpy.mockRestore();
   });
 
+  it('deactivates membership with reserved registrations instead of deleting it', async () => {
+    deactivateMembershipMock.mockResolvedValueOnce(undefined);
+    getByCustomerMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 34,
+            membership_type_name: '예약회원권',
+            remaining_sessions: 2,
+            reserved_count: 1,
+            consumed_sessions: 0,
+            is_active: true,
+            notes: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 34,
+            membership_type_name: '예약회원권',
+            remaining_sessions: 2,
+            reserved_count: 1,
+            consumed_sessions: 0,
+            is_active: false,
+            notes: null,
+          },
+        ],
+      });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('예약회원권')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: '삭제' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+    await waitFor(() => expect(deactivateMembershipMock).toHaveBeenCalledWith(34));
+    expect(deleteMembershipMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('회원권을 비활성화했습니다.')).toBeTruthy());
+
+    confirmSpy.mockRestore();
+  });
+
   it('shows parsed error when membership deactivation fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     deactivateMembershipMock.mockRejectedValueOnce(new Error('deactivate failed'));

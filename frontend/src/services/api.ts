@@ -142,9 +142,6 @@ export const attendanceAPI = {
   checkIn: (data: unknown) => 
     api.post('/attendances', data),
   
-  update: (id: number, data: unknown) => 
-    api.put(`/attendances/${id}`, data),
-  
   delete: (id: number) => 
     api.delete(`/attendances/${id}`),
 };
