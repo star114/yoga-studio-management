@@ -729,7 +729,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteSuccessClient = h.createDbClientMock();
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 201 }] },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: false,
+        has_consumed_registrations: false,
+        has_attendance_history: false,
+      }],
+    },
     { rows: [], rowCount: 2 },
     { rows: [], rowCount: 3 },
     { rows: [], rowCount: 1 },
@@ -746,7 +753,8 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(
     deleteSuccessClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('FROM yoga_memberships')
+      String(queryText).includes('yoga_memberships')
+      && String(queryText).includes('has_reserved_registrations')
       && String(queryText).includes('has_consumed_registrations')
       && String(queryText).includes('FOR UPDATE')
     ),
@@ -774,7 +782,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteErrorClient = h.createDbClientMock();
   deleteErrorClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 201 }] },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: false,
+        has_consumed_registrations: false,
+        has_attendance_history: false,
+      }],
+    },
     new Error('delete membership fail'),
     { rows: [], rowCount: 0 }
   );
@@ -827,7 +842,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteConsumedClient = h.createDbClientMock();
   deleteConsumedClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 201, has_consumed_registrations: true, has_attendance_history: true }] },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: false,
+        has_consumed_registrations: true,
+        has_attendance_history: true,
+      }],
+    },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(deleteConsumedClient);
@@ -838,5 +860,34 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 409);
-  assert.equal(res.body.error, 'Membership with consumed history can only be deactivated');
+  assert.equal(res.body.error, 'Membership with registration history can only be deactivated');
+
+  const deleteReservedClient = h.createDbClientMock();
+  deleteReservedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: true,
+        has_consumed_registrations: false,
+        has_attendance_history: false,
+      }],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteReservedClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Membership with registration history can only be deactivated');
+  assert.equal(
+    deleteReservedClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('DELETE FROM yoga_class_registrations')
+    ),
+    false
+  );
 });

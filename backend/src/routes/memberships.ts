@@ -460,9 +460,15 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    const membershipResult = await client.query(
+      const membershipResult = await client.query(
       `SELECT
          id,
+         EXISTS (
+           SELECT 1
+           FROM yoga_class_registrations r
+           WHERE r.membership_id = $1
+             AND r.attendance_status = 'reserved'
+         ) AS has_reserved_registrations,
          EXISTS (
            SELECT 1
            FROM yoga_class_registrations r
@@ -485,18 +491,23 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Membership not found' });
     }
 
-    const membership = membershipResult.rows[0] as {
-      id: number;
-      has_consumed_registrations: boolean;
-      has_attendance_history: boolean;
-    };
+      const membership = membershipResult.rows[0] as {
+        id: number;
+        has_reserved_registrations: boolean;
+        has_consumed_registrations: boolean;
+        has_attendance_history: boolean;
+      };
 
-    if (membership.has_consumed_registrations || membership.has_attendance_history) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({
-        error: 'Membership with consumed history can only be deactivated',
-      });
-    }
+      if (
+        membership.has_reserved_registrations
+        || membership.has_consumed_registrations
+        || membership.has_attendance_history
+      ) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'Membership with registration history can only be deactivated',
+        });
+      }
 
     await client.query(
       `UPDATE yoga_attendances

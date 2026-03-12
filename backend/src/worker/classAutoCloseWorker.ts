@@ -283,6 +283,18 @@ export const startClassAutoCloseWorker = () => {
               updated_at = CURRENT_TIMESTAMP
          WHERE is_open = TRUE
            AND (class_date::timestamp + end_time) <= CURRENT_TIMESTAMP
+           AND NOT EXISTS (
+             SELECT 1
+             FROM yoga_class_registrations r
+             WHERE r.class_id = yoga_classes.id
+               AND r.attendance_status = 'reserved'
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM yoga_attendances a
+                 WHERE a.class_id = r.class_id
+                   AND a.customer_id = r.customer_id
+               )
+           )
          RETURNING id`
       );
 
