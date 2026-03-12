@@ -625,10 +625,10 @@ router.put('/:id/registrations/:customerId/status',
       await client.query('BEGIN');
 
       const registrationResult = await client.query(
-        `SELECT id, class_id, customer_id, membership_id, attendance_status, registration_comment, registered_at
-         FROM yoga_class_registrations
-         WHERE class_id = $1 AND customer_id = $2
-         FOR UPDATE`,
+      `SELECT id, class_id, customer_id, membership_id, attendance_status, session_consumed, registration_comment, registered_at
+        FROM yoga_class_registrations
+        WHERE class_id = $1 AND customer_id = $2
+        FOR UPDATE`,
         [classId, customerId]
       );
 

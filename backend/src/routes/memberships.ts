@@ -368,6 +368,24 @@ router.put('/:id',
         return res.json(currentMembership);
       }
 
+      if (hasRemainingSessions) {
+        const reservedCountResult = await client.query(
+          `SELECT COUNT(*)::int AS reserved_count
+           FROM yoga_class_registrations
+           WHERE membership_id = $1
+             AND attendance_status = 'reserved'`,
+          [id]
+        );
+
+        const reservedCount = Number((reservedCountResult.rows[0] as { reserved_count?: number | string } | undefined)?.reserved_count ?? 0);
+        if (Number(remaining_sessions) < reservedCount) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `remaining_sessions cannot be less than reserved registrations (${reservedCount})`,
+          });
+        }
+      }
+
       const updateResult = await client.query(
         `UPDATE yoga_memberships
          SET remaining_sessions = CASE

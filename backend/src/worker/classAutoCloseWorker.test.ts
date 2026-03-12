@@ -75,6 +75,9 @@ test('worker starts with fallback interval, runs query, and stops', async (t) =>
   assert.match(firstQuery, /session_consumed/i);
   assert.match(firstQuery, /processable_selected/i);
   assert.match(firstQuery, /event_index <= de\.remaining_sessions/i);
+  assert.match(firstQuery, /m\.remaining_sessions >= u\.used_count/i);
+  assert.match(firstQuery, /LEFT JOIN updated_memberships um/i);
+  assert.match(firstQuery, /sm\.should_decrement_membership = FALSE\s+OR um\.id IS NOT NULL/i);
   assert.match(firstQuery, /INSERT INTO yoga_membership_usage_audit_logs/i);
   assert.equal(typeof capturedCallback, 'function');
   const initialLogs = logMock.mock.calls.map((call) => String(call.arguments[0]));

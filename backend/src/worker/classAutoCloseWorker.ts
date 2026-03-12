@@ -134,8 +134,31 @@ export const startClassAutoCloseWorker = () => {
              de.should_decrement_membership
            FROM decrementable_events de
            WHERE de.event_index <= de.remaining_sessions
-         ),
-         inserted AS (
+        ),
+        membership_usage AS (
+          SELECT sm.membership_id, COUNT(*)::int AS used_count
+          FROM processable_selected sm
+          WHERE sm.should_decrement_membership = TRUE
+          GROUP BY sm.membership_id
+        ),
+        updated_memberships AS (
+          UPDATE yoga_memberships m
+          SET remaining_sessions = m.remaining_sessions - u.used_count,
+              is_active = CASE
+                WHEN (m.remaining_sessions - u.used_count) <= 0 THEN FALSE
+                ELSE TRUE
+              END
+          FROM membership_usage u
+          WHERE m.id = u.membership_id
+            AND m.remaining_sessions >= u.used_count
+          RETURNING
+            m.id,
+            m.customer_id,
+            u.used_count,
+            m.remaining_sessions + u.used_count AS remaining_before,
+            m.remaining_sessions AS remaining_after
+        ),
+        inserted AS (
            INSERT INTO yoga_attendances (
              customer_id,
              membership_id,
@@ -150,12 +173,18 @@ export const startClassAutoCloseWorker = () => {
              sm.class_title,
              sm.should_decrement_membership
            FROM processable_selected sm
-           WHERE NOT EXISTS (
-             SELECT 1
-             FROM yoga_attendances a
-             WHERE a.class_id = sm.class_id
-               AND a.customer_id = sm.customer_id
+           LEFT JOIN updated_memberships um
+             ON um.id = sm.membership_id
+           WHERE (
+             sm.should_decrement_membership = FALSE
+             OR um.id IS NOT NULL
            )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM yoga_attendances a
+               WHERE a.class_id = sm.class_id
+                 AND a.customer_id = sm.customer_id
+             )
            RETURNING id, customer_id, membership_id, class_id
          ),
          updated_registrations AS (
@@ -167,19 +196,10 @@ export const startClassAutoCloseWorker = () => {
              AND r.customer_id = i.customer_id
              AND r.attendance_status = 'reserved'
            RETURNING r.id
-         ),
-         membership_usage AS (
-           SELECT i.membership_id, COUNT(*)::int AS used_count
-           FROM inserted i
-           INNER JOIN selected_memberships sm
-             ON sm.class_id = i.class_id
-            AND sm.customer_id = i.customer_id
-           WHERE sm.should_decrement_membership = TRUE
-           GROUP BY i.membership_id
-         ),
-         membership_usage_events AS (
-           SELECT
-             i.membership_id,
+        ),
+        membership_usage_events AS (
+          SELECT
+            i.membership_id,
              i.customer_id,
              i.class_id,
              ROW_NUMBER() OVER (
@@ -191,24 +211,8 @@ export const startClassAutoCloseWorker = () => {
              ON sm.class_id = i.class_id
             AND sm.customer_id = i.customer_id
            WHERE sm.should_decrement_membership = TRUE
-         ),
-         updated_memberships AS (
-           UPDATE yoga_memberships m
-           SET remaining_sessions = m.remaining_sessions - u.used_count,
-               is_active = CASE
-                 WHEN (m.remaining_sessions - u.used_count) <= 0 THEN FALSE
-                 ELSE TRUE
-               END
-           FROM membership_usage u
-           WHERE m.id = u.membership_id
-           RETURNING
-             m.id,
-             m.customer_id,
-             u.used_count,
-             m.remaining_sessions + u.used_count AS remaining_before,
-             m.remaining_sessions AS remaining_after
-         ),
-         audit_logs AS (
+        ),
+        audit_logs AS (
            INSERT INTO yoga_membership_usage_audit_logs (
              membership_id,
              customer_id,

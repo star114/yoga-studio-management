@@ -626,6 +626,68 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'remaining_sessions must be a non-negative integer');
 
+  const updateBelowReservedClient = h.createDbClientMock();
+  updateBelowReservedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 207, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [{ reserved_count: 2 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateBelowReservedClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '207' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'remaining_sessions cannot be less than reserved registrations (2)');
+  assert.equal(
+    updateBelowReservedClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    false
+  );
+
+  const updateAtReservedFloorClient = h.createDbClientMock();
+  updateAtReservedFloorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 208, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [{ reserved_count: 2 }] },
+    { rows: [{ id: 208, remaining_sessions: 2, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateAtReservedFloorClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '208' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 2 },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.remaining_sessions, 2);
+
+  const updateWithMissingReservedCountRowClient = h.createDbClientMock();
+  updateWithMissingReservedCountRowClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 209, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [] },
+    { rows: [{ id: 209, remaining_sessions: 1, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateWithMissingReservedCountRowClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '209' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 1 },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.remaining_sessions, 1);
+
   const updateErrorClient = h.createDbClientMock();
   updateErrorClient.queryQueue.push(
     { rows: [], rowCount: 0 },
