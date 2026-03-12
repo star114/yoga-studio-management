@@ -9,6 +9,7 @@ const {
   membershipGetByCustomerMock,
   membershipCreateMock,
   membershipUpdateMock,
+  membershipDeactivateMock,
   membershipDeleteMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   membershipGetByCustomerMock: vi.fn(),
   membershipCreateMock: vi.fn(),
   membershipUpdateMock: vi.fn(),
+  membershipDeactivateMock: vi.fn(),
   membershipDeleteMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '처리에 실패했습니다.'),
 }));
@@ -30,6 +32,7 @@ vi.mock('../services/api', () => ({
     getByCustomer: membershipGetByCustomerMock,
     create: membershipCreateMock,
     update: membershipUpdateMock,
+    deactivate: membershipDeactivateMock,
     delete: membershipDeleteMock,
   },
 }));
@@ -72,11 +75,22 @@ describe('MembershipManagement page', () => {
     consoleSpy.mockRestore();
   });
 
+  it('shows initialize error when membership types request fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    membershipGetTypesMock.mockRejectedValueOnce(new Error('types failed'));
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('초기 데이터를 불러오지 못했습니다.')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
   it('renders no-membership state after load', async () => {
     render(<MembershipManagement />);
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
-    expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1);
+    await waitFor(() => expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1));
     expect(screen.getByText('로그인 아이디: 010-1111-2222')).toBeTruthy();
   });
 
@@ -89,7 +103,8 @@ describe('MembershipManagement page', () => {
           {
             id: 21,
             membership_type_name: '10회권',
-            remaining_sessions: null,
+            remaining_sessions: 10,
+            total_sessions: 10,
             is_active: true,
             notes: null,
           },
@@ -152,8 +167,9 @@ describe('MembershipManagement page', () => {
         data: [
           {
             id: 31,
-            membership_type_name: '프리패스',
-            remaining_sessions: null,
+            membership_type_name: '20회권',
+            remaining_sessions: 5,
+            total_sessions: 20,
             is_active: true,
             notes: null,
           },
@@ -163,7 +179,7 @@ describe('MembershipManagement page', () => {
         data: [
           {
             id: 31,
-            membership_type_name: '프리패스',
+            membership_type_name: '20회권',
             remaining_sessions: 3,
             is_active: false,
             notes: '변경됨',
@@ -173,17 +189,15 @@ describe('MembershipManagement page', () => {
 
     render(<MembershipManagement />);
 
-    await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('20회권')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
     fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '3' } });
     fireEvent.change(document.getElementById('edit-notes-31') as HTMLTextAreaElement, { target: { value: '변경됨' } });
-    fireEvent.click(screen.getByLabelText('활성 상태'));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(membershipUpdateMock).toHaveBeenCalledWith(31, {
       remaining_sessions: 3,
-      is_active: false,
       notes: '변경됨',
     }));
 
@@ -195,6 +209,46 @@ describe('MembershipManagement page', () => {
     expect(screen.queryByRole('button', { name: '저장' })).toBeNull();
   });
 
+  it('omits is_active when editing a limited membership', async () => {
+    membershipUpdateMock.mockResolvedValueOnce(undefined);
+    membershipGetByCustomerMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 33,
+            membership_type_name: '10회권',
+            remaining_sessions: 2,
+            is_active: true,
+            notes: '기존 메모',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 33,
+            membership_type_name: '10회권',
+            remaining_sessions: 2,
+            is_active: true,
+            notes: '메모만 변경',
+          },
+        ],
+      });
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('10회권')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '수정' }));
+    fireEvent.change(document.getElementById('edit-notes-33') as HTMLTextAreaElement, { target: { value: '메모만 변경' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(membershipUpdateMock).toHaveBeenCalledWith(33, {
+      remaining_sessions: 2,
+      notes: '메모만 변경',
+    }));
+  });
+
   it('renders start/expected end date values when provided', async () => {
     membershipGetByCustomerMock.mockResolvedValueOnce({
       data: [
@@ -202,6 +256,7 @@ describe('MembershipManagement page', () => {
           id: 71,
           membership_type_name: '날짜표시권',
           remaining_sessions: 4,
+          available_sessions: 2,
           total_sessions: 12,
           consumed_sessions: 5,
           is_active: true,
@@ -214,7 +269,7 @@ describe('MembershipManagement page', () => {
 
     render(<MembershipManagement />);
     await waitFor(() => expect(screen.getByText('날짜표시권')).toBeTruthy());
-    expect(screen.getByText('예약 가능 잔여: 4')).toBeTruthy();
+    expect(screen.getByText('예약 가능 잔여: 2회')).toBeTruthy();
     expect(screen.getByText('소진 횟수: 5 / 12회')).toBeTruthy();
     expect(screen.getByText('시작일: 2026년 2월 1일')).toBeTruthy();
     expect(screen.getByText('예상 종료일: 2026년 3월 1일')).toBeTruthy();
@@ -336,6 +391,114 @@ describe('MembershipManagement page', () => {
     consoleSpy.mockRestore();
   });
 
+  it('shows deactivate instead of delete when reserved registrations exist', async () => {
+    membershipDeactivateMock.mockResolvedValueOnce(undefined);
+    membershipGetByCustomerMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 52,
+            membership_type_name: '예약보유',
+            remaining_sessions: 3,
+            reserved_count: 1,
+            consumed_sessions: 0,
+            total_sessions: 10,
+            is_active: true,
+            notes: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 52,
+            membership_type_name: '예약보유',
+            remaining_sessions: 3,
+            reserved_count: 1,
+            consumed_sessions: 0,
+            total_sessions: 10,
+            is_active: false,
+            notes: null,
+          },
+        ],
+      });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('예약보유')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: '삭제' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => expect(membershipDeactivateMock).toHaveBeenCalledWith(52));
+    await waitFor(() => expect(screen.getByText('회원권을 비활성화했습니다.')).toBeTruthy());
+
+    confirmSpy.mockRestore();
+  });
+
+  it('shows parsed error when deactivate fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    membershipDeactivateMock.mockRejectedValueOnce(new Error('deactivate failed'));
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 53,
+          membership_type_name: '비활성실패권',
+          remaining_sessions: 2,
+          reserved_count: 1,
+          consumed_sessions: 0,
+          total_sessions: 10,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('비활성실패권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    await waitFor(() => expect(screen.getByText('처리에 실패했습니다.')).toBeTruthy());
+    expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
+  it('does not deactivate membership when deactivation confirm is canceled', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 54,
+          membership_type_name: '비활성취소권',
+          remaining_sessions: 2,
+          reserved_count: 1,
+          consumed_sessions: 0,
+          total_sessions: 10,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('비활성취소권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(membershipDeactivateMock).not.toHaveBeenCalled();
+  });
+
   it('keeps memberships empty when no customers are returned', async () => {
     customerGetAllMock.mockResolvedValueOnce({ data: [] });
     membershipGetTypesMock.mockResolvedValueOnce({ data: [] });
@@ -344,6 +507,13 @@ describe('MembershipManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
     expect(membershipGetByCustomerMock).not.toHaveBeenCalled();
+  });
+
+  it('selects the first customer automatically after initialization', async () => {
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1));
+    expect((screen.getByLabelText('고객 선택') as HTMLSelectElement).value).toBe('1');
   });
 
   it('returns early on create submit when no customer is selected', async () => {
@@ -359,7 +529,7 @@ describe('MembershipManagement page', () => {
     expect(membershipCreateMock).not.toHaveBeenCalled();
   });
 
-  it('updates membership with null remaining sessions', async () => {
+  it('updates membership to zero remaining sessions', async () => {
     membershipUpdateMock.mockResolvedValueOnce(undefined);
     membershipGetByCustomerMock
       .mockResolvedValueOnce({
@@ -368,6 +538,7 @@ describe('MembershipManagement page', () => {
             id: 61,
             membership_type_name: '정기권',
             remaining_sessions: 2,
+            total_sessions: 10,
             is_active: true,
             notes: null,
           },
@@ -378,8 +549,9 @@ describe('MembershipManagement page', () => {
           {
             id: 61,
             membership_type_name: '정기권',
-            remaining_sessions: null,
-            is_active: true,
+            remaining_sessions: 0,
+            total_sessions: 10,
+            is_active: false,
             notes: null,
           },
         ],
@@ -389,12 +561,11 @@ describe('MembershipManagement page', () => {
     await waitFor(() => expect(screen.getByText('정기권')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
-    fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('잔여 횟수'), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(membershipUpdateMock).toHaveBeenCalledWith(61, {
-      remaining_sessions: null,
-      is_active: true,
+      remaining_sessions: 0,
       notes: null,
     }));
   });

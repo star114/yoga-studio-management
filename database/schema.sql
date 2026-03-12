@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS yoga_membership_types (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    total_sessions INTEGER,  -- 횟수제의 경우 총 횟수
+    total_sessions INTEGER NOT NULL CHECK (total_sessions > 0),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS yoga_memberships (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES yoga_customers(id) ON DELETE CASCADE,
     membership_type_id INTEGER REFERENCES yoga_membership_types(id),
-    remaining_sessions INTEGER CHECK (remaining_sessions IS NULL OR remaining_sessions >= 0),  -- 잔여 횟수
+    remaining_sessions INTEGER NOT NULL CHECK (remaining_sessions >= 0),
     is_active BOOLEAN DEFAULT TRUE,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS yoga_attendances (
     attendance_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     instructor_id INTEGER REFERENCES yoga_users(id),
     class_type VARCHAR(100),  -- 수업 종류
+    session_deducted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -86,9 +87,27 @@ CREATE TABLE IF NOT EXISTS yoga_class_registrations (
     customer_id INTEGER NOT NULL REFERENCES yoga_customers(id) ON DELETE CASCADE,
     membership_id INTEGER REFERENCES yoga_memberships(id) ON DELETE SET NULL,
     attendance_status VARCHAR(20) NOT NULL DEFAULT 'reserved' CHECK (attendance_status IN ('reserved', 'attended', 'absent')),
+    session_consumed BOOLEAN NOT NULL DEFAULT FALSE,
     registration_comment TEXT,
     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (class_id, customer_id)
+);
+
+-- 회원권 잔여 횟수 감사 로그
+CREATE TABLE IF NOT EXISTS yoga_membership_usage_audit_logs (
+    id SERIAL PRIMARY KEY,
+    membership_id INTEGER NOT NULL REFERENCES yoga_memberships(id) ON DELETE CASCADE,
+    customer_id INTEGER NOT NULL REFERENCES yoga_customers(id) ON DELETE CASCADE,
+    class_id INTEGER REFERENCES yoga_classes(id) ON DELETE SET NULL,
+    registration_id INTEGER REFERENCES yoga_class_registrations(id) ON DELETE SET NULL,
+    attendance_id INTEGER REFERENCES yoga_attendances(id) ON DELETE SET NULL,
+    actor_user_id INTEGER REFERENCES yoga_users(id) ON DELETE SET NULL,
+    change_amount INTEGER NOT NULL,
+    remaining_before INTEGER NOT NULL CHECK (remaining_before >= 0),
+    remaining_after INTEGER NOT NULL CHECK (remaining_after >= 0),
+    reason VARCHAR(100) NOT NULL,
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 인덱스 생성
@@ -96,6 +115,10 @@ CREATE INDEX IF NOT EXISTS idx_customers_user_id ON yoga_customers(user_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON yoga_customers(phone);
 CREATE INDEX IF NOT EXISTS idx_memberships_customer_id ON yoga_memberships(customer_id);
 CREATE INDEX IF NOT EXISTS idx_memberships_active ON yoga_memberships(is_active);
+CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_membership_created
+    ON yoga_membership_usage_audit_logs(membership_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_customer_created
+    ON yoga_membership_usage_audit_logs(customer_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_attendances_customer_id ON yoga_attendances(customer_id);
 CREATE INDEX IF NOT EXISTS idx_attendances_date ON yoga_attendances(attendance_date);
 CREATE INDEX IF NOT EXISTS idx_attendances_class_id ON yoga_attendances(class_id);
@@ -120,9 +143,7 @@ $$ language 'plpgsql';
 CREATE OR REPLACE FUNCTION sync_membership_active_from_remaining()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.remaining_sessions IS NOT NULL THEN
-        NEW.is_active = NEW.remaining_sessions > 0;
-    END IF;
+    NEW.is_active = NEW.remaining_sessions > 0;
     RETURN NEW;
 END;
 $$ language 'plpgsql';
@@ -144,4 +165,5 @@ CREATE TRIGGER sync_yoga_memberships_active_from_remaining
 CREATE TRIGGER update_yoga_classes_updated_at BEFORE UPDATE ON yoga_classes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 초기 관리자 계정은 백엔드 시작 시 .env의 ADMIN_ID / ADMIN_PASSWORD 값으로 생성/갱신됨
+-- 초기 관리자 계정은 백엔드 시작 시 .env의 ADMIN_ID / ADMIN_PASSWORD 값으로 생성되며,
+-- 같은 login_id가 있으면 비밀번호는 유지하고 role만 admin으로 승격한다.

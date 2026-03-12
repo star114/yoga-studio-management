@@ -4,6 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
 type QueryParams = Record<string, string | number | boolean | null | undefined>;
 type ClassRegistrationPayload = {
   customer_id?: number;
+  membership_id?: number;
   allow_cross_membership_registration?: boolean;
   mark_attended_after_register?: boolean;
 };
@@ -61,9 +62,6 @@ export const customerAPI = {
   getById: (id: number) => 
     api.get(`/customers/${id}`),
 
-  getAttendances: (id: number, params?: QueryParams) =>
-    api.get(`/customers/${id}/attendances`, { params }),
-
   getClassActivities: (id: number, params?: QueryParams) =>
     api.get(`/customers/${id}/class-activities`, { params }),
 
@@ -100,8 +98,10 @@ export const adminAccountAPI = {
 
 // Membership API
 export const membershipAPI = {
-  getTypes: () => 
-    api.get('/memberships/types'),
+  getTypes: (options?: { includeInactive?: boolean }) => 
+    api.get('/memberships/types', {
+      params: options?.includeInactive ? { include_inactive: true } : undefined,
+    }),
   
   createType: (data: unknown) => 
     api.post('/memberships/types', data),
@@ -110,6 +110,9 @@ export const membershipAPI = {
     api.put(`/memberships/types/${id}`, data),
 
   deactivateType: (id: number) =>
+    api.post(`/memberships/types/${id}/deactivate`),
+
+  deleteType: (id: number) =>
     api.delete(`/memberships/types/${id}`),
   
   getByCustomer: (customerId: number) => 
@@ -120,6 +123,9 @@ export const membershipAPI = {
   
   update: (id: number, data: unknown) => 
     api.put(`/memberships/${id}`, data),
+
+  deactivate: (id: number) =>
+    api.post(`/memberships/${id}/deactivate`),
   
   delete: (id: number) => 
     api.delete(`/memberships/${id}`),
@@ -135,9 +141,6 @@ export const attendanceAPI = {
   
   checkIn: (data: unknown) => 
     api.post('/attendances', data),
-  
-  update: (id: number, data: unknown) => 
-    api.put(`/attendances/${id}`, data),
   
   delete: (id: number) => 
     api.delete(`/attendances/${id}`),

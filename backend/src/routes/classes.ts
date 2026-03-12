@@ -3,6 +3,7 @@ import { body, param, query } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
+import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -41,38 +42,20 @@ const getLatestAttendanceIdByClassCustomer = async (
   return Number(attendanceResult.rows[0].id);
 };
 
-const restoreMembershipSessions = async (
-  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
-  membershipId: number
-) => {
-  await client.query(
-    `UPDATE yoga_memberships
-     SET remaining_sessions = CASE
-           WHEN remaining_sessions IS NULL THEN NULL
-           ELSE remaining_sessions + 1
-         END,
-         is_active = CASE
-           WHEN remaining_sessions IS NULL THEN is_active
-           WHEN (remaining_sessions + 1) > 0 THEN TRUE
-           ELSE FALSE
-         END
-     WHERE id = $1`,
-    [membershipId]
-  );
-};
-
 const cancelRegistrationAndRelatedAttendance = async (
   client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
   registration: {
     id: number;
     membership_id: number | null;
     attendance_status: 'reserved' | 'attended' | 'absent';
+    session_consumed?: boolean | null;
   },
   classId: string,
-  customerId: number | string
+  customerId: number | string,
+  actorUserId?: number | null
 ) => {
   const attendanceResult = await client.query(
-    `SELECT id, membership_id
+    `SELECT id, membership_id, session_deducted
      FROM yoga_attendances
      WHERE class_id = $1
        AND customer_id = $2
@@ -80,28 +63,25 @@ const cancelRegistrationAndRelatedAttendance = async (
     [classId, customerId]
   );
 
-  const attendanceRows = attendanceResult.rows as Array<{ id: number; membership_id: number | null }>;
-  const membershipUsage = new Map<number, number>();
+  const attendanceRows = attendanceResult.rows as Array<{
+    id: number;
+    membership_id: number | null;
+    session_deducted: boolean;
+  }>;
+  const refundMembershipId = registration.membership_id
+    ?? attendanceRows.find((attendanceRow) => attendanceRow.membership_id !== null)?.membership_id
+    ?? null;
 
-  attendanceRows.forEach((attendanceRow) => {
-    if (attendanceRow.membership_id === null) {
-      return;
-    }
-    const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
-    membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
-  });
-
-  if (
-    registration.membership_id !== null
-    && !membershipUsage.has(registration.membership_id)
-  ) {
-    membershipUsage.set(registration.membership_id, 1);
-  }
-
-  for (const [membershipId, usedCount] of membershipUsage.entries()) {
-    for (let index = 0; index < usedCount; index += 1) {
-      await restoreMembershipSessions(client, membershipId);
-    }
+  if (registration.session_consumed && refundMembershipId !== null) {
+    await refundMembershipSessions(client, {
+      membershipId: refundMembershipId,
+      changeAmount: 1,
+      actorUserId,
+      classId: Number(classId),
+      registrationId: registration.id,
+      reason: 'registration_cancel_refund',
+      note: `Canceled registration with status ${registration.attendance_status}`,
+    });
   }
 
   if (attendanceRows.length > 0) {
@@ -124,7 +104,7 @@ router.get('/',
   query('date_to').optional().isDate(),
   query('is_open').optional().isBoolean(),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const { date_from, date_to, is_open } = req.query;
 
     try {
@@ -227,7 +207,7 @@ router.get('/:id',
   requireAdmin,
   param('id').isInt({ min: 1 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
 
     try {
@@ -334,7 +314,7 @@ router.get('/:id/registrations',
   requireAdmin,
   param('id').isInt({ min: 1 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
 
     try {
@@ -478,7 +458,7 @@ router.get('/:id/registrations/:customerId/comment-thread',
   param('id').isInt({ min: 1 }),
   param('customerId').isInt({ min: 1 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
     const customerId = Number(req.params.customerId);
 
@@ -599,7 +579,7 @@ router.put('/:id/registrations/:customerId/comment',
   param('customerId').isInt({ min: 1 }),
   body('registration_comment').optional({ values: 'falsy' }).isString().isLength({ max: 500 }),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
     const customerId = Number(req.params.customerId);
     const comment = typeof req.body.registration_comment === 'string'
@@ -635,7 +615,7 @@ router.put('/:id/registrations/:customerId/status',
   param('customerId').isInt({ min: 1 }),
   body('attendance_status').isIn(['reserved', 'attended', 'absent']),
   validateRequest,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
     const customerId = Number(req.params.customerId);
     const attendanceStatus = String(req.body.attendance_status);
@@ -645,10 +625,10 @@ router.put('/:id/registrations/:customerId/status',
       await client.query('BEGIN');
 
       const registrationResult = await client.query(
-        `SELECT id, class_id, customer_id, membership_id, attendance_status, registration_comment, registered_at
-         FROM yoga_class_registrations
-         WHERE class_id = $1 AND customer_id = $2
-         FOR UPDATE`,
+      `SELECT id, class_id, customer_id, membership_id, attendance_status, session_consumed, registration_comment, registered_at
+        FROM yoga_class_registrations
+        WHERE class_id = $1 AND customer_id = $2
+        FOR UPDATE`,
         [classId, customerId]
       );
 
@@ -657,7 +637,17 @@ router.put('/:id/registrations/:customerId/status',
         return res.status(404).json({ error: 'Registration not found' });
       }
 
-      const currentRegistration = registrationResult.rows[0];
+      const currentRegistration = registrationResult.rows[0] as {
+        id: number;
+        class_id: number;
+        customer_id: number;
+        membership_id: number | null;
+        attendance_status: 'reserved' | 'attended' | 'absent';
+        session_consumed?: boolean | null;
+        registration_comment: string | null;
+        registered_at: string;
+      };
+      const currentSessionConsumed = Boolean(currentRegistration.session_consumed);
 
       if (currentRegistration.attendance_status === attendanceStatus) {
         await client.query('COMMIT');
@@ -677,50 +667,61 @@ router.put('/:id/registrations/:customerId/status',
           await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Attendance record not found; use check-in endpoint first' });
         }
+      } else if (attendanceStatus === 'absent' && currentRegistration.attendance_status === 'reserved') {
+        if (currentRegistration.membership_id === null) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Registration membership not found' });
+        }
+
+        if (!currentSessionConsumed) {
+          const membershipUpdateResult = await deductMembershipSessions(client, {
+            membershipId: currentRegistration.membership_id,
+            changeAmount: 1,
+            actorUserId: req.user!.id,
+            classId,
+            registrationId: currentRegistration.id,
+            reason: 'registration_status_absent_deduction',
+          });
+
+          if (!membershipUpdateResult) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Membership sessions exhausted' });
+          }
+        }
       } else {
         const attendanceResult = await client.query(
-          `SELECT id, membership_id
+          `SELECT id, membership_id, session_deducted
            FROM yoga_attendances
            WHERE class_id = $1 AND customer_id = $2
            FOR UPDATE`,
           [classId, customerId]
         );
 
-        const attendanceRows = attendanceResult.rows as Array<{ id: number; membership_id: number | null }>;
+        const attendanceRows = attendanceResult.rows as Array<{
+          id: number;
+          membership_id: number | null;
+          session_deducted: boolean;
+        }>;
+
+        if (attendanceStatus === 'reserved') {
+          const refundMembershipId = currentRegistration.membership_id
+            ?? attendanceRows.find((attendanceRow) => attendanceRow.membership_id !== null)?.membership_id
+            ?? null;
+
+          if (currentSessionConsumed && refundMembershipId !== null) {
+            await refundMembershipSessions(client, {
+              membershipId: refundMembershipId,
+              changeAmount: 1,
+              actorUserId: req.user!.id,
+              classId,
+              registrationId: currentRegistration.id,
+              reason: 'registration_status_reserved_refund',
+              note: `Status changed from ${currentRegistration.attendance_status} to reserved`,
+            });
+          }
+        }
 
         if (attendanceRows.length > 0) {
-          const membershipUsage = new Map<number, number>();
-
-          if (attendanceStatus === 'reserved') {
-            attendanceRows.forEach((attendanceRow) => {
-              if (
-                attendanceRow.membership_id === null
-                || attendanceRow.membership_id === currentRegistration.membership_id
-              ) {
-                return;
-              }
-              const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
-              membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
-            });
-
-            for (const [membershipId, usedCount] of membershipUsage.entries()) {
-              await client.query(
-                `UPDATE yoga_memberships
-                 SET remaining_sessions = CASE
-                       WHEN remaining_sessions IS NULL THEN NULL
-                       ELSE remaining_sessions + $2
-                     END,
-                     is_active = CASE
-                       WHEN remaining_sessions IS NULL THEN is_active
-                       WHEN (remaining_sessions + $2) > 0 THEN TRUE
-                       ELSE FALSE
-                     END
-                 WHERE id = $1`,
-                [membershipId, usedCount]
-              );
-            }
-          }
-
           const attendanceIds = attendanceRows.map((attendanceRow) => attendanceRow.id);
           await client.query(
             'DELETE FROM yoga_attendances WHERE id = ANY($1::int[])',
@@ -731,10 +732,11 @@ router.put('/:id/registrations/:customerId/status',
 
       const result = await client.query(
         `UPDATE yoga_class_registrations
-         SET attendance_status = $3
+         SET attendance_status = $3,
+             session_consumed = $4
          WHERE class_id = $1 AND customer_id = $2
-         RETURNING id, class_id, customer_id, membership_id, attendance_status, registration_comment, registered_at`,
-        [classId, customerId, attendanceStatus]
+         RETURNING id, class_id, customer_id, membership_id, attendance_status, session_consumed, registration_comment, registered_at`,
+        [classId, customerId, attendanceStatus, attendanceStatus !== 'reserved']
       );
 
       await client.query('COMMIT');
@@ -753,6 +755,7 @@ router.put('/:id/registrations/:customerId/status',
 router.post('/:id/registrations',
   authenticate,
   body('customer_id').optional().isInt({ min: 1 }),
+  body('membership_id').optional().isInt({ min: 1 }),
   body('allow_cross_membership_registration').optional().isBoolean(),
   body('mark_attended_after_register').optional().isBoolean(),
   validateRequest,
@@ -778,7 +781,15 @@ router.post('/:id/registrations',
       await client.query('BEGIN');
 
       const classResult = await client.query(
-        `SELECT id, title, is_open, max_capacity, class_date, start_time, end_time
+        `SELECT
+           id,
+           title,
+           is_open,
+           max_capacity,
+           class_date,
+           start_time,
+           end_time,
+           (class_date::timestamp + end_time) <= CURRENT_TIMESTAMP AS is_completed
          FROM yoga_classes
          WHERE id = $1
          FOR UPDATE`,
@@ -792,11 +803,7 @@ router.post('/:id/registrations',
 
       const yogaClass = classResult.rows[0];
 
-      const now = new Date();
-      const normalizedClassDate = String(yogaClass.class_date).slice(0, 10);
-      const normalizedEndTime = String(yogaClass.end_time).slice(0, 8);
-      const classEndAt = new Date(`${normalizedClassDate}T${normalizedEndTime}`);
-      const isCompletedClass = classEndAt <= now;
+      const isCompletedClass = yogaClass.is_completed === true;
       const markAttendedAfterRegister = req.user?.role === 'admin'
         && req.body.mark_attended_after_register === true;
       const shouldCreateImmediateAttendance = isCompletedClass && markAttendedAfterRegister;
@@ -816,6 +823,7 @@ router.post('/:id/registrations',
         return res.status(400).json({ error: 'Class is closed' });
       }
 
+      const requestedMembershipId = req.body.membership_id ? Number(req.body.membership_id) : null;
       const membershipResult = await client.query(
         `SELECT
            m.id,
@@ -839,7 +847,6 @@ router.post('/:id/registrations',
          INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
          WHERE m.customer_id = $1
            AND m.is_active = TRUE
-           AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
          ORDER BY
            CASE
              WHEN regexp_replace(
@@ -860,16 +867,50 @@ router.post('/:id/registrations',
         [customerId, yogaClass.title]
       );
 
-      const eligibleMembershipRows = membershipResult.rows as Array<{
+      const lockedMembershipRows = membershipResult.rows as Array<{
         id: number;
-        remaining_sessions: number | null;
+        remaining_sessions: number;
         is_title_match: boolean;
       }>;
+      const reservedCountByMembershipId = new Map<number, number>();
+
+      if (lockedMembershipRows.length > 0) {
+        const reservedCountResult = await client.query(
+          `SELECT membership_id, COUNT(*)::int AS reserved_count
+           FROM yoga_class_registrations
+           WHERE membership_id = ANY($1::int[])
+             AND attendance_status = 'reserved'
+           GROUP BY membership_id`,
+          [lockedMembershipRows.map((row) => row.id)]
+        );
+
+        for (const row of reservedCountResult.rows as Array<{ membership_id: number; reserved_count: number }>) {
+          reservedCountByMembershipId.set(Number(row.membership_id), Number(row.reserved_count));
+        }
+      }
+
+      const eligibleMembershipRows = lockedMembershipRows
+        .map((row) => ({
+          ...row,
+          reserved_count: reservedCountByMembershipId.get(row.id) ?? 0,
+        }))
+        .filter((row) => (row.remaining_sessions - row.reserved_count) > 0);
+
+      const requestedMembership = requestedMembershipId === null
+        ? null
+        : eligibleMembershipRows.find((row) => row.id === requestedMembershipId) ?? null;
       const matchingMembershipRows = eligibleMembershipRows.filter((row) => row.is_title_match);
       const alternativeMembershipRows = eligibleMembershipRows.filter((row) => !row.is_title_match);
-      const hasAlternativeMembership = matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
+      const hasAlternativeMembership = requestedMembership
+        ? !requestedMembership.is_title_match
+        : matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
 
-      if (matchingMembershipRows.length === 0) {
+      if (requestedMembershipId !== null && !requestedMembership) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Invalid or unavailable membership' });
+      }
+
+      if ((requestedMembership && !requestedMembership.is_title_match) || matchingMembershipRows.length === 0) {
         if (hasAlternativeMembership && !allowCrossMembershipRegistration) {
           await client.query('ROLLBACK');
           return res.status(400).json({
@@ -895,11 +936,11 @@ router.post('/:id/registrations',
              COUNT(*)::int AS total_memberships,
              COUNT(*) FILTER (WHERE m.is_active = TRUE)::int AS active_memberships,
              COUNT(*) FILTER (
-               WHERE m.remaining_sessions IS NULL OR m.remaining_sessions > 0
+               WHERE (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
              )::int AS remaining_memberships,
              COUNT(*) FILTER (
                WHERE m.is_active = TRUE
-                 AND (m.remaining_sessions IS NULL OR m.remaining_sessions > 0)
+                 AND (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
              )::int AS eligible_memberships,
              COUNT(*) FILTER (
                WHERE regexp_replace(
@@ -916,6 +957,12 @@ router.post('/:id/registrations',
              )::int AS title_matched_memberships
            FROM yoga_memberships m
            LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*)::int AS reserved_count
+             FROM yoga_class_registrations rr
+             WHERE rr.membership_id = m.id
+               AND rr.attendance_status = 'reserved'
+           ) reservations ON true
            WHERE m.customer_id = $1`,
             [customerId, yogaClass.title]
           );
@@ -975,7 +1022,9 @@ router.post('/:id/registrations',
         }
       }
 
-      const usesAlternativeMembership = matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
+      const usesAlternativeMembership = requestedMembership
+        ? !requestedMembership.is_title_match
+        : matchingMembershipRows.length === 0 && alternativeMembershipRows.length > 0;
 
       if (!shouldCreateImmediateAttendance) {
         const countResult = await client.query(
@@ -990,14 +1039,15 @@ router.post('/:id/registrations',
         }
       }
 
-      const selectedMembership = (usesAlternativeMembership ? eligibleMembershipRows : matchingMembershipRows)[0];
+      const selectedMembership = requestedMembership
+        ?? (usesAlternativeMembership ? alternativeMembershipRows[0] : matchingMembershipRows[0]);
 
       const registrationResult = await client.query(
-        `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id, attendance_status)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO yoga_class_registrations (class_id, customer_id, membership_id, attendance_status, session_consumed)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (class_id, customer_id) DO NOTHING
          RETURNING *`,
-        [id, customerId, selectedMembership.id, shouldCreateImmediateAttendance ? 'attended' : 'reserved']
+        [id, customerId, selectedMembership.id, shouldCreateImmediateAttendance ? 'attended' : 'reserved', shouldCreateImmediateAttendance]
       );
 
       if (registrationResult.rows.length === 0) {
@@ -1005,31 +1055,50 @@ router.post('/:id/registrations',
         return res.status(400).json({ error: 'Customer already registered' });
       }
 
-      if (selectedMembership?.remaining_sessions !== null) {
-        const membershipUpdateResult = await client.query(
-          `UPDATE yoga_memberships
-           SET remaining_sessions = remaining_sessions - 1,
-               is_active = CASE
-                 WHEN (remaining_sessions - 1) <= 0 THEN FALSE
-                 ELSE TRUE
-               END
-           WHERE id = $1
-             AND remaining_sessions > 0
-           RETURNING id`,
-          [selectedMembership.id]
-        );
+      if (shouldCreateImmediateAttendance) {
+        const membershipUpdateResult = await deductMembershipSessions(client, {
+          membershipId: selectedMembership.id,
+          changeAmount: 1,
+          actorUserId: req.user!.id,
+          classId: Number(id),
+          registrationId: Number(registrationResult.rows[0].id),
+          reason: 'completed_class_immediate_attendance',
+        });
 
-        if (membershipUpdateResult.rows.length === 0) {
+        if (!membershipUpdateResult) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'Membership sessions exhausted' });
         }
-      }
 
-      if (shouldCreateImmediateAttendance) {
         await client.query(
-          `INSERT INTO yoga_attendances (customer_id, membership_id, class_id, attendance_date, instructor_id, class_type)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [customerId, selectedMembership.id, id, classEndAt, req.user!.id, yogaClass.title || null]
+          `INSERT INTO yoga_attendances (
+             customer_id,
+             membership_id,
+             class_id,
+             attendance_date,
+             instructor_id,
+             class_type,
+             session_deducted
+           )
+           VALUES (
+             $1,
+             $2,
+             $3,
+             ($4::date::timestamp + $5::time),
+             $6,
+             $7,
+             $8
+           )`,
+          [
+            customerId,
+            selectedMembership.id,
+            id,
+            yogaClass.class_date,
+            yogaClass.end_time,
+            req.user!.id,
+            yogaClass.title || null,
+            true,
+          ]
         );
       }
 
@@ -1066,7 +1135,7 @@ router.delete('/:id/registrations/me',
         await client.query('BEGIN');
 
         const registrationResult = await client.query(
-          `SELECT id, membership_id, attendance_status
+          `SELECT id, membership_id, attendance_status, session_consumed
            FROM yoga_class_registrations
            WHERE class_id = $1 AND customer_id = $2
            FOR UPDATE`,
@@ -1082,6 +1151,7 @@ router.delete('/:id/registrations/me',
           id: number;
           membership_id: number | null;
           attendance_status: 'reserved' | 'attended' | 'absent';
+          session_consumed?: boolean | null;
         };
 
         if (registration.attendance_status !== 'reserved') {
@@ -1089,7 +1159,13 @@ router.delete('/:id/registrations/me',
           return res.status(400).json({ error: 'Only reserved registrations can be canceled by customer' });
         }
 
-        await cancelRegistrationAndRelatedAttendance(client, registration, String(id), customerId);
+        await cancelRegistrationAndRelatedAttendance(
+          client,
+          registration,
+          String(id),
+          customerId,
+          req.user!.id
+        );
 
         await client.query('COMMIT');
         res.json({ message: 'Registration canceled successfully' });
@@ -1110,7 +1186,7 @@ router.delete('/:id/registrations/me',
 router.delete('/:id/registrations/:customerId',
   authenticate,
   requireAdmin,
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const { id, customerId } = req.params;
 
     try {
@@ -1119,7 +1195,7 @@ router.delete('/:id/registrations/:customerId',
         await client.query('BEGIN');
 
         const registrationResult = await client.query(
-          `SELECT id, membership_id, attendance_status
+          `SELECT id, membership_id, attendance_status, session_consumed
            FROM yoga_class_registrations
            WHERE class_id = $1 AND customer_id = $2
            FOR UPDATE`,
@@ -1135,9 +1211,21 @@ router.delete('/:id/registrations/:customerId',
           id: number;
           membership_id: number | null;
           attendance_status: 'reserved' | 'attended' | 'absent';
+          session_consumed?: boolean | null;
         };
 
-        await cancelRegistrationAndRelatedAttendance(client, registration, String(id), customerId);
+        if (registration.attendance_status !== 'reserved') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Only reserved registrations can be canceled by admin' });
+        }
+
+        await cancelRegistrationAndRelatedAttendance(
+          client,
+          registration,
+          String(id),
+          customerId,
+          req.user!.id
+        );
 
         await client.query('COMMIT');
         res.json({ message: 'Registration canceled successfully' });

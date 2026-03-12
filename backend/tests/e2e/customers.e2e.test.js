@@ -275,6 +275,15 @@ test('GET /:id/class-activities covers forbidden, success, filters, and error', 
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/class-activities',
+    params: { id: 'abc' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid customerId');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/class-activities',
     params: { id: '5' },
     query: { date_from: '2026-99-99' },
     headers: { authorization: `Bearer ${customerToken()}` },
@@ -392,6 +401,16 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   });
   assert.equal(res.status, 400);
 
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: 'abc' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid customerId');
+
   h.queryQueue.push({ rows: [] });
   res = await h.runRoute({
     method: 'get',
@@ -414,7 +433,7 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
-    { rows: [{ id: 9, title: '아쉬탕가' }] }
+    { rows: [{ id: 9, title: '아쉬탕가', is_registered: true, existing_status: 'attended' }] }
   );
   res = await h.runRoute({
     method: 'get',
@@ -426,6 +445,8 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
   assert.equal(res.body[0].title, '아쉬탕가');
+  assert.equal(res.body[0].is_registered, true);
+  assert.equal(res.body[0].existing_status, 'attended');
 
   h.queryQueue.push({ rows: [{ id: 10, title: '빈야사' }] });
   res = await h.runRoute({
@@ -449,93 +470,6 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
     query: { membership_name: '아쉬탕가' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-  });
-  assert.equal(res.status, 500);
-});
-
-test('GET /:id/attendances covers forbidden, success, filters, and error', async () => {
-  process.env.JWT_SECRET = 'test-secret';
-  const h = createCustomersHarness();
-
-  h.queryQueue.push({ rows: [] });
-  let res = await h.runRoute({
-    method: 'get',
-    routePath: '/:id/attendances',
-    params: { id: '5' },
-    headers: { authorization: `Bearer ${customerToken()}` },
-  });
-  assert.equal(res.status, 403);
-
-  res = await h.runRoute({
-    method: 'get',
-    routePath: '/:id/attendances',
-    params: { id: 'abc' },
-    headers: { authorization: `Bearer ${customerToken()}` },
-  });
-  assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Invalid customerId');
-
-  h.queryQueue.push(new Error('attendance access fail'));
-  res = await h.runRoute({
-    method: 'get',
-    routePath: '/:id/attendances',
-    params: { id: '5' },
-    headers: { authorization: `Bearer ${customerToken()}` },
-  });
-  assert.equal(res.status, 500);
-
-  h.queryQueue.push(
-    { rows: [{ id: 5 }] },
-    { rows: [{ total: 2 }] },
-    {
-      rows: [
-        {
-          id: 71,
-          class_title: '아쉬탕가',
-        },
-      ],
-    }
-  );
-  res = await h.runRoute({
-    method: 'get',
-    routePath: '/:id/attendances',
-    params: { id: '5' },
-    query: { months: '3', page: '2', page_size: '5' },
-    headers: { authorization: `Bearer ${customerToken()}` },
-  });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.items.length, 1);
-  assert.equal(res.body.pagination.page, 2);
-  assert.equal(res.body.filter.months, 3);
-  const attendanceQueryText = h.queryCalls
-    .map((call) => String(call[0]))
-    .find((text) => text.includes('FROM yoga_attendances a') && text.includes('LIMIT $'));
-  assert.ok(attendanceQueryText);
-  assert.ok(attendanceQueryText.includes("CURRENT_DATE - ($2::text || ' months')::interval"));
-
-  h.queryQueue.push(
-    { rows: [] },
-    { rows: [] }
-  );
-  res = await h.runRoute({
-    method: 'get',
-    routePath: '/:id/attendances',
-    params: { id: '5' },
-    query: { page: '0', page_size: '0' },
-    headers: { authorization: `Bearer ${adminToken()}` },
-  });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.pagination.page, 1);
-  assert.equal(res.body.pagination.page_size, 20);
-  assert.equal(res.body.pagination.total, 0);
-  assert.equal(res.body.filter.months, null);
-
-  h.queryQueue.push(new Error('attendances fail'));
-  res = await h.runRoute({
-    method: 'get',
-    routePath: '/:id/attendances',
-    params: { id: '5' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);

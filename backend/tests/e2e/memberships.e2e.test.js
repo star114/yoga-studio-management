@@ -71,6 +71,7 @@ const createMembershipsHarness = () => {
     method,
     routePath,
     params = {},
+    query = {},
     body = {},
     headers = {},
   }) => {
@@ -93,6 +94,7 @@ const createMembershipsHarness = () => {
       method: method.toUpperCase(),
       path: routePath,
       params,
+      query,
       body,
       headers: reqHeaders,
       get(name) {
@@ -167,6 +169,16 @@ test('types routes cover success/not-found/validation/error', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body[0].name, '10회');
 
+  h.queryQueue.push({ rows: [{ id: 2, name: '중지권', is_active: false }] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/types',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    query: { include_inactive: 'true' },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body[0].is_active, false);
+
   h.queryQueue.push(new Error('types fail'));
   res = await h.runRoute({
     method: 'get',
@@ -199,7 +211,7 @@ test('types routes cover success/not-found/validation/error', async () => {
     method: 'post',
     routePath: '/types',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'X' },
+    body: { name: 'X', total_sessions: 5 },
   });
   assert.equal(res.status, 500);
 
@@ -233,6 +245,17 @@ test('types routes cover success/not-found/validation/error', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body.name, 'updated');
 
+  h.queryQueue.push({ rows: [{ id: 3, name: 'updated', total_sessions: 12 }] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/types/:id',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { total_sessions: 12 },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.total_sessions, 12);
+
   h.queryQueue.push(new Error('update type fail'));
   res = await h.runRoute({
     method: 'put',
@@ -240,6 +263,33 @@ test('types routes cover success/not-found/validation/error', async () => {
     params: { id: '3' },
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { name: 'x2' },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types/:id/deactivate',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push({ rows: [{ id: 3 }] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types/:id/deactivate',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+
+  h.queryQueue.push(new Error('deactivate type fail'));
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types/:id/deactivate',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);
 
@@ -260,6 +310,16 @@ test('types routes cover success/not-found/validation/error', async () => {
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
+
+  h.queryQueue.push(Object.assign(new Error('in use'), { code: '23503' }));
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/types/:id',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Membership type cannot be deleted while memberships still reference it');
 
   h.queryQueue.push(new Error('delete type fail'));
   res = await h.runRoute({
@@ -301,6 +361,8 @@ test('memberships routes cover list/create/update/delete branches', async () => 
       total_sessions: 10,
       consumed_sessions: 5,
       remaining_sessions: 3,
+      reserved_count: 2,
+      available_sessions: 1,
     }],
   });
   res = await h.runRoute({
@@ -313,6 +375,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body.length, 1);
   assert.equal(res.body[0].total_sessions, 10);
   assert.equal(res.body[0].consumed_sessions, 5);
+  assert.equal(res.body[0].reserved_count, 2);
+  assert.equal(res.body[0].available_sessions, 1);
+  const membershipQueryText = h.queryCalls
+    .map((call) => String(call[0]))
+    .find((text) => text.includes('SELECT') && text.includes('projection.expected_end_date'));
+  assert.ok(membershipQueryText);
+  assert.ok(membershipQueryText.includes('reserved_count'));
+  assert.ok(membershipQueryText.includes('WHERE r.membership_id = m.id'));
 
   h.queryQueue.push(new Error('access check fail'));
   res = await h.runRoute({
@@ -366,8 +436,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.body.id, 101);
 
   h.queryQueue.push(
-    { rows: [{ id: 2, total_sessions: null }] },
-    { rows: [{ id: 102, customer_id: 2 }] }
+    { rows: [{ id: 2, total_sessions: 0 }] }
   );
   res = await h.runRoute({
     method: 'post',
@@ -379,11 +448,11 @@ test('memberships routes cover list/create/update/delete branches', async () => 
       notes: 'memo',
     },
   });
-  assert.equal(res.status, 201);
-  assert.equal(res.body.id, 102);
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Membership type must have a positive total_sessions value');
 
   h.queryQueue.push(
-    { rows: [{ id: 3, total_sessions: null }] },
+    { rows: [{ id: 3, total_sessions: 4 }] },
     { rows: [{ id: 103, customer_id: 3 }] }
   );
   res = await h.runRoute({
@@ -407,7 +476,13 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   });
   assert.equal(res.status, 500);
 
-  h.queryQueue.push({ rows: [] });
+  const updateNotFoundClient = h.createDbClientMock();
+  updateNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateNotFoundClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -427,7 +502,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'Request body must be an object');
 
-  h.queryQueue.push({ rows: [{ id: 201, notes: 'x2' }] });
+  const updateNotesClient = h.createDbClientMock();
+  updateNotesClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: 'old' }] },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: 'x2' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateNotesClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -436,8 +518,16 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { notes: 'x2' },
   });
   assert.equal(res.status, 200);
+  assert.match(String(updateNotesClient.queryCalls[2][0]), /WHERE id = \$5::integer/);
 
-  h.queryQueue.push({ rows: [{ id: 201, notes: null }] });
+  const updateNullNotesClient = h.createDbClientMock();
+  updateNullNotesClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: 'x2' }] },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateNullNotesClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -448,10 +538,6 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(res.body.notes, null);
 
-  h.queryQueue.push(
-    { rows: [{ id: 202, remaining_sessions: 5, is_active: true }] },
-    { rows: [{ id: 202, remaining_sessions: 5, is_active: false }] }
-  );
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -459,13 +545,9 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { remaining_sessions: 5, is_active: false },
   });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.is_active, false);
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'is_active is managed automatically from remaining_sessions');
 
-  h.queryQueue.push(
-    { rows: [{ id: 203, remaining_sessions: 8, is_active: true, notes: null }] },
-    { rows: [{ id: 203, remaining_sessions: 8, is_active: false, notes: null }] }
-  );
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -473,17 +555,55 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { is_active: false },
   });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.id, 203);
-  assert.equal(res.body.is_active, false);
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'is_active is managed automatically from remaining_sessions');
 
-  h.queryQueue.push({ rows: [] });
+  const updateMissingMembershipClient = h.createDbClientMock();
+  updateMissingMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateMissingMembershipClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
     params: { id: '999' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { is_active: false },
+    body: { notes: 'x' },
+  });
+  assert.equal(res.status, 404);
+
+  const updateEmptyBodyClient = h.createDbClientMock();
+  updateEmptyBodyClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 205, remaining_sessions: 3, is_active: true, notes: 'memo' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateEmptyBodyClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '205' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {},
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.id, 205);
+
+  const updateEmptyBodyMissingClient = h.createDbClientMock();
+  updateEmptyBodyMissingClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateEmptyBodyMissingClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '206' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {},
   });
   assert.equal(res.status, 404);
 
@@ -504,9 +624,78 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { remaining_sessions: -1 },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'remaining_sessions must be a non-negative integer or null');
+  assert.equal(res.body.error, 'remaining_sessions must be a non-negative integer');
 
-  h.queryQueue.push(new Error('update membership fail'));
+  const updateBelowReservedClient = h.createDbClientMock();
+  updateBelowReservedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 207, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [{ reserved_count: 2 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateBelowReservedClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '207' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 1 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'remaining_sessions cannot be less than reserved registrations (2)');
+  assert.equal(
+    updateBelowReservedClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    false
+  );
+
+  const updateAtReservedFloorClient = h.createDbClientMock();
+  updateAtReservedFloorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 208, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [{ reserved_count: 2 }] },
+    { rows: [{ id: 208, remaining_sessions: 2, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateAtReservedFloorClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '208' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 2 },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.remaining_sessions, 2);
+
+  const updateWithMissingReservedCountRowClient = h.createDbClientMock();
+  updateWithMissingReservedCountRowClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 209, remaining_sessions: 5, is_active: true, notes: null }] },
+    { rows: [] },
+    { rows: [{ id: 209, remaining_sessions: 1, is_active: true, notes: null }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateWithMissingReservedCountRowClient);
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id',
+    params: { id: '209' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { remaining_sessions: 1 },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.remaining_sessions, 1);
+
+  const updateErrorClient = h.createDbClientMock();
+  updateErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 201, remaining_sessions: 5, is_active: true, notes: null }] },
+    new Error('update membership fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(updateErrorClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id',
@@ -515,6 +704,12 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { notes: 'x3' },
   });
   assert.equal(res.status, 500);
+  assert.equal(
+    updateErrorClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('ROLLBACK')
+    ),
+    true
+  );
 
   const deleteNotFoundClient = h.createDbClientMock();
   deleteNotFoundClient.queryQueue.push(
@@ -534,7 +729,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteSuccessClient = h.createDbClientMock();
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 201 }] },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: false,
+        has_consumed_registrations: false,
+        has_attendance_history: false,
+      }],
+    },
     { rows: [], rowCount: 2 },
     { rows: [], rowCount: 3 },
     { rows: [], rowCount: 1 },
@@ -551,7 +753,10 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(
     deleteSuccessClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('SELECT id FROM yoga_memberships WHERE id = $1 FOR UPDATE')
+      String(queryText).includes('yoga_memberships')
+      && String(queryText).includes('has_reserved_registrations')
+      && String(queryText).includes('has_consumed_registrations')
+      && String(queryText).includes('FOR UPDATE')
     ),
     true
   );
@@ -577,7 +782,14 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   const deleteErrorClient = h.createDbClientMock();
   deleteErrorClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 201 }] },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: false,
+        has_consumed_registrations: false,
+        has_attendance_history: false,
+      }],
+    },
     new Error('delete membership fail'),
     { rows: [], rowCount: 0 }
   );
@@ -598,4 +810,84 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/deactivate',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push({ rows: [{ id: 201, is_active: false }] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/deactivate',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.is_active, false);
+
+  h.queryQueue.push(new Error('deactivate membership fail'));
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/deactivate',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  const deleteConsumedClient = h.createDbClientMock();
+  deleteConsumedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: false,
+        has_consumed_registrations: true,
+        has_attendance_history: true,
+      }],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteConsumedClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Membership with registration history can only be deactivated');
+
+  const deleteReservedClient = h.createDbClientMock();
+  deleteReservedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [{
+        id: 201,
+        has_reserved_registrations: true,
+        has_consumed_registrations: false,
+        has_attendance_history: false,
+      }],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteReservedClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Membership with registration history can only be deactivated');
+  assert.equal(
+    deleteReservedClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('DELETE FROM yoga_class_registrations')
+    ),
+    false
+  );
 });

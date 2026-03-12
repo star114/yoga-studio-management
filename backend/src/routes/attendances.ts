@@ -2,6 +2,7 @@ import express from 'express';
 import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -17,6 +18,51 @@ const getCustomerIdFromUser = async (userId: number): Promise<number | null> => 
   }
 
   return Number(result.rows[0].id);
+};
+
+const isValidIsoDate = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+};
+
+const isValidAttendanceDateFilter = (value: string): boolean => {
+  if (isValidIsoDate(value)) {
+    return true;
+  }
+
+  const normalizedValue = value.includes(' ') ? value.replace(' ', 'T') : value;
+  const match = normalizedValue.match(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?(?:Z|[+-]\d{2}:\d{2})?$/
+  );
+
+  if (!match) {
+    return false;
+  }
+
+  const [, datePart, hourText, minuteText, secondText] = match;
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = secondText === undefined ? 0 : Number(secondText);
+
+  if (!isValidIsoDate(datePart)) {
+    return false;
+  }
+
+  return hour >= 0
+    && hour <= 23
+    && minute >= 0
+    && minute <= 59
+    && second >= 0
+    && second <= 59;
 };
 
 // 출석 기록 조회 (필터링 가능)
@@ -36,6 +82,16 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       typeof end_date === 'string' && end_date.trim() !== ''
         ? end_date.trim()
         : null;
+
+    if (customerIdFilter && !/^\d+$/.test(customerIdFilter)) {
+      return res.status(400).json({ error: 'customer_id must be a positive integer' });
+    }
+    if (startDateFilter && !isValidAttendanceDateFilter(startDateFilter)) {
+      return res.status(400).json({ error: 'start_date must be a valid ISO date or datetime' });
+    }
+    if (endDateFilter && !isValidAttendanceDateFilter(endDateFilter)) {
+      return res.status(400).json({ error: 'end_date must be a valid ISO date or datetime' });
+    }
 
     if (req.user!.role !== 'admin') {
       const ownCustomerId = await getCustomerIdFromUser(req.user!.id);
@@ -127,7 +183,7 @@ router.post('/',
 
       const classId = Number(class_id);
       const classResult = await client.query(
-        `SELECT cls.id, cls.title, reg.membership_id
+        `SELECT cls.id, cls.title, reg.id AS registration_id, reg.membership_id, reg.attendance_status, reg.session_consumed
          FROM yoga_classes cls
          INNER JOIN yoga_class_registrations reg ON reg.class_id = cls.id
          WHERE cls.id = $1 AND reg.customer_id = $2
@@ -143,6 +199,8 @@ router.post('/',
 
       resolvedClassId = classResult.rows[0].id as number;
       const reservedMembershipId = classResult.rows[0].membership_id as number | null | undefined;
+      const currentRegistrationStatus = String(classResult.rows[0].attendance_status ?? 'reserved') as 'reserved' | 'attended' | 'absent';
+      const currentRegistrationSessionConsumed = Boolean(classResult.rows[0].session_consumed);
       if (!resolvedClassType) {
         resolvedClassType = String(classResult.rows[0].title ?? '').trim();
       }
@@ -211,10 +269,13 @@ router.post('/',
         activeMembership = membershipResult.rows[0];
       }
 
-      // 횟수제 회원권인 경우 잔여 횟수 확인
+      // 결석 처리에서 이미 차감된 등록은 체크인 시 추가 차감하지 않는다.
+      const shouldDeductAtAttendance = !currentRegistrationSessionConsumed;
+
+      // 실제 차감이 필요한 경우에만 잔여 횟수를 확인한다.
       if (
-        (reservedMembershipId === null || reservedMembershipId === undefined)
-        && activeMembership.remaining_sessions !== null
+        shouldDeductAtAttendance
+        && (reservedMembershipId === null || reservedMembershipId === undefined)
       ) {
         if (activeMembership.remaining_sessions <= 0) {
           await client.query('ROLLBACK');
@@ -225,40 +286,44 @@ router.post('/',
       // 출석 기록 생성
       const attendanceResult = await client.query(
         `INSERT INTO yoga_attendances 
-         (customer_id, membership_id, class_id, instructor_id, class_type)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+         (customer_id, membership_id, class_id, instructor_id, class_type, session_deducted)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [
           customer_id,
           activeMembership.id,
           resolvedClassId,
           req.user!.id,
-          resolvedClassType || null
+          resolvedClassType || null,
+          shouldDeductAtAttendance,
         ]
       );
 
       await client.query(
         `UPDATE yoga_class_registrations
          SET attendance_status = 'attended',
-             membership_id = COALESCE(membership_id, $3)
+             membership_id = COALESCE(membership_id, $3),
+             session_consumed = TRUE
          WHERE class_id = $1 AND customer_id = $2`,
         [resolvedClassId, customer_id, activeMembership.id]
       );
 
-      // 예약 시점에 차감된 회원권이면 중복 차감하지 않는다.
       if (
-        (reservedMembershipId === null || reservedMembershipId === undefined)
-        && activeMembership.remaining_sessions !== null
+        shouldDeductAtAttendance
       ) {
-        await client.query(
-          `UPDATE yoga_memberships 
-           SET remaining_sessions = remaining_sessions - 1,
-               is_active = CASE
-                 WHEN (remaining_sessions - 1) <= 0 THEN false
-                 ELSE true
-               END
-           WHERE id = $1`,
-          [activeMembership.id]
-        );
+        const membershipUpdateResult = await deductMembershipSessions(client, {
+          membershipId: activeMembership.id,
+          changeAmount: 1,
+          actorUserId: req.user!.id,
+          classId: resolvedClassId,
+          registrationId: Number((classResult.rows[0] as { registration_id: number }).registration_id),
+          attendanceId: Number((attendanceResult.rows[0] as { id: number }).id),
+          reason: 'attendance_check_in',
+        });
+
+        if (!membershipUpdateResult) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Membership sessions exhausted' });
+        }
       }
 
       await client.query('COMMIT');
@@ -274,152 +339,8 @@ router.post('/',
   }
 );
 
-// 출석 기록 수정 (관리자)
-router.put('/:id',
-  authenticate,
-  requireAdmin,
-  body('class_id').optional().isInt({ min: 1 }),
-  validateRequest,
-  async (req, res) => {
-    const { id } = req.params;
-    const { class_type, class_id } = req.body;
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const existingAttendanceResult = await client.query(
-        `SELECT id, customer_id, class_id
-         FROM yoga_attendances
-         WHERE id = $1
-         FOR UPDATE`,
-        [id]
-      );
-
-      if (existingAttendanceResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Attendance record not found' });
-      }
-
-      const currentAttendance = existingAttendanceResult.rows[0] as {
-        id: number;
-        customer_id: number;
-        class_id: number | null;
-      };
-
-      let resolvedClassId: number | null | undefined;
-      let resolvedClassType = typeof class_type === 'string' ? class_type.trim() : undefined;
-
-      if (class_id !== undefined && class_id !== null) {
-        const classId = Number(class_id);
-        const classResult = await client.query(
-          'SELECT id, title FROM yoga_classes WHERE id = $1',
-          [classId]
-        );
-
-        if (classResult.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Class not found' });
-        }
-
-        resolvedClassId = classResult.rows[0].id as number;
-        if (!resolvedClassType) {
-          resolvedClassType = String(classResult.rows[0].title ?? '').trim() || undefined;
-        }
-
-        if (resolvedClassId !== currentAttendance.class_id) {
-          const registrationResult = await client.query(
-            `SELECT id
-             FROM yoga_class_registrations
-             WHERE class_id = $1 AND customer_id = $2
-             LIMIT 1`,
-            [resolvedClassId, currentAttendance.customer_id]
-          );
-
-          if (registrationResult.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: 'Target class registration not found' });
-          }
-
-          const duplicateAttendanceResult = await client.query(
-            `SELECT id
-             FROM yoga_attendances
-             WHERE class_id = $1
-               AND customer_id = $2
-               AND id <> $3
-             LIMIT 1`,
-            [resolvedClassId, currentAttendance.customer_id, id]
-          );
-
-          if (duplicateAttendanceResult.rows.length > 0) {
-            await client.query('ROLLBACK');
-            return res.status(409).json({ error: 'Attendance already exists for target class and customer' });
-          }
-        }
-      } else {
-        resolvedClassId = undefined;
-      }
-
-      const result = await client.query(
-        `UPDATE yoga_attendances 
-         SET class_type = COALESCE($1, class_type),
-             class_id = COALESCE($2, class_id)
-         WHERE id = $3
-         RETURNING *`,
-        [resolvedClassType, resolvedClassId, id]
-      );
-
-      const updatedAttendance = result.rows[0] as {
-        id: number;
-        customer_id: number;
-        class_id: number | null;
-      };
-
-      if (
-        resolvedClassId !== undefined
-        && currentAttendance.class_id !== null
-        && resolvedClassId !== currentAttendance.class_id
-      ) {
-        await client.query(
-          `UPDATE yoga_class_registrations r
-           SET attendance_status = 'reserved'
-           WHERE r.class_id = $1
-             AND r.customer_id = $2
-             AND r.attendance_status = 'attended'
-             AND NOT EXISTS (
-               SELECT 1
-               FROM yoga_attendances a
-               WHERE a.class_id = r.class_id
-                 AND a.customer_id = r.customer_id
-             )`,
-          [currentAttendance.class_id, currentAttendance.customer_id]
-        );
-
-        if (updatedAttendance.class_id !== null) {
-          await client.query(
-            `UPDATE yoga_class_registrations
-             SET attendance_status = 'attended'
-             WHERE class_id = $1
-               AND customer_id = $2`,
-            [updatedAttendance.class_id, updatedAttendance.customer_id]
-          );
-        }
-      }
-
-      await client.query('COMMIT');
-      res.json(updatedAttendance);
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Update attendance error:', error);
-      res.status(500).json({ error: 'Server error' });
-    } finally {
-      client.release();
-    }
-  }
-);
-
 // 출석 기록 삭제 (관리자)
-router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   const { id } = req.params;
 
   const client = await pool.connect();
@@ -437,52 +358,50 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Attendance record not found' });
     }
 
-    const attendance = attendanceResult.rows[0];
-    let linkedRegistrationMembershipId: number | null = null;
+    const attendance = attendanceResult.rows[0] as {
+      membership_id: number | null;
+      class_id: number | null;
+      customer_id: number;
+      session_deducted: boolean;
+    };
 
-    if (attendance.class_id) {
-      const registrationResult = await client.query(
-        `SELECT membership_id
+    const registrationResult = attendance.class_id
+      ? await client.query(
+        `SELECT id, membership_id, session_consumed
          FROM yoga_class_registrations
-         WHERE class_id = $1
-           AND customer_id = $2
-         LIMIT 1`,
+         WHERE class_id = $1 AND customer_id = $2
+         FOR UPDATE`,
         [attendance.class_id, attendance.customer_id]
-      );
-      linkedRegistrationMembershipId = (registrationResult.rows[0]?.membership_id as number | null | undefined) ?? null;
-    }
+      )
+      : { rows: [] };
+    const registration = registrationResult.rows[0] as {
+      id: number;
+      membership_id: number | null;
+      session_consumed?: boolean | null;
+    } | undefined;
 
-    // 회원권 정보 조회
-    const membershipResult = await client.query(
-      'SELECT * FROM yoga_memberships WHERE id = $1',
-      [attendance.membership_id]
-    );
+    const refundMembershipId = registration?.membership_id ?? attendance.membership_id;
+    const shouldRefundConsumedSession = registration
+      ? Boolean(registration.session_consumed)
+      : attendance.session_deducted;
 
-    if (membershipResult.rows.length > 0) {
-      const membership = membershipResult.rows[0];
-      
-      // 횟수제 회원권인 경우 잔여 횟수 복원
-      if (
-        membership.remaining_sessions !== null
-        && linkedRegistrationMembershipId !== attendance.membership_id
-      ) {
-        await client.query(
-          `UPDATE yoga_memberships 
-           SET remaining_sessions = remaining_sessions + 1,
-               is_active = CASE
-                 WHEN (remaining_sessions + 1) > 0 THEN true
-                 ELSE false
-               END
-           WHERE id = $1`,
-          [membership.id]
-        );
-      }
+    if (refundMembershipId !== null && shouldRefundConsumedSession) {
+      await refundMembershipSessions(client, {
+        membershipId: refundMembershipId,
+        changeAmount: 1,
+        actorUserId: req.user!.id,
+        classId: attendance.class_id,
+        registrationId: registration?.id,
+        attendanceId: Number(id),
+        reason: 'attendance_delete_refund',
+      });
     }
 
     if (attendance.class_id) {
       await client.query(
         `UPDATE yoga_class_registrations
          SET attendance_status = 'reserved'
+             , session_consumed = FALSE
          WHERE class_id = $1
            AND customer_id = $2
            AND attendance_status = 'attended'`,

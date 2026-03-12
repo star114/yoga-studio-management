@@ -15,10 +15,13 @@ const hasCustomerAccess = async (customerId: string, userId: number) => {
 };
 
 // 회원권 종류 조회
-router.get('/types', authenticate, async (req, res) => {
+router.get('/types', authenticate, async (req: AuthRequest, res) => {
   try {
+    const includeInactive = req.user?.role === 'admin' && req.query.include_inactive === 'true';
     const result = await pool.query(
-      'SELECT * FROM yoga_membership_types WHERE is_active = true ORDER BY created_at DESC'
+      includeInactive
+        ? 'SELECT * FROM yoga_membership_types ORDER BY created_at DESC'
+        : 'SELECT * FROM yoga_membership_types WHERE is_active = true ORDER BY created_at DESC'
     );
     res.json(result.rows);
   } catch (error) {
@@ -32,7 +35,7 @@ router.post('/types',
   authenticate,
   requireAdmin,
   body('name').notEmpty(),
-  body('total_sessions').optional({ nullable: true }).isInt({ min: 0 }),
+  body('total_sessions').isInt({ min: 1 }),
   validateRequest,
   async (req, res) => {
     const { name, description, total_sessions } = req.body;
@@ -41,7 +44,7 @@ router.post('/types',
       const result = await pool.query(
         `INSERT INTO yoga_membership_types (name, description, total_sessions)
          VALUES ($1, $2, $3) RETURNING *`,
-        [name, description || null, total_sessions || null]
+        [name, description || null, total_sessions]
       );
 
       res.status(201).json(result.rows[0]);
@@ -56,7 +59,7 @@ router.post('/types',
 router.put('/types/:id',
   authenticate,
   requireAdmin,
-  body('total_sessions').optional({ nullable: true }).isInt({ min: 0 }),
+  body('total_sessions').optional().isInt({ min: 1 }),
   validateRequest,
   async (req, res) => {
     const { id } = req.params;
@@ -65,17 +68,31 @@ router.put('/types/:id',
     try {
       const result = await pool.query(
         `UPDATE yoga_membership_types
-         SET name = COALESCE($1, name),
-             description = COALESCE($2, description),
-             total_sessions = COALESCE($3, total_sessions),
-             is_active = COALESCE($4, is_active)
-         WHERE id = $5
+         SET name = CASE
+               WHEN $1::text IS NULL THEN name
+               ELSE $1::text
+             END,
+             description = CASE
+               WHEN $2::boolean THEN $3::text
+               ELSE description
+             END,
+             total_sessions = CASE
+               WHEN $4::boolean THEN $5::integer
+               ELSE total_sessions
+             END,
+             is_active = CASE
+               WHEN $6::boolean IS NULL THEN is_active
+               ELSE $6::boolean
+             END
+         WHERE id = $7::integer
          RETURNING *`,
         [
-          name,
-          description,
+          name ?? null,
+          Object.prototype.hasOwnProperty.call(req.body, 'description'),
+          description ?? null,
+          Object.prototype.hasOwnProperty.call(req.body, 'total_sessions'),
           total_sessions,
-          is_active,
+          is_active ?? null,
           id,
         ]
       );
@@ -93,7 +110,7 @@ router.put('/types/:id',
 );
 
 // 회원권 종류 비활성화 (관리자)
-router.delete('/types/:id', authenticate, requireAdmin, async (req, res) => {
+router.post('/types/:id/deactivate', authenticate, requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -112,6 +129,39 @@ router.delete('/types/:id', authenticate, requireAdmin, async (req, res) => {
     res.json({ message: 'Membership type deactivated successfully' });
   } catch (error) {
     console.error('Deactivate membership type error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 회원권 종류 실제 삭제 (관리자)
+router.delete('/types/:id', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM yoga_membership_types
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Membership type not found' });
+    }
+
+    res.json({ message: 'Membership type deleted successfully' });
+  } catch (error) {
+    console.error('Delete membership type error:', error);
+    if (
+      typeof error === 'object'
+      && error !== null
+      && 'code' in error
+      && error.code === '23503'
+    ) {
+      return res.status(409).json({
+        error: 'Membership type cannot be deleted while memberships still reference it',
+      });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -138,16 +188,24 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
         mt.name as membership_type_name,
         mt.description,
         mt.total_sessions,
+        COALESCE(reserved_summary.reserved_count, 0) AS reserved_count,
+        GREATEST(m.remaining_sessions - COALESCE(reserved_summary.reserved_count, 0), 0) AS available_sessions,
         COALESCE(usage_summary.consumed_sessions, 0) AS consumed_sessions,
         usage.start_date,
         projection.expected_end_date
       FROM yoga_memberships m
       LEFT JOIN yoga_membership_types mt ON m.membership_type_id = mt.id
       LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS reserved_count
+        FROM yoga_class_registrations r
+        WHERE r.membership_id = m.id
+          AND r.attendance_status = 'reserved'
+      ) reserved_summary ON true
+      LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS consumed_sessions
         FROM yoga_class_registrations r
         WHERE r.membership_id = m.id
-          AND r.attendance_status IN ('reserved', 'attended', 'absent')
+          AND r.attendance_status IN ('attended', 'absent')
       ) usage_summary ON true
       LEFT JOIN LATERAL (
         SELECT MIN(events.class_date) AS start_date
@@ -162,10 +220,8 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
           SELECT cls.class_date
           FROM yoga_class_registrations r
           INNER JOIN yoga_classes cls ON cls.id = r.class_id
-          WHERE r.customer_id = m.customer_id
+          WHERE r.membership_id = m.id
             AND r.attendance_status = 'reserved'
-            AND mt.name IS NOT NULL
-            AND cls.title = mt.name
         ) events
       ) usage ON true
       LEFT JOIN LATERAL (
@@ -178,10 +234,8 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
             ) AS row_num
           FROM yoga_class_registrations r
           INNER JOIN yoga_classes cls ON cls.id = r.class_id
-          WHERE r.customer_id = m.customer_id
+          WHERE r.membership_id = m.id
             AND r.attendance_status = 'reserved'
-            AND mt.name IS NOT NULL
-            AND cls.title = mt.name
             AND cls.class_date >= CURRENT_DATE
         ) projected
         WHERE m.remaining_sessions IS NOT NULL
@@ -222,9 +276,11 @@ router.post('/',
       }
 
       const membershipType = typeResult.rows[0];
-      const initialRemainingSessions = membershipType.total_sessions ?? null;
-      const initialIsActive =
-        initialRemainingSessions === null ? true : Number(initialRemainingSessions) > 0;
+      const initialRemainingSessions = Number(membershipType.total_sessions);
+
+      if (!Number.isInteger(initialRemainingSessions) || initialRemainingSessions <= 0) {
+        return res.status(400).json({ error: 'Membership type must have a positive total_sessions value' });
+      }
 
       const result = await pool.query(
         `INSERT INTO yoga_memberships 
@@ -234,7 +290,7 @@ router.post('/',
           customer_id,
           membership_type_id,
           initialRemainingSessions,
-          initialIsActive,
+          true,
           notes || null
         ]
       );
@@ -268,71 +324,131 @@ router.put('/:id',
 
     if (
       hasRemainingSessions
-      && remaining_sessions !== null
       && (!Number.isInteger(remaining_sessions) || Number(remaining_sessions) < 0)
     ) {
-      return res.status(400).json({ error: 'remaining_sessions must be a non-negative integer or null' });
+      return res.status(400).json({ error: 'remaining_sessions must be a non-negative integer' });
     }
 
     if (hasIsActive && typeof is_active !== 'boolean') {
       return res.status(400).json({ error: 'is_active must be boolean' });
     }
 
+    if (hasIsActive) {
+      return res.status(400).json({
+        error: 'is_active is managed automatically from remaining_sessions',
+      });
+    }
+
+    let client: {
+      query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }>;
+      release: () => void;
+    } | null = null;
+
     try {
-      let membershipRow: any = null;
+      client = await pool.connect();
+      await client.query('BEGIN');
 
-      if (hasRemainingSessions || hasNotes) {
-        const updateResult = await pool.query(
-          `UPDATE yoga_memberships 
-           SET remaining_sessions = CASE
-                 WHEN $1 THEN $2
-                 ELSE remaining_sessions
-               END,
-               notes = CASE
-                 WHEN $3 THEN $4
-                 ELSE notes
-               END
-           WHERE id = $5
-           RETURNING *`,
-          [hasRemainingSessions, remaining_sessions, hasNotes, notes, id]
-        );
+      const existingResult = await client.query(
+        `SELECT *
+         FROM yoga_memberships
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
 
-        if (updateResult.rows.length === 0) {
-          return res.status(404).json({ error: 'Membership not found' });
-        }
-        membershipRow = updateResult.rows[0];
-      } else {
-        const existingResult = await pool.query(
-          'SELECT * FROM yoga_memberships WHERE id = $1',
+      if (existingResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Membership not found' });
+      }
+
+      const currentMembership = existingResult.rows[0];
+
+      if (!hasRemainingSessions && !hasNotes) {
+        await client.query('COMMIT');
+        return res.json(currentMembership);
+      }
+
+      if (hasRemainingSessions) {
+        const reservedCountResult = await client.query(
+          `SELECT COUNT(*)::int AS reserved_count
+           FROM yoga_class_registrations
+           WHERE membership_id = $1
+             AND attendance_status = 'reserved'`,
           [id]
         );
 
-        if (existingResult.rows.length === 0) {
-          return res.status(404).json({ error: 'Membership not found' });
+        const reservedCount = Number((reservedCountResult.rows[0] as { reserved_count?: number | string } | undefined)?.reserved_count ?? 0);
+        if (Number(remaining_sessions) < reservedCount) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `remaining_sessions cannot be less than reserved registrations (${reservedCount})`,
+          });
         }
-        membershipRow = existingResult.rows[0];
       }
 
-      if (hasIsActive) {
-        const activeResult = await pool.query(
-          `UPDATE yoga_memberships
-           SET is_active = $1
-           WHERE id = $2
-           RETURNING *`,
-          [is_active, id]
-        );
-        membershipRow = activeResult.rows[0];
-      }
+      const updateResult = await client.query(
+        `UPDATE yoga_memberships
+         SET remaining_sessions = CASE
+               WHEN $1 THEN $2
+               ELSE remaining_sessions
+             END,
+             notes = CASE
+               WHEN $3 THEN $4
+               ELSE notes
+             END,
+             is_active = CASE
+               WHEN $1 THEN $2 > 0
+               ELSE is_active
+             END
+         WHERE id = $5::integer
+         RETURNING *`,
+        [
+          hasRemainingSessions,
+          remaining_sessions,
+          hasNotes,
+          notes,
+          id,
+        ]
+      );
 
-      res.json(membershipRow);
+      await client.query('COMMIT');
+      res.json(updateResult.rows[0]);
     } catch (error) {
+      if (client) {
+        await client.query('ROLLBACK');
+      }
       console.error('Update membership error:', error);
       res.status(500).json({ error: 'Server error' });
+    } finally {
+      client?.release();
     }
   }
 );
 
 // 회원권 삭제 (관리자)
+router.post('/:id/deactivate', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `UPDATE yoga_memberships
+       SET is_active = false
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Membership not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Deactivate membership error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   const { id } = req.params;
 
@@ -344,8 +460,29 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    const membershipResult = await client.query(
-      'SELECT id FROM yoga_memberships WHERE id = $1 FOR UPDATE',
+      const membershipResult = await client.query(
+      `SELECT
+         id,
+         EXISTS (
+           SELECT 1
+           FROM yoga_class_registrations r
+           WHERE r.membership_id = $1
+             AND r.attendance_status = 'reserved'
+         ) AS has_reserved_registrations,
+         EXISTS (
+           SELECT 1
+           FROM yoga_class_registrations r
+           WHERE r.membership_id = $1
+             AND r.attendance_status IN ('attended', 'absent')
+         ) AS has_consumed_registrations,
+         EXISTS (
+           SELECT 1
+           FROM yoga_attendances a
+           WHERE a.membership_id = $1
+         ) AS has_attendance_history
+       FROM yoga_memberships
+       WHERE id = $1
+       FOR UPDATE`,
       [id]
     );
 
@@ -353,6 +490,24 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Membership not found' });
     }
+
+      const membership = membershipResult.rows[0] as {
+        id: number;
+        has_reserved_registrations: boolean;
+        has_consumed_registrations: boolean;
+        has_attendance_history: boolean;
+      };
+
+      if (
+        membership.has_reserved_registrations
+        || membership.has_consumed_registrations
+        || membership.has_attendance_history
+      ) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'Membership with registration history can only be deactivated',
+        });
+      }
 
     await client.query(
       `UPDATE yoga_attendances
@@ -376,7 +531,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       [id]
     );
 
-    const result = await client.query(
+    await client.query(
       'DELETE FROM yoga_memberships WHERE id = $1 RETURNING id',
       [id]
     );

@@ -25,8 +25,9 @@ import {
 interface CustomerMembership {
   id: number;
   membership_type_name: string;
-  remaining_sessions?: number | null;
-  total_sessions?: number | null;
+  remaining_sessions: number;
+  available_sessions?: number;
+  total_sessions: number;
   consumed_sessions?: number;
   is_active: boolean;
   start_date?: string | null;
@@ -78,9 +79,6 @@ const normalizeDate = (value: string) => value.slice(0, 10);
 
 const formatConsumedSummary = (membership: CustomerMembership) => {
   const consumedSessions = membership.consumed_sessions ?? 0;
-  if (membership.total_sessions === null || membership.total_sessions === undefined) {
-    return `${consumedSessions}회`;
-  }
   return `${consumedSessions} / ${membership.total_sessions}회`;
 };
 
@@ -295,9 +293,7 @@ const CustomerMemberships: React.FC = () => {
                   <p>
                     <span className="text-warm-600">예약 가능 잔여:</span>{' '}
                     <span className="font-semibold text-primary-800">
-                      {membership.remaining_sessions === null || membership.remaining_sessions === undefined
-                        ? '무제한'
-                        : `${membership.remaining_sessions}회`}
+                      {membership.available_sessions ?? membership.remaining_sessions}회
                     </span>
                   </p>
                   <p>

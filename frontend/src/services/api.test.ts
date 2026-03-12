@@ -123,7 +123,6 @@ describe('api service', () => {
 
     customerAPI.getAll();
     customerAPI.getById(1);
-    customerAPI.getAttendances(1, { page: 2 });
     customerAPI.getClassActivities(1, { page: 3, activity_type: 'reserved' });
     customerAPI.getRecommendedClasses(1, { membership_name: '아쉬탕가', limit: 5 });
     customerAPI.create(payload);
@@ -137,18 +136,20 @@ describe('api service', () => {
     adminAccountAPI.delete(5);
 
     membershipAPI.getTypes();
+    membershipAPI.getTypes({ includeInactive: true });
     membershipAPI.createType(payload);
     membershipAPI.updateType(1, payload);
     membershipAPI.deactivateType(1);
+    membershipAPI.deleteType(1);
     membershipAPI.getByCustomer(1);
     membershipAPI.create(payload);
     membershipAPI.update(1, payload);
+    membershipAPI.deactivate(1);
     membershipAPI.delete(1);
 
     attendanceAPI.getAll({ limit: 10 });
     attendanceAPI.getToday();
     attendanceAPI.checkIn(payload);
-    attendanceAPI.update(1, payload);
     attendanceAPI.delete(1);
 
     classAPI.getAll({ limit: 10 });
@@ -161,6 +162,7 @@ describe('api service', () => {
     classAPI.update(2, payload);
     classAPI.register(2);
     classAPI.register(2, { customer_id: 7 });
+    classAPI.register(2, { customer_id: 7, membership_id: 9 });
     classAPI.register(2, { customer_id: 7, allow_cross_membership_registration: true });
     classAPI.updateRegistrationComment(2, 7, 'note');
     classAPI.updateMyRegistrationComment(2, 'self note');
@@ -181,7 +183,6 @@ describe('api service', () => {
 
     expect(getMock).toHaveBeenCalledWith('/customers');
     expect(getMock).toHaveBeenCalledWith('/customers/1');
-    expect(getMock).toHaveBeenCalledWith('/customers/1/attendances', { params: { page: 2 } });
     expect(getMock).toHaveBeenCalledWith('/customers/1/class-activities', { params: { page: 3, activity_type: 'reserved' } });
     expect(getMock).toHaveBeenCalledWith('/customers/1/recommended-classes', { params: { membership_name: '아쉬탕가', limit: 5 } });
     expect(postMock).toHaveBeenCalledWith('/customers', payload);
@@ -194,19 +195,21 @@ describe('api service', () => {
     expect(putMock).toHaveBeenCalledWith('/admin-accounts/5/password', { password: 'new-pass' });
     expect(deleteMock).toHaveBeenCalledWith('/admin-accounts/5');
 
-    expect(getMock).toHaveBeenCalledWith('/memberships/types');
+    expect(getMock).toHaveBeenCalledWith('/memberships/types', { params: undefined });
+    expect(getMock).toHaveBeenCalledWith('/memberships/types', { params: { include_inactive: true } });
     expect(postMock).toHaveBeenCalledWith('/memberships/types', payload);
     expect(putMock).toHaveBeenCalledWith('/memberships/types/1', payload);
+    expect(postMock).toHaveBeenCalledWith('/memberships/types/1/deactivate');
     expect(deleteMock).toHaveBeenCalledWith('/memberships/types/1');
     expect(getMock).toHaveBeenCalledWith('/memberships/customer/1');
     expect(postMock).toHaveBeenCalledWith('/memberships', payload);
     expect(putMock).toHaveBeenCalledWith('/memberships/1', payload);
+    expect(postMock).toHaveBeenCalledWith('/memberships/1/deactivate');
     expect(deleteMock).toHaveBeenCalledWith('/memberships/1');
 
     expect(getMock).toHaveBeenCalledWith('/attendances', { params: { limit: 10 } });
     expect(getMock).toHaveBeenCalledWith('/attendances/today');
     expect(postMock).toHaveBeenCalledWith('/attendances', payload);
-    expect(putMock).toHaveBeenCalledWith('/attendances/1', payload);
     expect(deleteMock).toHaveBeenCalledWith('/attendances/1');
 
     expect(getMock).toHaveBeenCalledWith('/classes', { params: { limit: 10 } });
@@ -219,6 +222,7 @@ describe('api service', () => {
     expect(putMock).toHaveBeenCalledWith('/classes/2', payload);
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', {});
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7 });
+    expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7, membership_id: 9 });
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations', { customer_id: 7, allow_cross_membership_registration: true });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment', { registration_comment: 'note' });
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/me/comment', { registration_comment: 'self note' });

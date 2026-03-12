@@ -103,6 +103,7 @@ const seedLoad = (overrides?: Record<string, unknown>) => {
         id: 1,
         class_id: 1,
         customer_id: 101,
+        attendance_status: 'reserved',
         registered_at: '2026-03-01T01:00:00.000Z',
         registration_comment: '기존 코멘트',
         attendance_id: 9001,
@@ -458,6 +459,40 @@ describe('ClassDetail page', () => {
     consoleSpy.mockRestore();
   });
 
+  it('disables cancel button when registration is already attended or absent', async () => {
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          class_id: 1,
+          customer_id: 101,
+          attendance_status: 'attended',
+          registered_at: '2026-03-01T01:00:00.000Z',
+          registration_comment: null,
+          attendance_id: 9001,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+        {
+          id: 2,
+          class_id: 1,
+          customer_id: 102,
+          attendance_status: 'absent',
+          registered_at: '2026-03-01T01:10:00.000Z',
+          registration_comment: null,
+          attendance_id: null,
+          customer_name: '김영희',
+          customer_phone: '010-2222-3333',
+        },
+      ],
+    });
+
+    renderPage();
+    const cancelButtons = await screen.findAllByRole('button', { name: '신청 취소' });
+    expect((cancelButtons[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((cancelButtons[1] as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('handles refresh result where class detail disappears', async () => {
     classRegisterMock.mockResolvedValueOnce(undefined);
 
@@ -505,6 +540,36 @@ describe('ClassDetail page', () => {
     }));
     expect(classUpdateRegistrationStatusMock).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText('출석 체크를 완료했습니다.')).toBeTruthy());
+  });
+
+  it('treats missing attendance status as reserved when changing status to attended', async () => {
+    attendanceCheckInMock.mockResolvedValueOnce(undefined);
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          class_id: 1,
+          customer_id: 101,
+          attendance_status: null,
+          registered_at: '2026-03-01T01:00:00.000Z',
+          registration_comment: '기존 코멘트',
+          attendance_id: null,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('출석 상태')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('출석 상태'), { target: { value: 'attended' } });
+
+    await waitFor(() => expect(attendanceCheckInMock).toHaveBeenCalledWith({
+      customer_id: 101,
+      class_id: 1,
+    }));
+    expect(classUpdateRegistrationStatusMock).not.toHaveBeenCalled();
   });
 
   it('runs check-in flow when changing status from absent to attended', async () => {

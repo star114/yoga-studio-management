@@ -151,6 +151,9 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
   const dateFrom = rawDateFrom.trim();
   const dateTo = rawDateTo.trim();
 
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid customerId' });
+  }
   if (dateFrom && !isValidIsoDate(dateFrom)) {
     return res.status(400).json({ error: 'date_from must be a valid YYYY-MM-DD date' });
   }
@@ -320,6 +323,9 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
     ? Math.min(Math.floor(rawLimit), 100)
     : 20;
 
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid customerId' });
+  }
   if (!membershipName) {
     return res.status(400).json({ error: 'membership_name is required' });
   }
@@ -343,15 +349,33 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
          c.is_open,
          COUNT(r.id)::int AS current_enrollment,
          GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats,
-         EXISTS (
-           SELECT 1
+         existing_usage.existing_status IS NOT NULL AS is_registered,
+         existing_usage.existing_status
+       FROM yoga_classes c
+       LEFT JOIN yoga_class_registrations r ON r.class_id = c.id
+       LEFT JOIN LATERAL (
+         SELECT usage.status AS existing_status
+         FROM (
+           SELECT mine.attendance_status::text AS status
            FROM yoga_class_registrations mine
            WHERE mine.class_id = c.id
              AND mine.customer_id = $1
-             AND mine.attendance_status = 'reserved'
-         ) AS is_registered
-       FROM yoga_classes c
-       LEFT JOIN yoga_class_registrations r ON r.class_id = c.id
+
+           UNION ALL
+
+           SELECT 'attended'::text AS status
+           FROM yoga_attendances a
+           WHERE a.class_id = c.id
+             AND a.customer_id = $1
+         ) usage
+         ORDER BY CASE usage.status
+           WHEN 'reserved' THEN 1
+           WHEN 'attended' THEN 2
+           WHEN 'absent' THEN 3
+           ELSE 4
+         END
+         LIMIT 1
+       ) existing_usage ON true
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
          AND regexp_replace(
@@ -365,7 +389,7 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
                ' ',
                'g'
              )
-       GROUP BY c.id
+       GROUP BY c.id, existing_usage.existing_status
        ORDER BY c.class_date ASC, c.start_time ASC
        LIMIT $3`,
       [id, membershipName, limit]
@@ -374,92 +398,6 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
     res.json(result.rows);
   } catch (error) {
     console.error('Get recommended classes error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// 특정 고객 전체 출석 조회
-router.get('/:id/attendances', authenticate, async (req: AuthRequest, res) => {
-  const { id } = req.params;
-  const rawMonths = typeof req.query.months === 'string' ? Number(req.query.months) : null;
-  const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
-  const rawPageSize = typeof req.query.page_size === 'string' ? Number(req.query.page_size) : 20;
-  const months = rawMonths === 3 || rawMonths === 6 ? rawMonths : null;
-  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
-  const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
-    ? Math.min(Math.floor(rawPageSize), 100)
-    : 20;
-  const offset = (page - 1) * pageSize;
-
-  if (!/^\d+$/.test(id)) {
-    return res.status(400).json({ error: 'Invalid customerId' });
-  }
-
-  try {
-    // 일반 사용자는 자기 정보만 조회 가능
-    if (req.user!.role !== 'admin') {
-      const checkResult = await pool.query(
-        'SELECT id FROM yoga_customers WHERE id = $1 AND user_id = $2',
-        [id, req.user!.id]
-      );
-      if (checkResult.rows.length === 0) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-
-    const whereClauses = ['a.customer_id = $1'];
-    const queryParams: Array<number | string> = [id];
-
-    if (months) {
-      whereClauses.push(`a.attendance_date >= (CURRENT_DATE - ($2::text || ' months')::interval)`);
-      queryParams.push(months);
-    }
-
-    const whereSql = whereClauses.join(' AND ');
-    const countResult = await pool.query(
-      `SELECT COUNT(*)::int AS total
-       FROM yoga_attendances a
-       WHERE ${whereSql}`,
-      queryParams
-    );
-    const total = countResult.rows[0]?.total ?? 0;
-
-    const limitParamIndex = queryParams.length + 1;
-    const offsetParamIndex = queryParams.length + 2;
-    const result = await pool.query(
-      `SELECT
-         a.*,
-         u.login_id as instructor_email,
-         cls.id as class_id,
-         cls.title as class_title,
-         cls.class_date,
-         cls.start_time as class_start_time,
-         cls.end_time as class_end_time,
-         COALESCE(a.class_type, cls.title) as class_type
-       FROM yoga_attendances a
-       LEFT JOIN yoga_users u ON a.instructor_id = u.id
-       LEFT JOIN yoga_classes cls ON cls.id = a.class_id
-       WHERE ${whereSql}
-       ORDER BY a.attendance_date DESC
-       LIMIT $${limitParamIndex}
-       OFFSET $${offsetParamIndex}`,
-      [...queryParams, pageSize, offset]
-    );
-
-    res.json({
-      items: result.rows,
-      pagination: {
-        page,
-        page_size: pageSize,
-        total,
-        total_pages: Math.max(1, Math.ceil(total / pageSize)),
-      },
-      filter: {
-        months,
-      },
-    });
-  } catch (error) {
-    console.error('Get customer attendances error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -8,12 +8,14 @@ const {
   createTypeMock,
   updateTypeMock,
   deactivateTypeMock,
+  deleteTypeMock,
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getTypesMock: vi.fn(),
   createTypeMock: vi.fn(),
   updateTypeMock: vi.fn(),
   deactivateTypeMock: vi.fn(),
+  deleteTypeMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 처리 실패'),
 }));
 
@@ -23,6 +25,7 @@ vi.mock('../services/api', () => ({
     createType: createTypeMock,
     updateType: updateTypeMock,
     deactivateType: deactivateTypeMock,
+    deleteType: deleteTypeMock,
   },
 }));
 
@@ -55,7 +58,7 @@ describe('MembershipTypeManagement page', () => {
   it('renders empty state when type list is empty', async () => {
     render(<MembershipTypeManagement />);
 
-    await waitFor(() => expect(screen.getByText('운영 중인 회원권 관리 항목이 없습니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
   });
 
   it('creates membership type and clears success message after timeout', async () => {
@@ -68,7 +71,7 @@ describe('MembershipTypeManagement page', () => {
             id: 1,
             name: '10회권',
             description: null,
-            total_sessions: null,
+            total_sessions: 10,
             is_active: true,
           },
         ],
@@ -76,7 +79,7 @@ describe('MembershipTypeManagement page', () => {
 
     render(<MembershipTypeManagement />);
 
-    await waitFor(() => expect(screen.getByText('운영 중인 회원권 관리 항목이 없습니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '10회권' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '10' } });
@@ -99,9 +102,9 @@ describe('MembershipTypeManagement page', () => {
         data: [
           {
             id: 7,
-            name: '프리패스',
+            name: '기본권',
             description: '기존 설명',
-            total_sessions: null,
+            total_sessions: 12,
             is_active: true,
           },
         ],
@@ -110,7 +113,7 @@ describe('MembershipTypeManagement page', () => {
         data: [
           {
             id: 7,
-            name: '프리패스+',
+            name: '기본권+',
             description: null,
             total_sessions: 20,
             is_active: true,
@@ -120,17 +123,17 @@ describe('MembershipTypeManagement page', () => {
 
     render(<MembershipTypeManagement />);
 
-    await waitFor(() => expect(screen.getByText('프리패스')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('기본권')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
 
     expect(screen.getByRole('button', { name: '수정 저장' })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '프리패스+' } });
+    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '기본권+' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '20' } });
     fireEvent.change(screen.getByLabelText('설명'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
 
     await waitFor(() => expect(updateTypeMock).toHaveBeenCalledWith(7, {
-      name: '프리패스+',
+      name: '기본권+',
       description: null,
       total_sessions: 20,
     }));
@@ -149,8 +152,9 @@ describe('MembershipTypeManagement page', () => {
 
     render(<MembershipTypeManagement />);
 
-    await waitFor(() => expect(screen.getByText('운영 중인 회원권 관리 항목이 없습니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '실패 케이스' } });
+    fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
 
     await waitFor(() => expect(screen.getByText('요청 처리 실패')).toBeTruthy());
@@ -189,6 +193,120 @@ describe('MembershipTypeManagement page', () => {
     await waitFor(() => expect(deactivateTypeMock).toHaveBeenCalledWith(3));
     await waitFor(() => expect(screen.getByText('요청 처리 실패')).toBeTruthy());
 
+    expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
+  it('shows inactive types and deletes them successfully', async () => {
+    deleteTypeMock.mockResolvedValueOnce(undefined);
+    getTypesMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 21,
+            name: '중지된 회원권',
+            description: '예전 상품',
+            total_sessions: 6,
+            is_active: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('중지된 회원권')).toBeTruthy());
+    expect(screen.getByText('비활성')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+
+    await waitFor(() => expect(deleteTypeMock).toHaveBeenCalledWith(21));
+    await waitFor(() => expect(screen.getByText('회원권 관리 항목을 삭제했습니다.')).toBeTruthy());
+
+    confirmSpy.mockRestore();
+  });
+
+  it('does not delete inactive type when delete confirm is canceled', async () => {
+    getTypesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 24,
+          name: '삭제취소권',
+          description: '예전 상품',
+          total_sessions: 6,
+          is_active: false,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('삭제취소권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+
+    expect(deleteTypeMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('deletes inactive type while editing and resets edit mode', async () => {
+    deleteTypeMock.mockResolvedValueOnce(undefined);
+    getTypesMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 22,
+            name: '편집중 삭제권',
+            description: '예전 상품',
+            total_sessions: 6,
+            is_active: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('편집중 삭제권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '수정' }));
+    expect(screen.getByRole('button', { name: '수정 저장' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+
+    await waitFor(() => expect(deleteTypeMock).toHaveBeenCalledWith(22));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '수정 저장' })).toBeNull());
+    confirmSpy.mockRestore();
+  });
+
+  it('shows parsed error when deleting inactive type fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    deleteTypeMock.mockRejectedValueOnce(new Error('delete failed'));
+    getTypesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 23,
+          name: '삭제실패권',
+          description: '예전 상품',
+          total_sessions: 6,
+          is_active: false,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('삭제실패권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+
+    await waitFor(() => expect(screen.getByText('요청 처리 실패')).toBeTruthy());
     expect(parseApiErrorMock).toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalled();
     confirmSpy.mockRestore();
@@ -246,5 +364,11 @@ describe('MembershipTypeManagement page', () => {
     await waitFor(() => expect(screen.getByText('기본 횟수권')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
     expect((screen.getByLabelText('총 횟수') as HTMLInputElement).value).toBe('4');
+  });
+
+  it('requests inactive types in management view', async () => {
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(getTypesMock).toHaveBeenCalledWith({ includeInactive: true }));
   });
 });

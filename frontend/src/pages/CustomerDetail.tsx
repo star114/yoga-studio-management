@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { classAPI, customerAPI, membershipAPI } from '../services/api';
 import {
@@ -25,8 +25,9 @@ interface MembershipType {
 interface Membership {
   id: number;
   membership_type_name: string;
-  remaining_sessions?: number | null;
-  total_sessions?: number | null;
+  remaining_sessions: number;
+  available_sessions?: number;
+  total_sessions: number;
   consumed_sessions?: number;
   is_active: boolean;
   notes?: string | null;
@@ -43,6 +44,7 @@ interface RecommendedClass {
   remaining_seats: number;
   current_enrollment: number;
   is_registered: boolean;
+  existing_status?: 'reserved' | 'attended' | 'absent' | null;
 }
 
 type ActivityTypeFilter = 'all' | 'attended' | 'reserved' | 'absent';
@@ -83,7 +85,6 @@ interface NewMembershipForm {
 
 interface EditMembershipForm {
   remaining_sessions: string;
-  is_active: boolean;
   notes: string;
 }
 
@@ -96,10 +97,26 @@ const MEMBERSHIPS_PAGE_SIZE = 5;
 
 const formatConsumedSummary = (membership: Membership) => {
   const consumedSessions = membership.consumed_sessions ?? 0;
-  if (membership.total_sessions === null || membership.total_sessions === undefined) {
-    return `${consumedSessions}회`;
-  }
   return `${consumedSessions} / ${membership.total_sessions}회`;
+};
+
+const buildMembershipUpdatePayload = (form: EditMembershipForm) => {
+  return {
+    remaining_sessions: Number(form.remaining_sessions),
+    notes: form.notes || null,
+  };
+};
+
+const getRecommendedClassStatusLabel = (item: RecommendedClass) => {
+  switch (item.existing_status) {
+    case 'attended':
+      return '출석';
+    case 'absent':
+      return '결석';
+    case 'reserved':
+    default:
+      return '예약됨';
+  }
 };
 
 const CustomerDetail: React.FC = () => {
@@ -141,7 +158,6 @@ const CustomerDetail: React.FC = () => {
   });
   const [editMembershipForm, setEditMembershipForm] = useState<EditMembershipForm>({
     remaining_sessions: '',
-    is_active: true,
     notes: '',
   });
 
@@ -151,6 +167,7 @@ const CustomerDetail: React.FC = () => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [membershipPage, setMembershipPage] = useState(1);
+  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasValidCustomerId = useMemo(() => Number.isInteger(customerId) && customerId > 0, [customerId]);
   const activityPageItems = useMemo(() => {
@@ -232,6 +249,12 @@ const CustomerDetail: React.FC = () => {
     setMembershipPage((prev) => Math.min(prev, membershipTotalPages));
   }, [membershipTotalPages]);
 
+  useEffect(() => () => {
+    if (noticeTimeoutRef.current) {
+      clearTimeout(noticeTimeoutRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     if (!hasValidCustomerId) {
       setIsActivityLoading(false);
@@ -287,6 +310,7 @@ const CustomerDetail: React.FC = () => {
     setError('');
     try {
       await classAPI.cancelRegistration(item.class_id as number, customerId);
+      await loadMemberships();
       setActivityReloadToken((prev) => prev + 1);
       showNotice('예약을 취소했습니다.');
     } catch (cancelError: unknown) {
@@ -315,8 +339,14 @@ const CustomerDetail: React.FC = () => {
   };
 
   const showNotice = (message: string) => {
+    if (noticeTimeoutRef.current) {
+      clearTimeout(noticeTimeoutRef.current);
+    }
     setNotice(message);
-    setTimeout(() => setNotice(''), 2500);
+    noticeTimeoutRef.current = setTimeout(() => {
+      setNotice('');
+      noticeTimeoutRef.current = null;
+    }, 2500);
   };
 
   const openActivityFilterModal = () => {
@@ -383,7 +413,7 @@ const CustomerDetail: React.FC = () => {
     setClassReservationLoading((prev) => ({ ...prev, [classId]: true }));
     setError('');
     try {
-      await classAPI.register(classId, { customer_id: customerId });
+      await classAPI.register(classId, { customer_id: customerId, membership_id: membershipId });
       setMembershipRecommendedClasses((prev) => {
         const classes = prev[membershipId] as RecommendedClass[];
         return {
@@ -393,6 +423,7 @@ const CustomerDetail: React.FC = () => {
             return {
               ...item,
               is_registered: true,
+              existing_status: 'reserved',
               remaining_seats: Math.max(0, item.remaining_seats - 1),
               current_enrollment: item.current_enrollment + 1,
             };
@@ -408,6 +439,7 @@ const CustomerDetail: React.FC = () => {
           try {
             await classAPI.register(classId, {
               customer_id: customerId,
+              membership_id: membershipId,
               allow_cross_membership_registration: true,
             });
             setMembershipRecommendedClasses((prev) => {
@@ -419,6 +451,7 @@ const CustomerDetail: React.FC = () => {
                   return {
                     ...item,
                     is_registered: true,
+                    existing_status: 'reserved',
                     remaining_seats: Math.max(0, item.remaining_seats - 1),
                     current_enrollment: item.current_enrollment + 1,
                   };
@@ -522,11 +555,7 @@ const CustomerDetail: React.FC = () => {
   const startEditMembership = (membership: Membership) => {
     setEditingMembershipId(membership.id);
     setEditMembershipForm({
-      remaining_sessions:
-        membership.remaining_sessions === null || membership.remaining_sessions === undefined
-          ? ''
-          : String(membership.remaining_sessions),
-      is_active: membership.is_active,
+      remaining_sessions: String(membership.remaining_sessions),
       notes: membership.notes || '',
     });
   };
@@ -535,11 +564,7 @@ const CustomerDetail: React.FC = () => {
     setError('');
 
     try {
-      await membershipAPI.update(membershipId, {
-        remaining_sessions: editMembershipForm.remaining_sessions === '' ? null : Number(editMembershipForm.remaining_sessions),
-        is_active: editMembershipForm.is_active,
-        notes: editMembershipForm.notes || null,
-      });
+      await membershipAPI.update(membershipId, buildMembershipUpdatePayload(editMembershipForm));
 
       await Promise.all([loadMemberships(), loadCustomer()]);
       setEditingMembershipId(null);
@@ -562,6 +587,21 @@ const CustomerDetail: React.FC = () => {
     } catch (deleteError: unknown) {
       console.error('Failed to delete membership:', deleteError);
       setError(parseApiError(deleteError));
+    }
+  };
+
+  const handleDeactivateMembership = async (membership: Membership) => {
+    const ok = window.confirm(`"${membership.membership_type_name}" 회원권을 비활성화할까요?`);
+    if (!ok) return;
+
+    setError('');
+    try {
+      await membershipAPI.deactivate(membership.id);
+      await Promise.all([loadMemberships(), loadCustomer()]);
+      showNotice('회원권을 비활성화했습니다.');
+    } catch (deactivateError: unknown) {
+      console.error('Failed to deactivate membership:', deactivateError);
+      setError(parseApiError(deactivateError));
     }
   };
 
@@ -754,6 +794,8 @@ const CustomerDetail: React.FC = () => {
                           className="input-field"
                           value={editMembershipForm.remaining_sessions}
                           onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, remaining_sessions: e.target.value }))}
+                          min={0}
+                          required
                         />
                       </div>
                       <div>
@@ -765,14 +807,6 @@ const CustomerDetail: React.FC = () => {
                           onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, notes: e.target.value }))}
                         />
                       </div>
-                      <label className="inline-flex items-center gap-2 text-sm text-warm-700">
-                        <input
-                          type="checkbox"
-                          checked={editMembershipForm.is_active}
-                          onChange={(e) => setEditMembershipForm((prev) => ({ ...prev, is_active: e.target.checked }))}
-                        />
-                        활성 상태
-                      </label>
                       <div className="flex gap-2">
                         <button type="button" className="btn-primary" onClick={() => void handleUpdateMembership(membership.id)}>저장</button>
                         <button type="button" className="btn-secondary" onClick={() => setEditingMembershipId(null)}>취소</button>
@@ -788,7 +822,7 @@ const CustomerDetail: React.FC = () => {
                           {membership.is_active ? '활성' : '비활성'}
                         </span>
                       </div>
-                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.remaining_sessions ?? '무제한'}</p>
+                      <p className="text-sm text-warm-700">예약 가능 잔여: {membership.available_sessions ?? membership.remaining_sessions}회</p>
                       <p className="text-sm text-warm-700">소진 횟수: {formatConsumedSummary(membership)}</p>
                       <p className="text-sm text-warm-700">
                         시작일: {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
@@ -819,7 +853,8 @@ const CustomerDetail: React.FC = () => {
                           if (recommendedClasses.length === 0) {
                             return <p className="text-xs text-warm-600">예정된 같은 이름 수업이 없습니다.</p>;
                           }
-                          const hasNoRemainingSessions = typeof membership.remaining_sessions === 'number' && membership.remaining_sessions <= 0;
+                          const availableSessions = membership.available_sessions ?? membership.remaining_sessions;
+                          const hasNoRemainingSessions = typeof availableSessions === 'number' && availableSessions <= 0;
                           return (
                             <div className="space-y-2">
                               {recommendedClasses.map((item) => (
@@ -842,7 +877,11 @@ const CustomerDetail: React.FC = () => {
                                     }
                                     onClick={() => void handleQuickReserveClass(membership.id, item.id)}
                                   >
-                                    {item.is_registered ? '예약됨' : classReservationLoading[item.id] ? '예약 중...' : '바로 예약'}
+                                    {item.is_registered
+                                      ? getRecommendedClassStatusLabel(item)
+                                      : classReservationLoading[item.id]
+                                        ? '예약 중...'
+                                        : '바로 예약'}
                                   </button>
                                 </div>
                               ))}
@@ -852,7 +891,25 @@ const CustomerDetail: React.FC = () => {
                       </div>
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>
-                        <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDeleteMembership(membership)}>삭제</button>
+                        {((membership.consumed_sessions ?? 0) > 0 || (membership.reserved_count ?? 0) > 0) ? (
+                          membership.is_active ? (
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300"
+                              onClick={() => void handleDeactivateMembership(membership)}
+                            >
+                              비활성화
+                            </button>
+                          ) : null
+                        ) : (
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
+                            onClick={() => void handleDeleteMembership(membership)}
+                          >
+                            삭제
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

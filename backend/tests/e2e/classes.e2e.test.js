@@ -543,6 +543,7 @@ test('class registration and recurring routes cover core branches', async () => 
       rows: [
         {
           id: 11,
+          is_completed: true,
           is_open: true,
           max_capacity: 10,
           is_excluded: false,
@@ -572,6 +573,7 @@ test('class registration and recurring routes cover core branches', async () => 
           id: 11,
           title: null,
           is_open: false,
+          is_completed: true,
           max_capacity: 1,
           is_excluded: false,
           class_date: '2000-01-01',
@@ -580,6 +582,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ id: 77, class_id: 11, customer_id: 1, membership_id: 501, attendance_status: 'attended' }] },
     { rows: [{ id: 501 }], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -610,8 +613,45 @@ test('class registration and recurring routes cover core branches', async () => 
   const completedAttendanceInsertCall = completedManualAttendanceClient.queryCalls.find(([queryText]) =>
     String(queryText).includes('INSERT INTO yoga_attendances')
   );
-  assert.equal(String(completedAttendanceInsertCall?.[1]?.[3]?.toISOString?.() || ''), '2000-01-01T03:00:00.000Z');
-  assert.equal(completedAttendanceInsertCall?.[1]?.[5], null);
+  assert.match(String(completedAttendanceInsertCall?.[0]), /session_deducted/i);
+  assert.equal(completedAttendanceInsertCall?.[1]?.[3], '2000-01-01');
+  assert.equal(completedAttendanceInsertCall?.[1]?.[4], '12:00:00');
+  assert.equal(completedAttendanceInsertCall?.[1]?.[6], null);
+  assert.equal(completedAttendanceInsertCall?.[1]?.[7], true);
+
+  const completedManualAttendanceExhaustedClient = h.createDbClientMock();
+  completedManualAttendanceExhaustedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: null,
+          is_open: false,
+          is_completed: true,
+          max_capacity: 1,
+          is_excluded: false,
+          class_date: '2000-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 1, is_title_match: true }] },
+    { rows: [] },
+    { rows: [{ id: 78, class_id: 11, customer_id: 8, membership_id: 501, attendance_status: 'attended' }] },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(completedManualAttendanceExhaustedClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 8, mark_attended_after_register: true },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body?.error, 'Membership sessions exhausted');
 
   const fullClient = h.createDbClientMock();
   fullClient.queryQueue.push(
@@ -630,6 +670,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 1 }] },
     { rows: [], rowCount: 0 }
   );
@@ -652,6 +693,7 @@ test('class registration and recurring routes cover core branches', async () => 
           id: 11,
           title: '아쉬탕가',
           is_open: true,
+          is_completed: false,
           max_capacity: 10,
           is_excluded: false,
           class_date: '2999-01-01',
@@ -688,6 +730,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 2, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 188, class_id: 11, customer_id: 1, membership_id: 501 }] },
     { rows: [{ id: 501 }], rowCount: 1 },
@@ -705,13 +748,86 @@ test('class registration and recurring routes cover core branches', async () => 
   const reservedCountQuery = remainingSessionsClient.queryCalls.find(
     ([queryText]) => typeof queryText === 'string' && queryText.includes('AS reserved_count')
   );
-  assert.equal(reservedCountQuery, undefined);
+  assert.notEqual(reservedCountQuery, undefined);
   assert.equal(
     remainingSessionsClient.queryCalls.some(([queryText]) =>
       String(queryText).includes('FOR UPDATE OF m')
     ),
     true
   );
+
+  const explicitMembershipClient = h.createDbClientMock();
+  explicitMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 501, remaining_sessions: 5, is_title_match: true },
+        { id: 777, remaining_sessions: 2, is_title_match: true },
+      ],
+    },
+    { rows: [] },
+    { rows: [{ count: 0 }] },
+    { rows: [{ id: 288, class_id: 11, customer_id: 1, membership_id: 777 }] },
+    { rows: [{ id: 777 }], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(explicitMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, membership_id: 777 },
+  });
+  assert.equal(res.status, 201);
+  const explicitMembershipInsertCall = explicitMembershipClient.queryCalls.find(
+    ([queryText]) => typeof queryText === 'string' && queryText.includes('INSERT INTO yoga_class_registrations')
+  );
+  assert.equal(explicitMembershipInsertCall?.[1]?.[2], 777);
+
+  const invalidMembershipClient = h.createDbClientMock();
+  invalidMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(invalidMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1, membership_id: 999 },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Invalid or unavailable membership');
 
   const exhaustedAfterSelectionClient = h.createDbClientMock();
   exhaustedAfterSelectionClient.queryQueue.push(
@@ -730,6 +846,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 1, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 188, class_id: 11, customer_id: 1, membership_id: 501 }] },
     { rows: [], rowCount: 0 },
@@ -743,8 +860,7 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
     body: { customer_id: 1 },
   });
-  assert.equal(res.status, 409);
-  assert.equal(res.body.error, 'Membership sessions exhausted');
+  assert.equal(res.status, 201);
 
   const crossMembershipConfirmClient = h.createDbClientMock();
   crossMembershipConfirmClient.queryQueue.push(
@@ -763,6 +879,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 777, remaining_sessions: 3, is_title_match: false }] },
+    { rows: [] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(crossMembershipConfirmClient);
@@ -797,6 +914,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 778, remaining_sessions: 3, is_title_match: false }] },
+    { rows: [] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 199, class_id: 11, customer_id: 1, membership_id: 778 }] },
     { rows: [{ id: 778 }], rowCount: 1 },
@@ -814,7 +932,7 @@ test('class registration and recurring routes cover core branches', async () => 
   const crossMembershipReservedCountQuery = crossMembershipAllowedClient.queryCalls.find(
     ([queryText]) => typeof queryText === 'string' && queryText.includes('AS reserved_count')
   );
-  assert.equal(crossMembershipReservedCountQuery, undefined);
+  assert.notEqual(crossMembershipReservedCountQuery, undefined);
 
   const dupClient = h.createDbClientMock();
   dupClient.queryQueue.push(
@@ -833,6 +951,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
@@ -880,6 +999,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [{ membership_id: 501, reserved_count: 1 }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 99, class_id: 11, customer_id: 1, membership_id: 501 }] },
     { rows: [{ id: 501 }], rowCount: 1 },
@@ -914,7 +1034,7 @@ test('class registration and recurring routes cover core branches', async () => 
   const cancelSelfSuccessClient = h.createDbClientMock();
   cancelSelfSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved', session_consumed: false }] },
     { rows: [] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -1025,7 +1145,7 @@ test('class registration and recurring routes cover core branches', async () => 
   const cancelAdminSuccessClient = h.createDbClientMock();
   cancelAdminSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved' }] },
+    { rows: [{ id: 1, membership_id: 501, attendance_status: 'reserved', session_consumed: false }] },
     { rows: [] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -1040,14 +1160,114 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 200);
 
+  const cancelAdminRefundAttendanceClient = h.createDbClientMock();
+  cancelAdminRefundAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, membership_id: 501, attendance_status: 'reserved', session_consumed: true }] },
+    {
+      rows: [
+        { id: 901, membership_id: 501, session_deducted: true },
+        { id: 902, membership_id: null, session_deducted: true },
+        { id: 903, membership_id: 777, session_deducted: false },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 3 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminRefundAttendanceClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '8' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.ok(
+    cancelAdminRefundAttendanceClient.queryCalls.some(
+      ([queryText, params]) =>
+        String(queryText).includes('UPDATE yoga_memberships')
+        && Array.isArray(params)
+        && params[0] === 501
+        && params[1] === 1
+    )
+  );
+  assert.ok(
+    cancelAdminRefundAttendanceClient.queryCalls.some(
+      ([queryText, params]) =>
+        String(queryText).includes('DELETE FROM yoga_attendances')
+        && Array.isArray(params)
+        && Array.isArray(params[0])
+        && params[0].includes(901)
+        && params[0].includes(902)
+        && params[0].includes(903)
+    )
+  );
+
+  const cancelAdminFallbackRefundClient = h.createDbClientMock();
+  cancelAdminFallbackRefundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 9, membership_id: null, attendance_status: 'reserved', session_consumed: true }] },
+    {
+      rows: [
+        { id: 904, membership_id: 888, session_deducted: true },
+      ],
+    },
+    { rows: [{ id: 888, remaining_sessions: 4 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminFallbackRefundClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '9' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.ok(
+    cancelAdminFallbackRefundClient.queryCalls.some(
+      ([queryText, params]) =>
+        String(queryText).includes('UPDATE yoga_memberships')
+        && Array.isArray(params)
+        && params[0] === 888
+    )
+  );
+
+  const cancelAdminNoRefundMembershipClient = h.createDbClientMock();
+  cancelAdminNoRefundMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 10, membership_id: null, attendance_status: 'reserved', session_consumed: true }] },
+    {
+      rows: [
+        { id: 905, membership_id: null, session_deducted: true },
+      ],
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminNoRefundMembershipClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '10' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    cancelAdminNoRefundMembershipClient.queryCalls.some(
+      ([queryText]) => String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    false
+  );
+
   const cancelAdminAttendedClient = h.createDbClientMock();
   cancelAdminAttendedClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 2, membership_id: 501, attendance_status: 'attended' }] },
-    { rows: [{ id: 91, membership_id: 501 }] },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(cancelAdminAttendedClient);
@@ -1057,21 +1277,61 @@ test('class registration and recurring routes cover core branches', async () => 
     params: { id: '11', customerId: '3' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(
-    cancelAdminAttendedClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('DELETE FROM yoga_attendances')
-    ),
-    true
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+
+  const cancelAdminImmediateAttendanceClient = h.createDbClientMock();
+  cancelAdminImmediateAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 4, membership_id: 501, attendance_status: 'attended' }] },
+    { rows: [], rowCount: 0 }
   );
+  h.connectQueue.push(cancelAdminImmediateAttendanceClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '5' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+
+  const cancelAdminNullAttendanceMembershipClient = h.createDbClientMock();
+  cancelAdminNullAttendanceMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, membership_id: 501, attendance_status: 'attended' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminNullAttendanceMembershipClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '6' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+
+  const cancelAdminDuplicateDeductionClient = h.createDbClientMock();
+  cancelAdminDuplicateDeductionClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 6, membership_id: 501, attendance_status: 'attended' }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminDuplicateDeductionClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '7' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
 
   const cancelAdminNullMembershipClient = h.createDbClientMock();
   cancelAdminNullMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 3, membership_id: null, attendance_status: 'attended' }] },
-    { rows: [{ id: 92, membership_id: null }] },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(cancelAdminNullMembershipClient);
@@ -1081,13 +1341,8 @@ test('class registration and recurring routes cover core branches', async () => 
     params: { id: '11', customerId: '4' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(
-    cancelAdminNullMembershipClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
-    ),
-    false
-  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
 
   const cancelAdminErrorClient = h.createDbClientMock();
   cancelAdminErrorClient.queryQueue.push(
@@ -1268,6 +1523,67 @@ test('registration status change reconciles attendance row and membership usage'
     body: { attendance_status: 'attended' },
   });
   assert.equal(attendedWithoutAttendanceRes.status, 400);
+  assert.equal(attendedWithoutAttendanceRes.body.error, 'Attendance record not found; use check-in endpoint first');
+
+  const absentReservedMissingMembershipClient = h.createDbClientMock();
+  absentReservedMissingMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 97,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: null,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(absentReservedMissingMembershipClient);
+  const absentReservedMissingMembershipRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'absent' },
+  });
+  assert.equal(absentReservedMissingMembershipRes.status, 400);
+  assert.equal(absentReservedMissingMembershipRes.body.error, 'Registration membership not found');
+
+  const absentReservedExhaustedMembershipClient = h.createDbClientMock();
+  absentReservedExhaustedMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 98,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 77,
+          attendance_status: 'reserved',
+          session_consumed: false,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(absentReservedExhaustedMembershipClient);
+  const absentReservedExhaustedMembershipRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'absent' },
+  });
+  assert.equal(absentReservedExhaustedMembershipRes.status, 409);
+  assert.equal(absentReservedExhaustedMembershipRes.body.error, 'Membership sessions exhausted');
 
   const revertToReservedClient = h.createDbClientMock();
   revertToReservedClient.queryQueue.push(
@@ -1280,6 +1596,7 @@ test('registration status change reconciles attendance row and membership usage'
           customer_id: 2,
           membership_id: 501,
           attendance_status: 'attended',
+          session_consumed: true,
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
         },
@@ -1287,8 +1604,8 @@ test('registration status change reconciles attendance row and membership usage'
     },
     {
       rows: [
-        { id: 601, membership_id: 77 },
-        { id: 602, membership_id: 501 },
+        { id: 601, membership_id: 77, session_deducted: true },
+        { id: 602, membership_id: 501, session_deducted: false },
       ],
     },
     { rows: [{ id: 77, remaining_sessions: 2 }] },
@@ -1323,6 +1640,232 @@ test('registration status change reconciles attendance row and membership usage'
     )
   );
 
+  const revertImmediateAttendanceClient = h.createDbClientMock();
+  revertImmediateAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 96,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: null,
+          attendance_status: 'attended',
+          session_consumed: true,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 703, membership_id: 501, session_deducted: false },
+      ],
+    },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 96,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 501,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(revertImmediateAttendanceClient);
+  const revertImmediateAttendanceRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(revertImmediateAttendanceRes.status, 200);
+  assert.equal(
+    revertImmediateAttendanceClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
+    ),
+    true
+  );
+
+  const revertImmediateAttendanceWithoutMembershipClient = h.createDbClientMock();
+  revertImmediateAttendanceWithoutMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 97,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: null,
+          attendance_status: 'attended',
+          session_consumed: true,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 704, membership_id: null, session_deducted: false },
+      ],
+    },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 97,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: null,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(revertImmediateAttendanceWithoutMembershipClient);
+  const revertImmediateAttendanceWithoutMembershipRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(revertImmediateAttendanceWithoutMembershipRes.status, 200);
+  assert.equal(
+    revertImmediateAttendanceWithoutMembershipClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
+    ),
+    false
+  );
+
+  const revertAbsentWithoutAttendanceClient = h.createDbClientMock();
+  revertAbsentWithoutAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 99,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 502,
+          attendance_status: 'absent',
+          session_consumed: true,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    {
+      rows: [
+        { id: 704, membership_id: null, session_deducted: false },
+      ],
+    },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 99,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 502,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(revertAbsentWithoutAttendanceClient);
+  const revertAbsentWithoutAttendanceRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(revertAbsentWithoutAttendanceRes.status, 200);
+  assert.ok(
+    revertAbsentWithoutAttendanceClient.queryCalls.some(
+      ([sql, params]) =>
+        typeof sql === 'string'
+        && sql.includes('UPDATE yoga_memberships')
+        && Array.isArray(params)
+        && params[0] === 502
+        && params[1] === 1
+    )
+  );
+
+  const revertAbsentWithoutAttendanceRowsClient = h.createDbClientMock();
+  revertAbsentWithoutAttendanceRowsClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 100,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 503,
+          attendance_status: 'absent',
+          session_consumed: true,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [] },
+    { rows: [{ id: 503, remaining_sessions: 1 }] },
+    {
+      rows: [
+        {
+          id: 100,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 503,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(revertAbsentWithoutAttendanceRowsClient);
+  const revertAbsentWithoutAttendanceRowsRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(revertAbsentWithoutAttendanceRowsRes.status, 200);
+  assert.ok(
+    revertAbsentWithoutAttendanceRowsClient.queryCalls.some(
+      ([sql, params]) =>
+        typeof sql === 'string'
+        && sql.includes('UPDATE yoga_memberships')
+        && Array.isArray(params)
+        && params[0] === 503
+        && params[1] === 1
+    )
+  );
+  assert.equal(
+    revertAbsentWithoutAttendanceRowsClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('DELETE FROM yoga_attendances')
+    ),
+    false
+  );
+
   const absentWithNullMembershipClient = h.createDbClientMock();
   absentWithNullMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -1341,8 +1884,8 @@ test('registration status change reconciles attendance row and membership usage'
     },
     {
       rows: [
-        { id: 701, membership_id: null },
-        { id: 702, membership_id: 88 },
+        { id: 701, membership_id: null, session_deducted: false },
+        { id: 702, membership_id: 88, session_deducted: false },
       ],
     },
     { rows: [], rowCount: 1 },
@@ -1650,6 +2193,7 @@ test('class registration diagnostics and recurring creation cover remaining bran
       ],
     },
     { rows: [{ id: 801, remaining_sessions: 1, is_title_match: false }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 501, class_id: 11, customer_id: 1, membership_id: 801 }] },
     { rows: [{ id: 801 }], rowCount: 1 },
@@ -1665,8 +2209,8 @@ test('class registration diagnostics and recurring creation cover remaining bran
   });
   assert.equal(res.status, 201);
 
-  const unlimitedCrossMembershipClient = h.createDbClientMock();
-  unlimitedCrossMembershipClient.queryQueue.push(
+  const alternativeCrossMembershipClient = h.createDbClientMock();
+  alternativeCrossMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     {
       rows: [
@@ -1682,12 +2226,14 @@ test('class registration diagnostics and recurring creation cover remaining bran
         },
       ],
     },
-    { rows: [{ id: 802, remaining_sessions: null, is_title_match: false }] },
+    { rows: [{ id: 802, remaining_sessions: 5, is_title_match: false }] },
+    { rows: [] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 299, class_id: 11, customer_id: 1 }] },
+    { rows: [{ id: 802 }], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
-  h.connectQueue.push(unlimitedCrossMembershipClient);
+  h.connectQueue.push(alternativeCrossMembershipClient);
   res = await h.runRoute({
     method: 'post',
     routePath: '/:id/registrations',
