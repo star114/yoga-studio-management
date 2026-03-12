@@ -828,7 +828,6 @@ router.post('/:id/registrations',
         `SELECT
            m.id,
            m.remaining_sessions,
-           COALESCE(reservations.reserved_count, 0) AS reserved_count,
            CASE
              WHEN regexp_replace(
                     trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
@@ -846,15 +845,8 @@ router.post('/:id/registrations',
            END AS is_title_match
          FROM yoga_memberships m
          INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
-         LEFT JOIN LATERAL (
-           SELECT COUNT(*)::int AS reserved_count
-           FROM yoga_class_registrations rr
-           WHERE rr.membership_id = m.id
-             AND rr.attendance_status = 'reserved'
-         ) reservations ON true
          WHERE m.customer_id = $1
            AND m.is_active = TRUE
-           AND (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
          ORDER BY
            CASE
              WHEN regexp_replace(
@@ -875,12 +867,35 @@ router.post('/:id/registrations',
         [customerId, yogaClass.title]
       );
 
-      const eligibleMembershipRows = membershipResult.rows as Array<{
+      const lockedMembershipRows = membershipResult.rows as Array<{
         id: number;
         remaining_sessions: number;
-        reserved_count: number;
         is_title_match: boolean;
       }>;
+      const reservedCountByMembershipId = new Map<number, number>();
+
+      if (lockedMembershipRows.length > 0) {
+        const reservedCountResult = await client.query(
+          `SELECT membership_id, COUNT(*)::int AS reserved_count
+           FROM yoga_class_registrations
+           WHERE membership_id = ANY($1::int[])
+             AND attendance_status = 'reserved'
+           GROUP BY membership_id`,
+          [lockedMembershipRows.map((row) => row.id)]
+        );
+
+        for (const row of reservedCountResult.rows as Array<{ membership_id: number; reserved_count: number }>) {
+          reservedCountByMembershipId.set(Number(row.membership_id), Number(row.reserved_count));
+        }
+      }
+
+      const eligibleMembershipRows = lockedMembershipRows
+        .map((row) => ({
+          ...row,
+          reserved_count: reservedCountByMembershipId.get(row.id) ?? 0,
+        }))
+        .filter((row) => (row.remaining_sessions - row.reserved_count) > 0);
+
       const requestedMembership = requestedMembershipId === null
         ? null
         : eligibleMembershipRows.find((row) => row.id === requestedMembershipId) ?? null;

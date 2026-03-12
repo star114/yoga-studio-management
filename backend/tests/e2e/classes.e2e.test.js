@@ -582,6 +582,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ id: 77, class_id: 11, customer_id: 1, membership_id: 501, attendance_status: 'attended' }] },
     { rows: [{ id: 501 }], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -636,6 +637,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 1, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ id: 78, class_id: 11, customer_id: 8, membership_id: 501, attendance_status: 'attended' }] },
     { rows: [], rowCount: 0 },
     { rows: [], rowCount: 0 }
@@ -668,6 +670,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 1 }] },
     { rows: [], rowCount: 0 }
   );
@@ -727,6 +730,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 2, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 188, class_id: 11, customer_id: 1, membership_id: 501 }] },
     { rows: [{ id: 501 }], rowCount: 1 },
@@ -774,6 +778,7 @@ test('class registration and recurring routes cover core branches', async () => 
         { id: 777, remaining_sessions: 2, is_title_match: true },
       ],
     },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 288, class_id: 11, customer_id: 1, membership_id: 777 }] },
     { rows: [{ id: 777 }], rowCount: 1 },
@@ -810,6 +815,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(invalidMembershipClient);
@@ -840,6 +846,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 1, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 188, class_id: 11, customer_id: 1, membership_id: 501 }] },
     { rows: [], rowCount: 0 },
@@ -872,6 +879,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 777, remaining_sessions: 3, is_title_match: false }] },
+    { rows: [] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(crossMembershipConfirmClient);
@@ -906,6 +914,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 778, remaining_sessions: 3, is_title_match: false }] },
+    { rows: [] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 199, class_id: 11, customer_id: 1, membership_id: 778 }] },
     { rows: [{ id: 778 }], rowCount: 1 },
@@ -942,6 +951,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
@@ -989,6 +999,7 @@ test('class registration and recurring routes cover core branches', async () => 
       ],
     },
     { rows: [{ id: 501, remaining_sessions: 5, is_title_match: true }] },
+    { rows: [{ membership_id: 501, reserved_count: 1 }] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 99, class_id: 11, customer_id: 1, membership_id: 501 }] },
     { rows: [{ id: 501 }], rowCount: 1 },
@@ -2182,6 +2193,7 @@ test('class registration diagnostics and recurring creation cover remaining bran
       ],
     },
     { rows: [{ id: 801, remaining_sessions: 1, is_title_match: false }] },
+    { rows: [] },
     { rows: [{ count: 0 }] },
     { rows: [{ id: 501, class_id: 11, customer_id: 1, membership_id: 801 }] },
     { rows: [{ id: 801 }], rowCount: 1 },
@@ -2215,6 +2227,7 @@ test('class registration diagnostics and recurring creation cover remaining bran
       ],
     },
     { rows: [{ id: 802, remaining_sessions: 5, is_title_match: false }] },
+    { rows: [] },
     { rows: [{ count: 1 }] },
     { rows: [{ id: 299, class_id: 11, customer_id: 1 }] },
     { rows: [{ id: 802 }], rowCount: 1 },
