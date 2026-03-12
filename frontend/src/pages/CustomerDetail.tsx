@@ -590,6 +590,21 @@ const CustomerDetail: React.FC = () => {
     }
   };
 
+  const handleDeactivateMembership = async (membership: Membership) => {
+    const ok = window.confirm(`"${membership.membership_type_name}" 회원권을 비활성화할까요?`);
+    if (!ok) return;
+
+    setError('');
+    try {
+      await membershipAPI.deactivate(membership.id);
+      await Promise.all([loadMemberships(), loadCustomer()]);
+      showNotice('회원권을 비활성화했습니다.');
+    } catch (deactivateError: unknown) {
+      console.error('Failed to deactivate membership:', deactivateError);
+      setError(parseApiError(deactivateError));
+    }
+  };
+
   const handleResetPassword = async () => {
     setError('');
     const ok = window.confirm('고객 로그인 비밀번호를 기본값 12345로 초기화합니다.');
@@ -876,7 +891,25 @@ const CustomerDetail: React.FC = () => {
                       </div>
                       <div className="flex gap-2">
                         <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEditMembership(membership)}>수정</button>
-                        <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDeleteMembership(membership)}>삭제</button>
+                        {(membership.consumed_sessions ?? 0) > 0 ? (
+                          membership.is_active ? (
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 rounded-md bg-gray-200 text-gray-800 hover:bg-gray-300"
+                              onClick={() => void handleDeactivateMembership(membership)}
+                            >
+                              비활성화
+                            </button>
+                          ) : null
+                        ) : (
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
+                            onClick={() => void handleDeleteMembership(membership)}
+                          >
+                            삭제
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

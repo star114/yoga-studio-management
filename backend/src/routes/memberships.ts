@@ -382,7 +382,7 @@ router.put('/:id',
                WHEN $1 THEN $2 > 0
                ELSE is_active
              END
-         WHERE id = $7
+         WHERE id = $5::integer
          RETURNING *`,
         [
           hasRemainingSessions,
@@ -408,6 +408,29 @@ router.put('/:id',
 );
 
 // 회원권 삭제 (관리자)
+router.post('/:id/deactivate', authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `UPDATE yoga_memberships
+       SET is_active = false
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Membership not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Deactivate membership error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   const { id } = req.params;
 
@@ -420,13 +443,41 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     await client.query('BEGIN');
 
     const membershipResult = await client.query(
-      'SELECT id FROM yoga_memberships WHERE id = $1 FOR UPDATE',
+      `SELECT
+         id,
+         EXISTS (
+           SELECT 1
+           FROM yoga_class_registrations r
+           WHERE r.membership_id = $1
+             AND r.attendance_status IN ('attended', 'absent')
+         ) AS has_consumed_registrations,
+         EXISTS (
+           SELECT 1
+           FROM yoga_attendances a
+           WHERE a.membership_id = $1
+         ) AS has_attendance_history
+       FROM yoga_memberships
+       WHERE id = $1
+       FOR UPDATE`,
       [id]
     );
 
     if (membershipResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Membership not found' });
+    }
+
+    const membership = membershipResult.rows[0] as {
+      id: number;
+      has_consumed_registrations: boolean;
+      has_attendance_history: boolean;
+    };
+
+    if (membership.has_consumed_registrations || membership.has_attendance_history) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Membership with consumed history can only be deactivated',
+      });
     }
 
     await client.query(

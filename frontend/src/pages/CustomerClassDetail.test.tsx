@@ -105,7 +105,7 @@ describe('CustomerClassDetail page', () => {
 
   it('renders class detail values', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText('수업 상세 로딩 중...')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('출석')).toBeTruthy());
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('오늘 허리 뻐근함')).toBeTruthy();
     expect(classGetMyCommentThreadMock).toHaveBeenCalledWith(1);

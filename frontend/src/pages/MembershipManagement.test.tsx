@@ -72,6 +72,17 @@ describe('MembershipManagement page', () => {
     consoleSpy.mockRestore();
   });
 
+  it('shows initialize error when membership types request fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    membershipGetTypesMock.mockRejectedValueOnce(new Error('types failed'));
+
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(screen.getByText('초기 데이터를 불러오지 못했습니다.')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
   it('renders no-membership state after load', async () => {
     render(<MembershipManagement />);
 
@@ -385,6 +396,13 @@ describe('MembershipManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('등록된 회원권이 없습니다.')).toBeTruthy());
     expect(membershipGetByCustomerMock).not.toHaveBeenCalled();
+  });
+
+  it('selects the first customer automatically after initialization', async () => {
+    render(<MembershipManagement />);
+
+    await waitFor(() => expect(membershipGetByCustomerMock).toHaveBeenCalledWith(1));
+    expect((screen.getByLabelText('고객 선택') as HTMLSelectElement).value).toBe('1');
   });
 
   it('returns early on create submit when no customer is selected', async () => {

@@ -1153,10 +1153,6 @@ test('class registration and recurring routes cover core branches', async () => 
   cancelAdminAttendedClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 2, membership_id: 501, attendance_status: 'attended' }] },
-    { rows: [{ id: 91, membership_id: 501 }] },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(cancelAdminAttendedClient);
@@ -1166,21 +1162,13 @@ test('class registration and recurring routes cover core branches', async () => 
     params: { id: '11', customerId: '3' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(
-    cancelAdminAttendedClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('DELETE FROM yoga_attendances')
-    ),
-    true
-  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
 
   const cancelAdminImmediateAttendanceClient = h.createDbClientMock();
   cancelAdminImmediateAttendanceClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 4, membership_id: 501, attendance_status: 'attended' }] },
-    { rows: [{ id: 93, membership_id: 501, session_deducted: false }] },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(cancelAdminImmediateAttendanceClient);
@@ -1190,21 +1178,13 @@ test('class registration and recurring routes cover core branches', async () => 
     params: { id: '11', customerId: '5' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(
-    cancelAdminImmediateAttendanceClient.queryCalls.filter(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions +')
-    ).length,
-    1
-  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
 
   const cancelAdminNullAttendanceMembershipClient = h.createDbClientMock();
   cancelAdminNullAttendanceMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 5, membership_id: 501, attendance_status: 'attended' }] },
-    { rows: [{ id: 94, membership_id: null, session_deducted: true }] },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(cancelAdminNullAttendanceMembershipClient);
@@ -1214,26 +1194,13 @@ test('class registration and recurring routes cover core branches', async () => 
     params: { id: '11', customerId: '6' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(
-    cancelAdminNullAttendanceMembershipClient.queryCalls.filter(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions +')
-    ).length,
-    1
-  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
 
   const cancelAdminDuplicateDeductionClient = h.createDbClientMock();
   cancelAdminDuplicateDeductionClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 6, membership_id: 501, attendance_status: 'attended' }] },
-    {
-      rows: [
-        { id: 95, membership_id: 501, session_deducted: true },
-        { id: 96, membership_id: 501, session_deducted: true },
-      ],
-    },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(cancelAdminDuplicateDeductionClient);
@@ -1243,21 +1210,13 @@ test('class registration and recurring routes cover core branches', async () => 
     params: { id: '11', customerId: '7' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(
-    cancelAdminDuplicateDeductionClient.queryCalls.filter(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions +')
-    ).length,
-    1
-  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
 
   const cancelAdminNullMembershipClient = h.createDbClientMock();
   cancelAdminNullMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },
     { rows: [{ id: 3, membership_id: null, attendance_status: 'attended' }] },
-    { rows: [{ id: 92, membership_id: null }] },
-    { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(cancelAdminNullMembershipClient);
@@ -1267,13 +1226,8 @@ test('class registration and recurring routes cover core branches', async () => 
     params: { id: '11', customerId: '4' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(
-    cancelAdminNullMembershipClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('remaining_sessions = remaining_sessions + 1')
-    ),
-    false
-  );
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
 
   const cancelAdminErrorClient = h.createDbClientMock();
   cancelAdminErrorClient.queryQueue.push(

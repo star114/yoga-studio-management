@@ -136,6 +136,7 @@ describe('api service', () => {
     adminAccountAPI.delete(5);
 
     membershipAPI.getTypes();
+    membershipAPI.getTypes({ includeInactive: true });
     membershipAPI.createType(payload);
     membershipAPI.updateType(1, payload);
     membershipAPI.deactivateType(1);
@@ -143,6 +144,7 @@ describe('api service', () => {
     membershipAPI.getByCustomer(1);
     membershipAPI.create(payload);
     membershipAPI.update(1, payload);
+    membershipAPI.deactivate(1);
     membershipAPI.delete(1);
 
     attendanceAPI.getAll({ limit: 10 });
@@ -195,6 +197,7 @@ describe('api service', () => {
     expect(deleteMock).toHaveBeenCalledWith('/admin-accounts/5');
 
     expect(getMock).toHaveBeenCalledWith('/memberships/types', { params: undefined });
+    expect(getMock).toHaveBeenCalledWith('/memberships/types', { params: { include_inactive: true } });
     expect(postMock).toHaveBeenCalledWith('/memberships/types', payload);
     expect(putMock).toHaveBeenCalledWith('/memberships/types/1', payload);
     expect(postMock).toHaveBeenCalledWith('/memberships/types/1/deactivate');
@@ -202,6 +205,7 @@ describe('api service', () => {
     expect(getMock).toHaveBeenCalledWith('/memberships/customer/1');
     expect(postMock).toHaveBeenCalledWith('/memberships', payload);
     expect(putMock).toHaveBeenCalledWith('/memberships/1', payload);
+    expect(postMock).toHaveBeenCalledWith('/memberships/1/deactivate');
     expect(deleteMock).toHaveBeenCalledWith('/memberships/1');
 
     expect(getMock).toHaveBeenCalledWith('/attendances', { params: { limit: 10 } });

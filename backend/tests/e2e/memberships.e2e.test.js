@@ -518,6 +518,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     body: { notes: 'x2' },
   });
   assert.equal(res.status, 200);
+  assert.match(String(updateNotesClient.queryCalls[2][0]), /WHERE id = \$5::integer/);
 
   const updateNullNotesClient = h.createDbClientMock();
   updateNullNotesClient.queryQueue.push(
@@ -683,7 +684,9 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(
     deleteSuccessClient.queryCalls.some(([queryText]) =>
-      String(queryText).includes('SELECT id FROM yoga_memberships WHERE id = $1 FOR UPDATE')
+      String(queryText).includes('FROM yoga_memberships')
+      && String(queryText).includes('has_consumed_registrations')
+      && String(queryText).includes('FOR UPDATE')
     ),
     true
   );
@@ -730,4 +733,48 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);
+
+  h.queryQueue.push({ rows: [] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/deactivate',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push({ rows: [{ id: 201, is_active: false }] });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/deactivate',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.is_active, false);
+
+  h.queryQueue.push(new Error('deactivate membership fail'));
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/deactivate',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  const deleteConsumedClient = h.createDbClientMock();
+  deleteConsumedClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 201, has_consumed_registrations: true, has_attendance_history: true }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteConsumedClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '201' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Membership with consumed history can only be deactivated');
 });

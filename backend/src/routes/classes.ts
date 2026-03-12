@@ -1211,6 +1211,11 @@ router.delete('/:id/registrations/:customerId',
           attendance_status: 'reserved' | 'attended' | 'absent';
         };
 
+        if (registration.attendance_status !== 'reserved') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Only reserved registrations can be canceled by admin' });
+        }
+
         await cancelRegistrationAndRelatedAttendance(
           client,
           registration,

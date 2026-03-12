@@ -229,6 +229,90 @@ describe('MembershipTypeManagement page', () => {
     confirmSpy.mockRestore();
   });
 
+  it('does not delete inactive type when delete confirm is canceled', async () => {
+    getTypesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 24,
+          name: '삭제취소권',
+          description: '예전 상품',
+          total_sessions: 6,
+          is_active: false,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('삭제취소권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+
+    expect(deleteTypeMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('deletes inactive type while editing and resets edit mode', async () => {
+    deleteTypeMock.mockResolvedValueOnce(undefined);
+    getTypesMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 22,
+            name: '편집중 삭제권',
+            description: '예전 상품',
+            total_sessions: 6,
+            is_active: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('편집중 삭제권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '수정' }));
+    expect(screen.getByRole('button', { name: '수정 저장' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+
+    await waitFor(() => expect(deleteTypeMock).toHaveBeenCalledWith(22));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '수정 저장' })).toBeNull());
+    confirmSpy.mockRestore();
+  });
+
+  it('shows parsed error when deleting inactive type fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    deleteTypeMock.mockRejectedValueOnce(new Error('delete failed'));
+    getTypesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 23,
+          name: '삭제실패권',
+          description: '예전 상품',
+          total_sessions: 6,
+          is_active: false,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('삭제실패권')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+
+    await waitFor(() => expect(screen.getByText('요청 처리 실패')).toBeTruthy());
+    expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
   it('deactivates successfully and resets edit mode when target is being edited', async () => {
     deactivateTypeMock.mockResolvedValueOnce(undefined);
     getTypesMock

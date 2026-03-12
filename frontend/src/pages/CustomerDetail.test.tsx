@@ -18,6 +18,7 @@ const {
   classRegisterMock,
   createMembershipMock,
   updateMembershipMock,
+  deactivateMembershipMock,
   deleteMembershipMock,
   parseApiErrorMock,
   shouldConfirmCrossMembershipRegistrationMock,
@@ -35,6 +36,7 @@ const {
   classRegisterMock: vi.fn(),
   createMembershipMock: vi.fn(),
   updateMembershipMock: vi.fn(),
+  deactivateMembershipMock: vi.fn(),
   deleteMembershipMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
   shouldConfirmCrossMembershipRegistrationMock: vi.fn(() => false),
@@ -69,6 +71,7 @@ vi.mock('../services/api', () => ({
     getByCustomer: getByCustomerMock,
     create: createMembershipMock,
     update: updateMembershipMock,
+    deactivate: deactivateMembershipMock,
     delete: deleteMembershipMock,
   },
 }));
@@ -1064,6 +1067,7 @@ describe('CustomerDetail page', () => {
   });
 
   it('delete membership handles confirm cancel and success', async () => {
+    deactivateMembershipMock.mockReset();
     deleteMembershipMock.mockResolvedValueOnce(undefined);
     getByCustomerMock
       .mockResolvedValueOnce({
@@ -1088,6 +1092,7 @@ describe('CustomerDetail page', () => {
     await waitFor(() => expect(screen.getByText('삭제대상')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     expect(deleteMembershipMock).not.toHaveBeenCalled();
+    expect(deactivateMembershipMock).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     await waitFor(() => expect(deleteMembershipMock).toHaveBeenCalledWith(20));
@@ -1098,6 +1103,7 @@ describe('CustomerDetail page', () => {
 
   it('shows parsed error when delete membership fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    deactivateMembershipMock.mockReset();
     deleteMembershipMock.mockRejectedValueOnce(new Error('delete failed'));
     getByCustomerMock.mockResolvedValueOnce({
       data: [
@@ -1124,6 +1130,101 @@ describe('CustomerDetail page', () => {
 
     confirmSpy.mockRestore();
     consoleSpy.mockRestore();
+  });
+
+  it('deactivates consumed membership instead of deleting it', async () => {
+    deactivateMembershipMock.mockResolvedValueOnce(undefined);
+    getByCustomerMock
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 31,
+            membership_type_name: '소진회원권',
+            remaining_sessions: 2,
+            consumed_sessions: 4,
+            is_active: true,
+            notes: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 31,
+            membership_type_name: '소진회원권',
+            remaining_sessions: 2,
+            consumed_sessions: 4,
+            is_active: false,
+            notes: null,
+          },
+        ],
+      });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('소진회원권')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: '삭제' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+    await waitFor(() => expect(deactivateMembershipMock).toHaveBeenCalledWith(31));
+    expect(deleteMembershipMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('회원권을 비활성화했습니다.')).toBeTruthy());
+
+    confirmSpy.mockRestore();
+  });
+
+  it('shows parsed error when membership deactivation fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    deactivateMembershipMock.mockRejectedValueOnce(new Error('deactivate failed'));
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 32,
+          membership_type_name: '비활성실패권',
+          remaining_sessions: 2,
+          consumed_sessions: 3,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('비활성실패권')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(parseApiErrorMock).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('does not deactivate membership when deactivation confirm is canceled', async () => {
+    deactivateMembershipMock.mockReset();
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 33,
+          membership_type_name: '비활성취소권',
+          remaining_sessions: 2,
+          consumed_sessions: 3,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('비활성취소권')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '비활성화' }));
+
+    expect(deactivateMembershipMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it('loads recommended classes for membership and allows quick reserve', async () => {
@@ -1207,6 +1308,43 @@ describe('CustomerDetail page', () => {
 
     const attendedButton = await screen.findByRole('button', { name: '출석' });
     expect((attendedButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows absent classes as already processed in recommended classes', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 42,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          available_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 901,
+          title: '아쉬탕가',
+          class_date: '2026-03-11',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 2,
+          current_enrollment: 3,
+          is_registered: true,
+          existing_status: 'absent',
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const absentButton = await screen.findByRole('button', { name: '결석' });
+    expect((absentButton as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('updates only the selected class when quick reserving among multiple recommendations', async () => {

@@ -123,6 +123,9 @@ export const membershipAPI = {
   
   update: (id: number, data: unknown) => 
     api.put(`/memberships/${id}`, data),
+
+  deactivate: (id: number) =>
+    api.post(`/memberships/${id}/deactivate`),
   
   delete: (id: number) => 
     api.delete(`/memberships/${id}`),
