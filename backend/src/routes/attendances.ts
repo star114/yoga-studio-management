@@ -183,7 +183,7 @@ router.post('/',
 
       const classId = Number(class_id);
       const classResult = await client.query(
-        `SELECT cls.id, cls.title, reg.id AS registration_id, reg.membership_id
+        `SELECT cls.id, cls.title, reg.id AS registration_id, reg.membership_id, reg.attendance_status
          FROM yoga_classes cls
          INNER JOIN yoga_class_registrations reg ON reg.class_id = cls.id
          WHERE cls.id = $1 AND reg.customer_id = $2
@@ -199,6 +199,7 @@ router.post('/',
 
       resolvedClassId = classResult.rows[0].id as number;
       const reservedMembershipId = classResult.rows[0].membership_id as number | null | undefined;
+      const currentRegistrationStatus = String(classResult.rows[0].attendance_status ?? 'reserved') as 'reserved' | 'attended' | 'absent';
       if (!resolvedClassType) {
         resolvedClassType = String(classResult.rows[0].title ?? '').trim();
       }
@@ -267,17 +268,19 @@ router.post('/',
         activeMembership = membershipResult.rows[0];
       }
 
-      // 횟수제 회원권인 경우 잔여 횟수 확인
+      // 결석 처리에서 이미 차감된 등록은 체크인 시 추가 차감하지 않는다.
+      const shouldDeductAtAttendance = currentRegistrationStatus !== 'absent';
+
+      // 실제 차감이 필요한 경우에만 잔여 횟수를 확인한다.
       if (
-        reservedMembershipId === null || reservedMembershipId === undefined
+        shouldDeductAtAttendance
+        && (reservedMembershipId === null || reservedMembershipId === undefined)
       ) {
         if (activeMembership.remaining_sessions <= 0) {
           await client.query('ROLLBACK');
           return res.status(400).json({ error: 'No remaining sessions' });
         }
       }
-
-      const shouldDeductAtAttendance = true;
 
       // 출석 기록 생성
       const attendanceResult = await client.query(
@@ -302,7 +305,6 @@ router.post('/',
         [resolvedClassId, customer_id, activeMembership.id]
       );
 
-      // 예약 시점에 차감된 회원권이면 중복 차감하지 않는다.
       if (
         shouldDeductAtAttendance
       ) {

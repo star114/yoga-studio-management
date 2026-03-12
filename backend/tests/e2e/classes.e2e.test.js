@@ -1149,6 +1149,51 @@ test('class registration and recurring routes cover core branches', async () => 
   });
   assert.equal(res.status, 200);
 
+  const cancelAdminRefundAttendanceClient = h.createDbClientMock();
+  cancelAdminRefundAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 8, membership_id: 501, attendance_status: 'reserved' }] },
+    {
+      rows: [
+        { id: 901, membership_id: 501, session_deducted: true },
+        { id: 902, membership_id: null, session_deducted: true },
+        { id: 903, membership_id: 777, session_deducted: false },
+      ],
+    },
+    { rows: [{ id: 501, remaining_sessions: 3 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(cancelAdminRefundAttendanceClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId',
+    params: { id: '11', customerId: '8' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.ok(
+    cancelAdminRefundAttendanceClient.queryCalls.some(
+      ([queryText, params]) =>
+        String(queryText).includes('UPDATE yoga_memberships')
+        && Array.isArray(params)
+        && params[0] === 501
+        && params[1] === 1
+    )
+  );
+  assert.ok(
+    cancelAdminRefundAttendanceClient.queryCalls.some(
+      ([queryText, params]) =>
+        String(queryText).includes('DELETE FROM yoga_attendances')
+        && Array.isArray(params)
+        && Array.isArray(params[0])
+        && params[0].includes(901)
+        && params[0].includes(902)
+        && params[0].includes(903)
+    )
+  );
+
   const cancelAdminAttendedClient = h.createDbClientMock();
   cancelAdminAttendedClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -1631,6 +1676,65 @@ test('registration status change reconciles attendance row and membership usage'
         && params[0] === 502
         && params[1] === 1
     )
+  );
+
+  const revertAbsentWithoutAttendanceRowsClient = h.createDbClientMock();
+  revertAbsentWithoutAttendanceRowsClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 100,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 503,
+          attendance_status: 'absent',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [] },
+    { rows: [{ id: 503, remaining_sessions: 1 }] },
+    {
+      rows: [
+        {
+          id: 100,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 503,
+          attendance_status: 'reserved',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(revertAbsentWithoutAttendanceRowsClient);
+  const revertAbsentWithoutAttendanceRowsRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(revertAbsentWithoutAttendanceRowsRes.status, 200);
+  assert.ok(
+    revertAbsentWithoutAttendanceRowsClient.queryCalls.some(
+      ([sql, params]) =>
+        typeof sql === 'string'
+        && sql.includes('UPDATE yoga_memberships')
+        && Array.isArray(params)
+        && params[0] === 503
+        && params[1] === 1
+    )
+  );
+  assert.equal(
+    revertAbsentWithoutAttendanceRowsClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('DELETE FROM yoga_attendances')
+    ),
+    false
   );
 
   const absentWithNullMembershipClient = h.createDbClientMock();

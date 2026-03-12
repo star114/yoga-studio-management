@@ -77,14 +77,6 @@ const cancelRegistrationAndRelatedAttendance = async (
     membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
   });
 
-  if (
-    registration.membership_id !== null
-    && registration.attendance_status !== 'reserved'
-    && !membershipUsage.has(registration.membership_id)
-  ) {
-    membershipUsage.set(registration.membership_id, 1);
-  }
-
   for (const [membershipId, usedCount] of membershipUsage.entries()) {
     await refundMembershipSessions(client, {
       membershipId,
@@ -704,39 +696,39 @@ router.put('/:id/registrations/:customerId/status',
           session_deducted: boolean;
         }>;
 
-        if (attendanceRows.length > 0) {
-          const membershipUsage = new Map<number, number>();
+        const membershipUsage = new Map<number, number>();
 
-          if (attendanceStatus === 'reserved') {
-            attendanceRows.forEach((attendanceRow) => {
-              if (!attendanceRow.session_deducted || attendanceRow.membership_id === null) {
-                return;
-              }
-              const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
-              membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
-            });
-
-            if (
-              currentRegistration.attendance_status === 'absent'
-              && currentRegistration.membership_id !== null
-              && !membershipUsage.has(currentRegistration.membership_id)
-            ) {
-              membershipUsage.set(currentRegistration.membership_id, 1);
+        if (attendanceStatus === 'reserved') {
+          attendanceRows.forEach((attendanceRow) => {
+            if (!attendanceRow.session_deducted || attendanceRow.membership_id === null) {
+              return;
             }
+            const usedCount = membershipUsage.get(attendanceRow.membership_id) ?? 0;
+            membershipUsage.set(attendanceRow.membership_id, usedCount + 1);
+          });
 
-            for (const [membershipId, usedCount] of membershipUsage.entries()) {
-              await refundMembershipSessions(client, {
-                membershipId,
-                changeAmount: usedCount,
-                actorUserId: req.user!.id,
-                classId,
-                registrationId: currentRegistration.id,
-                reason: 'registration_status_reserved_refund',
-                note: `Status changed from ${currentRegistration.attendance_status} to reserved`,
-              });
-            }
+          if (
+            currentRegistration.attendance_status === 'absent'
+            && currentRegistration.membership_id !== null
+            && !membershipUsage.has(currentRegistration.membership_id)
+          ) {
+            membershipUsage.set(currentRegistration.membership_id, 1);
           }
 
+          for (const [membershipId, usedCount] of membershipUsage.entries()) {
+            await refundMembershipSessions(client, {
+              membershipId,
+              changeAmount: usedCount,
+              actorUserId: req.user!.id,
+              classId,
+              registrationId: currentRegistration.id,
+              reason: 'registration_status_reserved_refund',
+              note: `Status changed from ${currentRegistration.attendance_status} to reserved`,
+            });
+          }
+        }
+
+        if (attendanceRows.length > 0) {
           const attendanceIds = attendanceRows.map((attendanceRow) => attendanceRow.id);
           await client.query(
             'DELETE FROM yoga_attendances WHERE id = ANY($1::int[])',
