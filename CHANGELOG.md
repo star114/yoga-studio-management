@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.3](https://github.com/star114/yoga-studio-management/compare/v2.4.2...v2.4.3) (2026-03-12)
+
+
+### Bug Fixes
+
+* harden membership lifecycle, reservations, and cleanup ([#45](https://github.com/star114/yoga-studio-management/issues/45)) ([1abd4d2](https://github.com/star114/yoga-studio-management/commit/1abd4d29b73d9c5bfeb6b377588e1f9e81f697ad))
+
 ## [2.4.2](https://github.com/star114/yoga-studio-management/compare/v2.4.1...v2.4.2) (2026-03-11)
 
 
