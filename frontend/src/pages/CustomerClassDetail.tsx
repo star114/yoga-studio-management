@@ -80,6 +80,7 @@ const CustomerClassDetail: React.FC = () => {
     activeClassIdRef.current = classId;
     setIsThreadLoading(false);
     setIsThreadSaving(false);
+    setIsSavingComment(false);
 
     if (user?.role !== 'customer') {
       setIsLoading(false);
@@ -211,21 +212,28 @@ const CustomerClassDetail: React.FC = () => {
   };
 
   const persistComment = async (rawComment: string) => {
+    const requestClassId = classId;
     const mergedComment = rawComment.trim();
     try {
       setError('');
       setIsSavingComment(true);
-      await classAPI.updateMyRegistrationComment(classId, mergedComment);
-      setDetail((prev) => (
-        prev
-          ? { ...prev, registration_comment: mergedComment || null }
-          : prev
-      ));
+      await classAPI.updateMyRegistrationComment(requestClassId, mergedComment);
+      if (activeClassIdRef.current !== requestClassId) {
+        return;
+      }
+      if (detail) {
+        setDetail({ ...detail, registration_comment: mergedComment || null });
+      }
     } catch (saveError: unknown) {
+      if (activeClassIdRef.current !== requestClassId) {
+        return;
+      }
       console.error('Failed to save registration comment:', saveError);
       setError(parseApiError(saveError, '강사에게 전달할 코멘트를 저장하지 못했습니다.'));
     } finally {
-      setIsSavingComment(false);
+      if (activeClassIdRef.current === requestClassId) {
+        setIsSavingComment(false);
+      }
     }
   };
 

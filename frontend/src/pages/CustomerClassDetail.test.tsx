@@ -407,6 +407,103 @@ describe('CustomerClassDetail page', () => {
     expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy();
   });
 
+  it('does not overwrite another reserved class detail with stale save response', async () => {
+    let resolveSave: (value: unknown) => void = () => {};
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '첫 번째 수업',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: null,
+      },
+    });
+    classUpdateMyRegistrationCommentMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveSave = resolve;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '두 번째 수업',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'reserved',
+        registration_comment: '두 번째 코멘트',
+      },
+    });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText('두 번째 코멘트')).toBeTruthy());
+
+    resolveSave({});
+    await Promise.resolve();
+    expect(screen.getByText('두 번째 코멘트')).toBeTruthy();
+  });
+
+  it('ignores stale reserved comment save error after route changes', async () => {
+    let rejectSave: (reason?: unknown) => void = () => {};
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '첫 번째 수업',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: null,
+      },
+    });
+    classUpdateMyRegistrationCommentMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectSave = reject;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '두 번째 수업',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'reserved',
+        registration_comment: '두 번째 코멘트',
+      },
+    });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText('두 번째 코멘트')).toBeTruthy());
+
+    rejectSave(new Error('late save failure'));
+    await Promise.resolve();
+    expect(screen.queryByText('요청 실패')).toBeNull();
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
   it('keeps detail and shows error banner when a later reload fails', async () => {
     const { rerender } = renderPage();
     await waitFor(() => expect(screen.getByText('수업 상세 로딩 중...')).toBeTruthy());

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceAPI, classAPI } from '../services/api';
@@ -74,6 +74,7 @@ const CustomerDashboard: React.FC = () => {
   const [isDirectCommentOpen, setIsDirectCommentOpen] = useState(false);
   const [directCommentInput, setDirectCommentInput] = useState('');
   const [isSavingComment, setIsSavingComment] = useState(false);
+  const loadedThreadClassIdsRef = useRef<Set<number>>(new Set());
 
   const loadAttendanceData = useCallback(async () => {
     try {
@@ -102,50 +103,8 @@ const CustomerDashboard: React.FC = () => {
       ));
       setRecentAttendances(sortedAttendances);
       setAttendancePage(1);
-
-      const recentClassIds = Array.from(new Set(
-        sortedAttendances
-          .map((item) => (typeof item.class_id === 'number' ? item.class_id : null))
-          .filter((id): id is number => id !== null)
-      ));
-
-      if (recentClassIds.length === 0) {
-        setPendingConversations([]);
-        return;
-      }
-
-      const threadResults = await Promise.allSettled(
-        recentClassIds.map((classId) => classAPI.getMyCommentThread(classId))
-      );
-
-      const pendingItems: PendingConversation[] = [];
-
-      threadResults.forEach((result, index) => {
-        if (result.status !== 'fulfilled') {
-          return;
-        }
-        const classId = recentClassIds[index];
-        const messages = (result.value.data?.messages || []) as AttendanceCommentMessage[];
-        if (messages.length === 0) {
-          return;
-        }
-
-        const lastMessage = messages[messages.length - 1];
-
-        const classInfo = sortedAttendances.find((item) => item.class_id === classId);
-        pendingItems.push({
-          class_id: classId,
-          title: String(classInfo?.class_title || classInfo?.class_type || `수업 #${classId}`),
-          class_date: classInfo?.class_date || classInfo?.attendance_date || '',
-          messages,
-          last_created_at: lastMessage.created_at,
-        });
-      });
-
-      pendingItems.sort((a, b) => (
-        new Date(b.last_created_at).getTime() - new Date(a.last_created_at).getTime()
-      ));
-      setPendingConversations(pendingItems);
+      loadedThreadClassIdsRef.current.clear();
+      setPendingConversations([]);
     } catch (error) {
       console.error('Failed to load attendance data:', error);
     } finally {
@@ -223,10 +182,83 @@ const CustomerDashboard: React.FC = () => {
     const startIndex = (attendancePage - 1) * ATTENDANCE_PAGE_SIZE;
     return recentAttendances.slice(startIndex, startIndex + ATTENDANCE_PAGE_SIZE);
   }, [attendancePage, recentAttendances]);
+  const visibleAttendanceClassIds = useMemo(() => Array.from(new Set(
+    attendedSummary
+      .map((item) => (typeof item.class_id === 'number' ? item.class_id : null))
+      .filter((classId): classId is number => classId !== null)
+  )), [attendedSummary]);
   const pendingConversationByClassId = useMemo(
     () => new Map(pendingConversations.map((item) => [item.class_id, item])),
     [pendingConversations]
   );
+
+  useEffect(() => {
+    const classIdsToFetch = visibleAttendanceClassIds.filter((classId) => !loadedThreadClassIdsRef.current.has(classId));
+    if (classIdsToFetch.length === 0) {
+      return;
+    }
+
+    classIdsToFetch.forEach((classId) => {
+      loadedThreadClassIdsRef.current.add(classId);
+    });
+
+    let cancelled = false;
+
+    const loadVisibleThreads = async () => {
+      const threadResults = await Promise.allSettled(
+        classIdsToFetch.map((classId) => classAPI.getMyCommentThread(classId))
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      const nextItems: PendingConversation[] = [];
+
+      threadResults.forEach((result, index) => {
+        if (result.status !== 'fulfilled') {
+          return;
+        }
+
+        const classId = classIdsToFetch[index];
+        const messages = (result.value.data?.messages || []) as AttendanceCommentMessage[];
+        if (messages.length === 0) {
+          return;
+        }
+
+        const classInfo = recentAttendances.find((item) => item.class_id === classId);
+        const lastMessage = messages[messages.length - 1];
+
+        nextItems.push({
+          class_id: classId,
+          title: String(classInfo?.class_title || classInfo?.class_type || `수업 #${classId}`),
+          class_date: classInfo?.class_date || classInfo?.attendance_date || '',
+          messages,
+          last_created_at: lastMessage.created_at,
+        });
+      });
+
+      if (nextItems.length === 0) {
+        return;
+      }
+
+      setPendingConversations((prev) => {
+        const merged = new Map(prev.map((item) => [item.class_id, item]));
+        nextItems.forEach((item) => {
+          merged.set(item.class_id, item);
+        });
+        return [...merged.values()].sort((a, b) => (
+          new Date(b.last_created_at).getTime() - new Date(a.last_created_at).getTime()
+        ));
+      });
+    };
+
+    void loadVisibleThreads();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recentAttendances, visibleAttendanceClassIds]);
 
   if (isLoading) {
     return (
