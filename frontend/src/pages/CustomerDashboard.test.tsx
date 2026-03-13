@@ -87,7 +87,7 @@ describe('CustomerDashboard page', () => {
     expect(screen.getByText('예정된 수업이 없습니다')).toBeTruthy();
     expect(screen.getByText('최근 출석 수업이 없습니다.')).toBeTruthy();
     expect(screen.queryByText('수업 후 코멘트 대화')).toBeNull();
-    expect(attendanceGetAllMock).toHaveBeenCalledWith({ customer_id: 1, limit: 20 });
+    expect(attendanceGetAllMock).toHaveBeenCalledWith({ customer_id: 1, limit: 200 });
     expect(classGetMyRegistrationsMock).toHaveBeenCalled();
     expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
   });
@@ -201,6 +201,39 @@ describe('CustomerDashboard page', () => {
     expect(disabledBtn).toHaveProperty('disabled', true);
     fireEvent.click(enabledBtn);
     expect(navigateMock).toHaveBeenCalledWith('/classes/22', { state: { from: '/' } });
+  });
+
+  it('paginates all recent attendances instead of limiting to three cards', async () => {
+    attendanceGetAllMock.mockResolvedValueOnce({
+      data: [
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+        { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
+      ],
+    });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
+    expect(screen.getByText('6개 중 1-5개')).toBeTruthy();
+    expect(screen.getByText('1 / 2')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /여섯째 수업/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /둘째 수업/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /첫째 수업/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+
+    await waitFor(() => expect(screen.getByText('6개 중 6-6개')).toBeTruthy());
+    expect(screen.getByText('2 / 2')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /첫째 수업/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /여섯째 수업/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
+    await waitFor(() => expect(screen.getByText('6개 중 1-5개')).toBeTruthy());
   });
 
   it('embeds class comment conversations in attended class cards', async () => {

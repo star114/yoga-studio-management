@@ -43,6 +43,7 @@ interface PendingConversation {
 }
 
 const normalizeDate = (value: string) => value.slice(0, 10);
+const ATTENDANCE_PAGE_SIZE = 5;
 const QUICK_COMMENT_OPTIONS = [
   '월경 중입니다',
   '오늘은 조용히 수련하고 싶어요',
@@ -66,6 +67,7 @@ const CustomerDashboard: React.FC = () => {
   const [nextUpcomingClass, setNextUpcomingClass] = useState<MyRegistrationClass | null>(null);
   const [recentAttendances, setRecentAttendances] = useState<CustomerAttendance[]>([]);
   const [pendingConversations, setPendingConversations] = useState<PendingConversation[]>([]);
+  const [attendancePage, setAttendancePage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedQuickComments, setSelectedQuickComments] = useState<string[]>([]);
   const [customCommentChips, setCustomCommentChips] = useState<string[]>([]);
@@ -76,7 +78,7 @@ const CustomerDashboard: React.FC = () => {
   const loadAttendanceData = useCallback(async () => {
     try {
       const [attendancesRes, registrationsRes] = await Promise.all([
-        attendanceAPI.getAll({ customer_id: customerInfo.id, limit: 20 }),
+        attendanceAPI.getAll({ customer_id: customerInfo.id, limit: 200 }),
         classAPI.getMyRegistrations(),
       ]);
 
@@ -98,13 +100,14 @@ const CustomerDashboard: React.FC = () => {
       const sortedAttendances = [...attendanceItems].sort((a, b) => (
         new Date(b.attendance_date).getTime() - new Date(a.attendance_date).getTime()
       ));
-      setRecentAttendances(sortedAttendances.slice(0, 5));
+      setRecentAttendances(sortedAttendances);
+      setAttendancePage(1);
 
       const recentClassIds = Array.from(new Set(
         sortedAttendances
           .map((item) => (typeof item.class_id === 'number' ? item.class_id : null))
           .filter((id): id is number => id !== null)
-      )).slice(0, 8);
+      ));
 
       if (recentClassIds.length === 0) {
         setPendingConversations([]);
@@ -212,7 +215,14 @@ const CustomerDashboard: React.FC = () => {
     await saveComment(selectedQuickComments, nextCustomChips.join('\n'));
   };
 
-  const attendedSummary = useMemo(() => recentAttendances.slice(0, 3), [recentAttendances]);
+  const attendanceTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(recentAttendances.length / ATTENDANCE_PAGE_SIZE)),
+    [recentAttendances.length]
+  );
+  const attendedSummary = useMemo(() => {
+    const startIndex = (attendancePage - 1) * ATTENDANCE_PAGE_SIZE;
+    return recentAttendances.slice(startIndex, startIndex + ATTENDANCE_PAGE_SIZE);
+  }, [attendancePage, recentAttendances]);
   const pendingConversationByClassId = useMemo(
     () => new Map(pendingConversations.map((item) => [item.class_id, item])),
     [pendingConversations]
@@ -346,9 +356,39 @@ const CustomerDashboard: React.FC = () => {
       </div>
 
       <section className="card space-y-4">
-        <div>
-          <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
-          <p className="text-sm text-warm-600">최근 출석 수업과 수업 후 코멘트 대화를 함께 확인할 수 있습니다.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
+            <p className="text-sm text-warm-600">최근 출석 수업과 수업 후 코멘트 대화를 함께 확인할 수 있습니다.</p>
+          </div>
+          {recentAttendances.length > 0 && (
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
+              <p className="text-xs text-warm-600">
+                {recentAttendances.length}개 중 {(attendancePage - 1) * ATTENDANCE_PAGE_SIZE + 1}-{Math.min(attendancePage * ATTENDANCE_PAGE_SIZE, recentAttendances.length)}개
+              </p>
+              <div className="inline-flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+                  disabled={attendancePage === 1}
+                  onClick={() => setAttendancePage((prev) => Math.max(1, prev - 1))}
+                >
+                  이전
+                </button>
+                <span className="text-sm font-medium text-primary-800">
+                  {attendancePage} / {attendanceTotalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+                  disabled={attendancePage === attendanceTotalPages}
+                  onClick={() => setAttendancePage((prev) => Math.min(attendanceTotalPages, prev + 1))}
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         {attendedSummary.length === 0 ? (
           <p className="text-warm-500 py-4">최근 출석 수업이 없습니다.</p>
