@@ -174,7 +174,7 @@ describe('AdminDashboard page', () => {
     await waitFor(() => expect(screen.getAllByText('수업 없음').length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
     fireEvent.click(screen.getByRole('button', { name: '이전' }));
-    expect(screen.getAllByText('닫힘').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('마감').length).toBeGreaterThan(0);
     expect(screen.getByText('16:00 - 17:00')).toBeTruthy();
     fireEvent.click(screen.getAllByText('수업 없음')[0].closest('button') as HTMLButtonElement);
 
@@ -183,8 +183,8 @@ describe('AdminDashboard page', () => {
     fireEvent.click(screen.getByRole('button', { name: '오늘' }));
     fireEvent.click(screen.getByRole('button', { name: '일간' }));
     await waitFor(() => expect(screen.getAllByText('접수중').length).toBeGreaterThan(0));
-    expect(screen.getByText('완료')).toBeTruthy();
-    expect(screen.getByText('진행중')).toBeTruthy();
+    expect(screen.getAllByText('완료').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('진행중').length).toBeGreaterThan(0);
     expect(screen.getAllByText('마감').length).toBeGreaterThan(0);
     expect(screen.getByText('기본상태수업')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '다음' }));

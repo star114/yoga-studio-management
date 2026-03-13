@@ -49,11 +49,47 @@ interface DashboardClass {
 }
 
 type CalendarView = 'month' | 'week' | 'day';
+type AdminClassStatus = 'open' | 'in_progress' | 'completed' | 'closed';
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 const normalizeTime = (value: string) => value.slice(0, 5);
 const normalizeDate = (value: string) => value.slice(0, 10);
+
+const getAdminClassStatusMeta = (item: DashboardClass) => {
+  const status = (item.class_status || 'open') as AdminClassStatus;
+
+  switch (status) {
+    case 'completed':
+      return {
+        label: '완료',
+        badgeClassName: 'bg-slate-200 text-slate-800 border-slate-300',
+        cardClassName: 'bg-slate-50/90 border-slate-300 text-slate-900',
+        subtleTextClassName: 'text-slate-700',
+      };
+    case 'in_progress':
+      return {
+        label: '진행중',
+        badgeClassName: 'bg-sky-100 text-sky-800 border-sky-200',
+        cardClassName: 'bg-sky-50/90 border-sky-200 text-sky-950',
+        subtleTextClassName: 'text-sky-800',
+      };
+    case 'closed':
+      return {
+        label: '마감',
+        badgeClassName: 'bg-rose-100 text-rose-800 border-rose-200',
+        cardClassName: 'bg-rose-50/90 border-rose-200 text-rose-950',
+        subtleTextClassName: 'text-rose-800',
+      };
+    default:
+      return {
+        label: '접수중',
+        badgeClassName: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        cardClassName: 'bg-emerald-50/90 border-emerald-200 text-emerald-950',
+        subtleTextClassName: 'text-emerald-800',
+      };
+  }
+};
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -167,29 +203,24 @@ const AdminDashboard: React.FC = () => {
   };
 
   const renderClassChip = (item: DashboardClass) => {
-    const status = item.class_status || 'open';
-    const closed = status === 'closed' || status === 'completed';
-    const statusLabel =
-      status === 'completed'
-        ? '완료'
-        : status === 'in_progress'
-          ? '진행중'
-          : status === 'closed'
-              ? '닫힘'
-              : '오픈';
+    const meta = getAdminClassStatusMeta(item);
     return (
       <div
         key={item.id}
-        className={`rounded-lg px-2 py-1.5 text-xs border ${closed ? 'bg-gray-100 border-gray-200 text-gray-500' : 'bg-primary-50 border-primary-100 text-primary-800'}`}
+        className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm ${meta.cardClassName}`}
       >
-        <p className="font-medium truncate">{item.title}</p>
-        <p className="text-[11px]">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-semibold truncate">{item.title}</p>
+          <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${meta.badgeClassName}`}>
+            {meta.label}
+          </span>
+        </div>
+        <p className={`text-[11px] ${meta.subtleTextClassName}`}>
           {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
           {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number'
             ? ` · ${item.current_enrollment}/${item.max_capacity}`
             : ''}
         </p>
-        <p className="text-[10px] mt-0.5">{statusLabel}</p>
       </div>
     );
   };
@@ -293,6 +324,16 @@ const AdminDashboard: React.FC = () => {
         <div className="flex items-center">
           <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {(['open', 'in_progress', 'completed', 'closed'] as AdminClassStatus[]).map((status) => {
+            const meta = getAdminClassStatusMeta({ class_status: status } as DashboardClass);
+            return (
+              <span key={status} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium ${meta.badgeClassName}`}>
+                {meta.label}
+              </span>
+            );
+          })}
+        </div>
 
         {calendarView === 'month' && (
           <div className="space-y-2">
@@ -379,35 +420,34 @@ const AdminDashboard: React.FC = () => {
             ) : (
               <div className="space-y-2">
                 {selectedDayClasses.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      window.location.href = `/classes/${item.id}`;
-                    }}
-                    className="w-full rounded-lg border border-warm-200 bg-warm-50 p-3 text-left hover:bg-warm-100 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-primary-800">{item.title}</p>
-                        <p className="text-sm text-warm-600">
-                          {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
-                        </p>
-                      </div>
-                      <span className={`px-2.5 py-1 text-xs rounded-full ${item.is_open === false ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'}`}>
-                        {item.class_status === 'completed'
-                          ? '완료'
-                          : item.class_status === 'in_progress'
-                            ? '진행중'
-                            : item.is_open === false
-                                ? '마감'
-                                : '접수중'}
-                      </span>
-                    </div>
-                    {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number' && (
-                      <p className="mt-2 text-sm text-warm-700">신청: {item.current_enrollment}/{item.max_capacity}</p>
-                    )}
-                  </button>
+                  (() => {
+                    const meta = getAdminClassStatusMeta(item);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          window.location.href = `/classes/${item.id}`;
+                        }}
+                        className={`w-full rounded-xl border p-3 text-left shadow-sm transition-colors hover:brightness-[0.98] ${meta.cardClassName}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{item.title}</p>
+                            <p className={`text-sm ${meta.subtleTextClassName}`}>
+                              {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
+                            </p>
+                          </div>
+                          <span className={`px-2.5 py-1 text-xs rounded-full border font-bold ${meta.badgeClassName}`}>
+                            {meta.label}
+                          </span>
+                        </div>
+                        {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number' && (
+                          <p className={`mt-2 text-sm ${meta.subtleTextClassName}`}>신청: {item.current_enrollment}/{item.max_capacity}</p>
+                        )}
+                      </button>
+                    );
+                  })()
                 ))}
               </div>
             )}

@@ -67,6 +67,7 @@ interface CustomerCalendarEntry {
 }
 
 type CalendarView = 'month' | 'week' | 'day';
+type CustomerEntryStatus = 'reserved' | 'attended' | 'absent';
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -82,11 +83,40 @@ const formatConsumedSummary = (membership: CustomerMembership) => {
   return `${consumedSessions} / ${membership.total_sessions}회`;
 };
 
-const isAfterGraceTime = (entry: CustomerCalendarEntry, now: Date) => {
-  if (!entry.start_time) return false;
-  const classStart = new Date(`${normalizeDate(entry.class_date)}T${String(entry.start_time).slice(0, 8)}`);
-  const graceTime = new Date(classStart.getTime() + 15 * 60 * 1000);
-  return now >= graceTime;
+const getEntryStatus = (entry: CustomerCalendarEntry): CustomerEntryStatus => {
+  if (entry.attendance_status === 'absent') {
+    return 'absent';
+  }
+  if (entry.source === 'attendance' || entry.attendance_status === 'attended') {
+    return 'attended';
+  }
+  return 'reserved';
+};
+
+const getEntryStatusMeta = (status: CustomerEntryStatus) => {
+  switch (status) {
+    case 'attended':
+      return {
+        label: '출석',
+        badgeClassName: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        cardClassName: 'bg-emerald-50/85 border-emerald-200 text-emerald-950',
+        subtleTextClassName: 'text-emerald-700',
+      };
+    case 'absent':
+      return {
+        label: '결석',
+        badgeClassName: 'bg-rose-100 text-rose-800 border-rose-200',
+        cardClassName: 'bg-rose-50/85 border-rose-200 text-rose-950',
+        subtleTextClassName: 'text-rose-700',
+      };
+    default:
+      return {
+        label: '예약',
+        badgeClassName: 'bg-amber-100 text-amber-900 border-amber-200',
+        cardClassName: 'bg-amber-50/90 border-amber-200 text-amber-950',
+        subtleTextClassName: 'text-amber-800',
+      };
+  }
 };
 
 const mergeCalendarEntries = (
@@ -263,8 +293,6 @@ const CustomerMemberships: React.FC = () => {
     );
   }
 
-  const now = new Date();
-
   return (
     <div className="space-y-6 fade-in">
       <div>
@@ -371,6 +399,16 @@ const CustomerMemberships: React.FC = () => {
         <div className="flex items-center">
           <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {(['reserved', 'attended', 'absent'] as CustomerEntryStatus[]).map((status) => {
+            const meta = getEntryStatusMeta(status);
+            return (
+              <span key={status} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium ${meta.badgeClassName}`}>
+                {meta.label}
+              </span>
+            );
+          })}
+        </div>
 
         {calendarView === 'month' && (
           <div className="space-y-2">
@@ -403,12 +441,21 @@ const CustomerMemberships: React.FC = () => {
                     </div>
 
                     <div className="mt-1 sm:mt-2 space-y-1 hidden sm:block">
-                      {dayEntries.slice(0, 2).map((item) => (
-                        <div key={item.id} className={`rounded-lg px-2 py-1.5 text-xs border ${item.source === 'registration' ? 'bg-primary-50 border-primary-100 text-primary-800' : 'bg-warm-50 border-warm-200 text-warm-700'}`}>
-                          <p className="font-medium truncate">{item.title}</p>
-                          <p className="text-[11px]">{normalizeTime(item.start_time)}</p>
-                        </div>
-                      ))}
+                      {dayEntries.slice(0, 2).map((item) => {
+                        const status = getEntryStatus(item);
+                        const meta = getEntryStatusMeta(status);
+                        return (
+                          <div key={item.id} className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm ${meta.cardClassName}`}>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-semibold truncate">{item.title}</p>
+                              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${meta.badgeClassName}`}>
+                                {meta.label}
+                              </span>
+                            </div>
+                            <p className={`text-[11px] ${meta.subtleTextClassName}`}>{normalizeTime(item.start_time)}</p>
+                          </div>
+                        );
+                      })}
                       {dayEntries.length > 2 && (
                         <p className="text-[11px] text-warm-600">+{dayEntries.length - 2}개 더 있음</p>
                       )}
@@ -416,17 +463,14 @@ const CustomerMemberships: React.FC = () => {
 
                     <div className="sm:hidden mt-1 space-y-0.5 min-h-[10px]">
                       {dayEntries.slice(0, 2).map((item) => {
-                        const attended = item.source === 'attendance'
-                          || item.attendance_status === 'attended'
-                          || (item.attendance_status === 'reserved' && isAfterGraceTime(item, now));
-                        const absent = item.attendance_status === 'absent';
+                        const meta = getEntryStatusMeta(getEntryStatus(item));
                         return (
-                          <p
+                          <span
                             key={item.id}
-                            className={`text-[10px] leading-tight font-bold ${absent ? 'text-gray-600' : attended ? 'text-green-600' : 'text-red-600'}`}
+                            className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${meta.badgeClassName}`}
                           >
-                            {absent ? '결석' : attended ? '출석' : '예약'}
-                          </p>
+                            {meta.label}
+                          </span>
                         );
                       })}
                       {dayEntries.length > 2 && (
@@ -463,12 +507,21 @@ const CustomerMemberships: React.FC = () => {
                     {dayEntries.length === 0 ? (
                       <p className="text-xs text-warm-500">수업 없음</p>
                     ) : (
-                      dayEntries.map((item) => (
-                        <div key={item.id} className={`rounded-lg px-2 py-1.5 text-xs border ${item.source === 'registration' ? 'bg-primary-50 border-primary-100 text-primary-800' : 'bg-warm-50 border-warm-200 text-warm-700'}`}>
-                          <p className="font-medium truncate">{item.title}</p>
-                          <p className="text-[11px]">{normalizeTime(item.start_time)}</p>
-                        </div>
-                      ))
+                      dayEntries.map((item) => {
+                        const status = getEntryStatus(item);
+                        const meta = getEntryStatusMeta(status);
+                        return (
+                          <div key={item.id} className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm ${meta.cardClassName}`}>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-semibold truncate">{item.title}</p>
+                              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${meta.badgeClassName}`}>
+                                {meta.label}
+                              </span>
+                            </div>
+                            <p className={`text-[11px] ${meta.subtleTextClassName}`}>{normalizeTime(item.start_time)}</p>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </button>
@@ -485,32 +538,38 @@ const CustomerMemberships: React.FC = () => {
             ) : (
               <div className="space-y-2">
                 {selectedDayEntries.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      if (item.class_id) {
-                        navigate(`/classes/${item.class_id}`, {
-                          state: { from: `${location.pathname}${location.search}${location.hash}` },
-                        });
-                      }
-                    }}
-                    disabled={!item.class_id}
-                    className="w-full rounded-lg border border-warm-200 bg-warm-50 p-3 text-left disabled:opacity-60 disabled:cursor-not-allowed hover:bg-warm-100 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-primary-800">{item.title}</p>
-                        <p className="text-sm text-warm-600">
-                          {normalizeTime(item.start_time)}
-                          {item.end_time ? ` - ${normalizeTime(item.end_time)}` : ''}
-                        </p>
-                      </div>
-                      <span className={`px-2.5 py-1 text-xs rounded-full ${item.source === 'registration' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                        {item.source === 'registration' ? '예정' : '완료'}
-                      </span>
-                    </div>
-                  </button>
+                  (() => {
+                    const status = getEntryStatus(item);
+                    const meta = getEntryStatusMeta(status);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if (item.class_id) {
+                            navigate(`/classes/${item.class_id}`, {
+                              state: { from: `${location.pathname}${location.search}${location.hash}` },
+                            });
+                          }
+                        }}
+                        disabled={!item.class_id}
+                        className={`w-full rounded-xl border p-3 text-left shadow-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors hover:brightness-[0.98] ${meta.cardClassName}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{item.title}</p>
+                            <p className={`text-sm ${meta.subtleTextClassName}`}>
+                              {normalizeTime(item.start_time)}
+                              {item.end_time ? ` - ${normalizeTime(item.end_time)}` : ''}
+                            </p>
+                          </div>
+                          <span className={`px-2.5 py-1 text-xs rounded-full border font-bold ${meta.badgeClassName}`}>
+                            {meta.label}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })()
                 ))}
               </div>
             )}
