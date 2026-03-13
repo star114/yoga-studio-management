@@ -17,6 +17,7 @@ const {
   classPostRegistrationCommentThreadMock,
   attendanceCheckInMock,
   customerGetAllMock,
+  membershipGetByCustomerMock,
   parseApiErrorMock,
   shouldConfirmCrossMembershipRegistrationMock,
   getCrossMembershipConfirmationMessageMock,
@@ -32,6 +33,7 @@ const {
   classPostRegistrationCommentThreadMock: vi.fn(),
   attendanceCheckInMock: vi.fn(),
   customerGetAllMock: vi.fn(),
+  membershipGetByCustomerMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
   shouldConfirmCrossMembershipRegistrationMock: vi.fn(() => false),
   getCrossMembershipConfirmationMessageMock: vi.fn(() => '회원권이 없는데 등록하시겠어요? 다른 회원권에서 1회 차감됩니다.'),
@@ -63,6 +65,9 @@ vi.mock('../services/api', () => ({
   },
   customerAPI: {
     getAll: customerGetAllMock,
+  },
+  membershipAPI: {
+    getByCustomer: membershipGetByCustomerMock,
   },
   attendanceAPI: {
     checkIn: attendanceCheckInMock,
@@ -117,6 +122,14 @@ const seedLoad = (overrides?: Record<string, unknown>) => {
       { id: 101, name: '홍길동', phone: '010-1111-2222' },
       { id: 102, name: '김영희', phone: '010-2222-3333' },
       { id: 103, name: '박민수', phone: '010-9999-8888' },
+    ],
+  });
+  membershipGetByCustomerMock.mockResolvedValue({
+    data: [
+      { id: 31, membership_type_name: '빈야사 10회권', remaining_sessions: 8, available_sessions: 6, is_active: true },
+      { id: 32, membership_type_name: '필라테스 20회권', remaining_sessions: 12, available_sessions: 11, is_active: true },
+      { id: 33, membership_type_name: '소진된 5회권', remaining_sessions: 1, available_sessions: 0, is_active: true },
+      { id: 34, membership_type_name: '비활성 10회권', remaining_sessions: 10, available_sessions: 10, is_active: false },
     ],
   });
 };
@@ -413,6 +426,148 @@ describe('ClassDetail page', () => {
       mark_attended_after_register: true,
     }));
     await waitFor(() => expect(screen.getByText('사후 출석 등록을 완료했습니다.')).toBeTruthy());
+  });
+
+  it('loads memberships for selected customer and sends chosen membership id', async () => {
+    classRegisterMock.mockResolvedValueOnce(undefined);
+    classGetRegistrationsMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 2,
+            class_id: 1,
+            customer_id: 102,
+            registered_at: '2026-03-01T02:00:00.000Z',
+            registration_comment: '',
+            customer_name: '김영희',
+            customer_phone: '010-2222-3333',
+          },
+        ],
+      });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+
+    await waitFor(() => expect(membershipGetByCustomerMock).toHaveBeenCalledWith(102));
+    await waitFor(() => expect(screen.getByText('회원권을 지정하지 않으면 기존 규칙대로 자동 선택합니다.')).toBeTruthy());
+    expect(screen.queryByRole('option', { name: /소진된 5회권/ })).toBeNull();
+    expect(screen.queryByRole('option', { name: /비활성 10회권/ })).toBeNull();
+    fireEvent.change(screen.getByLabelText('사용할 회원권'), { target: { value: '32' } });
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenCalledWith(1, {
+      customer_id: 102,
+      membership_id: 32,
+    }));
+  });
+
+  it('shows membership load error under selector', async () => {
+    membershipGetByCustomerMock.mockRejectedValueOnce(new Error('membership load failed'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('shows empty-state hint when customer has no reservable active memberships', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        { id: 50, membership_type_name: '소진됨', remaining_sessions: 0, available_sessions: 0, is_active: true },
+        { id: 51, membership_type_name: '비활성', remaining_sessions: 5, available_sessions: 5, is_active: false },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+
+    await waitFor(() => expect(screen.getByText('예약 가능한 활성 회원권이 없습니다. 선택 없이 진행하면 서버 기준으로 등록 가능 여부를 다시 확인합니다.')).toBeTruthy());
+  });
+
+  it('auto-selects membership when exactly one reservable active membership exists', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        { id: 77, membership_type_name: '유일한 회원권', remaining_sessions: 3, available_sessions: 1, is_active: true },
+        { id: 78, membership_type_name: '비활성 회원권', remaining_sessions: 5, available_sessions: 5, is_active: false },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+
+    await waitFor(() => expect((screen.getByLabelText('사용할 회원권') as HTMLSelectElement).value).toBe('77'));
+  });
+
+  it('uses remaining sessions fallback when available sessions is missing', async () => {
+    membershipGetByCustomerMock.mockResolvedValueOnce({
+      data: [
+        { id: 79, membership_type_name: 'fallback 회원권', remaining_sessions: 4, is_active: true },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+
+    await waitFor(() => expect(screen.getByRole('option', { name: 'fallback 회원권 · 예약 가능 4회 / 잔여 4회' })).toBeTruthy());
+  });
+
+  it('ignores membership load failure after component unmount', async () => {
+    let rejectMembershipLoad: (reason?: unknown) => void = () => {};
+    membershipGetByCustomerMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectMembershipLoad = reject;
+      })
+    );
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { unmount } = renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    unmount();
+
+    rejectMembershipLoad(new Error('late membership failure'));
+    await Promise.resolve();
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('ignores late membership load success after customer selection is cleared', async () => {
+    let resolveMembershipLoad: (value: unknown) => void = () => {};
+    membershipGetByCustomerMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveMembershipLoad = resolve;
+      })
+    );
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '' } });
+
+    resolveMembershipLoad({
+      data: [
+        { id: 77, membership_type_name: '늦게 온 회원권', remaining_sessions: 3, available_sessions: 2, is_active: true },
+      ],
+    });
+
+    await Promise.resolve();
+    expect(screen.queryByRole('option', { name: /늦게 온 회원권/ })).toBeNull();
   });
 
   it('shows parsed error when manual register fails', async () => {
@@ -993,6 +1148,32 @@ describe('ClassDetail page', () => {
       allow_cross_membership_registration: true,
     }));
     await waitFor(() => expect(screen.getByText('다른 회원권 차감으로 수동 신청이 등록되었습니다.')).toBeTruthy());
+  });
+
+  it('keeps selected membership id when retrying manual registration after cross-membership confirmation', async () => {
+    const crossMembershipError = new AxiosError('cross membership required');
+    shouldConfirmCrossMembershipRegistrationMock.mockReturnValueOnce(true);
+    classRegisterMock
+      .mockRejectedValueOnce(crossMembershipError)
+      .mockResolvedValueOnce(undefined);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '수동 신청 등록' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
+    await waitFor(() => expect(screen.getByLabelText('사용할 회원권')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('사용할 회원권'), { target: { value: '31' } });
+    fireEvent.click(screen.getByRole('button', { name: '수동 신청 등록' }));
+
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(1, 1, {
+      customer_id: 102,
+      membership_id: 31,
+    }));
+    await waitFor(() => expect(classRegisterMock).toHaveBeenNthCalledWith(2, 1, {
+      customer_id: 102,
+      membership_id: 31,
+      allow_cross_membership_registration: true,
+    }));
   });
 
   it('retries post-attendance registration after cross-membership confirmation', async () => {

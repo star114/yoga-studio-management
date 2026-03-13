@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { attendanceAPI, classAPI, customerAPI } from '../services/api';
+import { attendanceAPI, classAPI, customerAPI, membershipAPI } from '../services/api';
 import {
   getCrossMembershipConfirmationMessage,
   parseApiError,
@@ -38,6 +38,14 @@ interface Customer {
   phone: string;
 }
 
+interface MembershipOption {
+  id: number;
+  membership_type_name: string;
+  remaining_sessions: number;
+  available_sessions?: number;
+  is_active: boolean;
+}
+
 interface ClassRegistration {
   id: number;
   class_id: number;
@@ -73,6 +81,10 @@ const ClassDetail: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [manualRegisterSearch, setManualRegisterSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedMembershipId, setSelectedMembershipId] = useState('');
+  const [availableMemberships, setAvailableMemberships] = useState<MembershipOption[]>([]);
+  const [isMembershipLoading, setIsMembershipLoading] = useState(false);
+  const [membershipLoadError, setMembershipLoadError] = useState('');
   const [savingAttendanceStatusCustomerId, setSavingAttendanceStatusCustomerId] = useState<number | null>(null);
   const [loadingThreadCustomerIds, setLoadingThreadCustomerIds] = useState<Record<number, boolean>>({});
   const [savingThreadCustomerId, setSavingThreadCustomerId] = useState<number | null>(null);
@@ -122,6 +134,60 @@ const ClassDetail: React.FC = () => {
       || String(customer.id).includes(keyword)
     ));
   }, [manualRegisterSearch, unregisteredCustomers]);
+
+  useEffect(() => {
+    if (!selectedCustomerId) {
+      setSelectedMembershipId('');
+      setAvailableMemberships([]);
+      setMembershipLoadError('');
+      setIsMembershipLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMemberships = async () => {
+      try {
+        setIsMembershipLoading(true);
+        setMembershipLoadError('');
+        setSelectedMembershipId('');
+        const response = await membershipAPI.getByCustomer(Number(selectedCustomerId));
+        if (cancelled) {
+          return;
+        }
+
+        const selectableMemberships = (response.data as MembershipOption[]).filter((membership) => {
+          if (!membership.is_active) {
+            return false;
+          }
+
+          const availableSessions = membership.available_sessions ?? membership.remaining_sessions;
+          return availableSessions > 0;
+        });
+        setAvailableMemberships(selectableMemberships);
+        if (selectableMemberships.length === 1) {
+          setSelectedMembershipId(String(selectableMemberships[0].id));
+        }
+      } catch (loadError: unknown) {
+        if (cancelled) {
+          return;
+        }
+        console.error('Failed to load memberships for selected customer:', loadError);
+        setAvailableMemberships([]);
+        setMembershipLoadError(parseApiError(loadError, '회원권 목록을 불러오지 못했습니다.'));
+      } finally {
+        if (!cancelled) {
+          setIsMembershipLoading(false);
+        }
+      }
+    };
+
+    void loadMemberships();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCustomerId]);
 
   useEffect(() => {
     if (!Number.isInteger(classId) || classId < 1) {
@@ -323,10 +389,13 @@ const ClassDetail: React.FC = () => {
       setIsRegisterSubmitting(true);
       await classAPI.register(classId, {
         customer_id: customerId,
+        ...(selectedMembershipId ? { membership_id: Number(selectedMembershipId) } : {}),
         ...(isCompletedClass ? { mark_attended_after_register: true } : {}),
       });
       setManualRegisterSearch('');
       setSelectedCustomerId('');
+      setSelectedMembershipId('');
+      setAvailableMemberships([]);
       await refreshClassAndRegistrations();
       setNotice(isCompletedClass ? '사후 출석 등록을 완료했습니다.' : '수동 신청이 등록되었습니다.');
     } catch (registerError: unknown) {
@@ -337,11 +406,14 @@ const ClassDetail: React.FC = () => {
           try {
             await classAPI.register(classId, {
               customer_id: customerId,
+              ...(selectedMembershipId ? { membership_id: Number(selectedMembershipId) } : {}),
               allow_cross_membership_registration: true,
               ...(isCompletedClass ? { mark_attended_after_register: true } : {}),
             });
             setManualRegisterSearch('');
             setSelectedCustomerId('');
+            setSelectedMembershipId('');
+            setAvailableMemberships([]);
             await refreshClassAndRegistrations();
             setNotice(isCompletedClass
               ? '다른 회원권 차감으로 사후 출석 등록을 완료했습니다.'
@@ -720,6 +792,45 @@ const ClassDetail: React.FC = () => {
                   ))}
                 </select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="manual-register-membership" className="block text-sm font-medium text-warm-700 mb-1">
+                사용할 회원권
+              </label>
+              <select
+                id="manual-register-membership"
+                className="input-field h-11 bg-white"
+                value={selectedMembershipId}
+                onChange={(e) => setSelectedMembershipId(e.target.value)}
+                disabled={!selectedCustomerId || isMembershipLoading}
+              >
+                <option value="">
+                  {!selectedCustomerId
+                    ? '고객을 먼저 선택하세요'
+                    : isMembershipLoading
+                      ? '회원권 불러오는 중...'
+                      : '자동 선택(기존 로직 사용)'}
+                </option>
+                {availableMemberships.map((membership) => {
+                  const availableSessions = membership.available_sessions ?? membership.remaining_sessions;
+                  return (
+                    <option key={membership.id} value={membership.id}>
+                      {membership.membership_type_name} · 예약 가능 {availableSessions}회 / 잔여 {membership.remaining_sessions}회
+                    </option>
+                  );
+                })}
+              </select>
+              {membershipLoadError ? (
+                <p className="text-xs text-red-700">{membershipLoadError}</p>
+              ) : selectedCustomerId && !isMembershipLoading && availableMemberships.length === 0 ? (
+                <p className="text-xs text-warm-600">
+                  예약 가능한 활성 회원권이 없습니다. 선택 없이 진행하면 서버 기준으로 등록 가능 여부를 다시 확인합니다.
+                </p>
+              ) : selectedCustomerId && !isMembershipLoading ? (
+                <p className="text-xs text-warm-600">
+                  회원권을 지정하지 않으면 기존 규칙대로 자동 선택합니다.
+                </p>
+              ) : null}
             </div>
             {filteredUnregisteredCustomers.length === 0 ? (
               <p className="rounded-xl border border-dashed border-warm-300 bg-white px-3 py-2 text-sm text-warm-600">
