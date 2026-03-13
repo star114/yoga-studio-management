@@ -9,11 +9,13 @@ const {
   attendanceGetAllMock,
   classGetMyRegistrationsMock,
   navigateMock,
+  locationMock,
 } = vi.hoisted(() => ({
   membershipGetByCustomerMock: vi.fn(),
   attendanceGetAllMock: vi.fn(),
   classGetMyRegistrationsMock: vi.fn(),
   navigateMock: vi.fn(),
+  locationMock: { pathname: '/memberships', search: '', hash: '' },
 }));
 
 let customerInfoState: { id: number; name: string; phone: string } | null = {
@@ -27,6 +29,7 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => navigateMock,
+    useLocation: () => locationMock,
   };
 });
 
@@ -279,7 +282,7 @@ describe('CustomerMemberships page', () => {
     const enabledTargetButton = targetButtons.find((button) => !(button as HTMLButtonElement).disabled);
     expect(enabledTargetButton).toBeTruthy();
     fireEvent.click(enabledTargetButton as HTMLButtonElement);
-    expect(navigateMock).toHaveBeenCalledWith('/classes/77');
+    expect(navigateMock).toHaveBeenCalledWith('/classes/77', { state: { from: '/memberships' } });
   });
 
   it('renders attendance fallback title/date and missing time branch safely', async () => {

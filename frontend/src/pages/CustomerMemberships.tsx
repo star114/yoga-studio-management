@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceAPI, classAPI, membershipAPI } from '../services/api';
 import { formatKoreanDate } from '../utils/dateFormat';
@@ -117,6 +117,7 @@ const mergeCalendarEntries = (
 
 const CustomerMemberships: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { customerInfo } = useAuth();
   const [memberships, setMemberships] = useState<CustomerMembership[]>([]);
   const [calendarEntries, setCalendarEntries] = useState<CustomerCalendarEntry[]>([]);
@@ -489,7 +490,9 @@ const CustomerMemberships: React.FC = () => {
                     type="button"
                     onClick={() => {
                       if (item.class_id) {
-                        navigate(`/classes/${item.class_id}`);
+                        navigate(`/classes/${item.class_id}`, {
+                          state: { from: `${location.pathname}${location.search}${location.hash}` },
+                        });
                       }
                     }}
                     disabled={!item.class_id}

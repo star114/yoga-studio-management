@@ -10,12 +10,14 @@ const {
   classGetMyCommentThreadMock,
   updateMyRegistrationCommentMock,
   navigateMock,
+  locationMock,
 } = vi.hoisted(() => ({
   attendanceGetAllMock: vi.fn(),
   classGetMyRegistrationsMock: vi.fn(),
   classGetMyCommentThreadMock: vi.fn(),
   updateMyRegistrationCommentMock: vi.fn(),
   navigateMock: vi.fn(),
+  locationMock: { pathname: '/', search: '', hash: '' },
 }));
 
 let customerInfoState: { id: number; name: string; phone: string } | null = {
@@ -29,6 +31,7 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => navigateMock,
+    useLocation: () => locationMock,
   };
 });
 
@@ -197,7 +200,7 @@ describe('CustomerDashboard page', () => {
 
     expect(disabledBtn).toHaveProperty('disabled', true);
     fireEvent.click(enabledBtn);
-    expect(navigateMock).toHaveBeenCalledWith('/classes/22');
+    expect(navigateMock).toHaveBeenCalledWith('/classes/22', { state: { from: '/' } });
   });
 
   it('embeds class comment conversations in attended class cards', async () => {
@@ -246,7 +249,7 @@ describe('CustomerDashboard page', () => {
     expect(screen.getByText('확인했어요')).toBeTruthy();
     expect(screen.getAllByText('수업 후 코멘트 대화').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /A 수업/ }));
-    expect(navigateMock).toHaveBeenCalledWith('/classes/101');
+    expect(navigateMock).toHaveBeenCalledWith('/classes/101', { state: { from: '/' } });
   });
 
   it('handles attendance load failure and comment save failure without crashing', async () => {

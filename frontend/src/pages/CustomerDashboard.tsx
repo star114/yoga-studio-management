@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceAPI, classAPI } from '../services/api';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
@@ -61,6 +61,7 @@ const composeRegistrationComment = (quickComments: string[], directInput: string
 
 const CustomerDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { customerInfo } = useAuth();
   const [nextUpcomingClass, setNextUpcomingClass] = useState<MyRegistrationClass | null>(null);
   const [recentAttendances, setRecentAttendances] = useState<CustomerAttendance[]>([]);
@@ -364,7 +365,9 @@ const CustomerDashboard: React.FC = () => {
                   type="button"
                   onClick={() => {
                     if (item.class_id) {
-                      navigate(`/classes/${item.class_id}`);
+                      navigate(`/classes/${item.class_id}`, {
+                        state: { from: `${location.pathname}${location.search}${location.hash}` },
+                      });
                     }
                   }}
                   disabled={!item.class_id}

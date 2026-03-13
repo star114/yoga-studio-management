@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +16,22 @@ interface CustomerClassDetailData {
   attendance_status?: 'reserved' | 'attended' | 'absent';
 }
 
+const QUICK_COMMENT_OPTIONS = [
+  '월경 중입니다',
+  '오늘은 조용히 수련하고 싶어요',
+  '선생님의 터치가 부담스러울 거 같아요 (no 핸즈온)',
+];
+
+const composeRegistrationComment = (quickComments: string[], directInput: string) => {
+  const normalizedQuick = Array.from(new Set(quickComments.map((item) => item.trim()).filter(Boolean)));
+  const normalizedDirect = directInput
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const parts = [...normalizedQuick, ...Array.from(new Set(normalizedDirect))];
+  return parts.join('\n');
+};
+
 interface AttendanceCommentMessage {
   id: number;
   attendance_id: number;
@@ -28,15 +44,34 @@ interface AttendanceCommentMessage {
 const CustomerClassDetail: React.FC = () => {
   const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const classId = Number(id);
   const activeClassIdRef = useRef<number | null>(null);
   const [detail, setDetail] = useState<CustomerClassDetailData | null>(null);
   const [threadMessages, setThreadMessages] = useState<AttendanceCommentMessage[]>([]);
   const [threadMessageDraft, setThreadMessageDraft] = useState('');
+  const [selectedQuickComments, setSelectedQuickComments] = useState<string[]>([]);
+  const [customCommentChips, setCustomCommentChips] = useState<string[]>([]);
+  const [isDirectCommentOpen, setIsDirectCommentOpen] = useState(false);
+  const [directCommentInput, setDirectCommentInput] = useState('');
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const [isThreadSaving, setIsThreadSaving] = useState(false);
+  const [isSavingComment, setIsSavingComment] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const handleBack = () => {
+    const backTarget = typeof location.state === 'object'
+      && location.state !== null
+      && 'from' in location.state
+      && typeof location.state.from === 'string'
+      && location.state.from.length > 0
+      ? location.state.from
+      : '/';
+
+    navigate(backTarget);
+  };
 
   useEffect(() => {
     activeClassIdRef.current = classId;
@@ -94,6 +129,29 @@ const CustomerClassDetail: React.FC = () => {
     void load();
   }, [classId, user?.role]);
 
+  useEffect(() => {
+    const savedComment = (detail?.registration_comment || '').trim();
+    if (!savedComment) {
+      setSelectedQuickComments([]);
+      setCustomCommentChips([]);
+      setDirectCommentInput('');
+      setIsDirectCommentOpen(false);
+      return;
+    }
+
+    const commentLines = savedComment
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const quickSelections = commentLines.filter((line) => QUICK_COMMENT_OPTIONS.includes(line));
+    const customLines = commentLines.filter((line) => !QUICK_COMMENT_OPTIONS.includes(line));
+
+    setSelectedQuickComments(quickSelections);
+    setCustomCommentChips(customLines);
+    setDirectCommentInput('');
+    setIsDirectCommentOpen(false);
+  }, [detail?.registration_comment]);
+
   if (user?.role !== 'customer') {
     return <Navigate to="/" replace />;
   }
@@ -106,7 +164,7 @@ const CustomerClassDetail: React.FC = () => {
     return (
       <div className="card space-y-3">
         <p className="text-red-700">{error || '수업 정보를 찾을 수 없습니다.'}</p>
-        <Link to="/" className="btn-secondary inline-flex">수련 기록으로 돌아가기</Link>
+        <button type="button" className="btn-secondary inline-flex" onClick={handleBack}>이전 페이지로 돌아가기</button>
       </div>
     );
   }
@@ -146,6 +204,44 @@ const CustomerClassDetail: React.FC = () => {
     }
   };
 
+  const persistComment = async (rawComment: string) => {
+    const mergedComment = rawComment.trim();
+    try {
+      setError('');
+      setIsSavingComment(true);
+      await classAPI.updateMyRegistrationComment(classId, mergedComment);
+      setDetail((prev) => (
+        prev
+          ? { ...prev, registration_comment: mergedComment || null }
+          : prev
+      ));
+    } catch (saveError: unknown) {
+      console.error('Failed to save registration comment:', saveError);
+      setError(parseApiError(saveError, '강사에게 전달할 코멘트를 저장하지 못했습니다.'));
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
+  const saveComment = async (quickComments: string[], directInput: string) => {
+    const mergedComment = composeRegistrationComment(quickComments, directInput);
+    await persistComment(mergedComment);
+  };
+
+  const handleQuickCommentClick = async (comment: string) => {
+    const nextSelectedComments = selectedQuickComments.includes(comment)
+      ? selectedQuickComments.filter((item) => item !== comment)
+      : [...selectedQuickComments, comment];
+    setSelectedQuickComments(nextSelectedComments);
+    await saveComment(nextSelectedComments, customCommentChips.join('\n'));
+  };
+
+  const handleCustomCommentChipClick = async (comment: string) => {
+    const nextCustomChips = customCommentChips.filter((item) => item !== comment);
+    setCustomCommentChips(nextCustomChips);
+    await saveComment(selectedQuickComments, nextCustomChips.join('\n'));
+  };
+
   return (
     <div className="space-y-6 fade-in">
       <div className="flex items-center justify-between gap-3">
@@ -155,7 +251,7 @@ const CustomerClassDetail: React.FC = () => {
             {formatKoreanDateTime(detail.class_date, detail.start_time)} ~ {formatKoreanTime(detail.end_time)} / {detail.title}
           </p>
         </div>
-        <Link to="/" className="btn-secondary">수련 기록으로</Link>
+        <button type="button" className="btn-secondary" onClick={handleBack}>이전 페이지로</button>
       </div>
 
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
@@ -165,10 +261,108 @@ const CustomerClassDetail: React.FC = () => {
         <p className="text-warm-700">출석 여부: <span className="font-semibold text-primary-800">{attendanceLabel}</span></p>
       </section>
 
-      <section className="card space-y-3">
-        <h2 className="text-xl font-display font-semibold text-primary-800">수업 전 코멘트 (신청 시)</h2>
-        <p className="text-warm-700">{detail.registration_comment?.trim() || '-'}</p>
-      </section>
+      {detail.attendance_status === 'reserved' ? (
+        <section className="card space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-xl font-display font-semibold text-primary-800">강사에게 전달할 코멘트</h2>
+              <p className="text-xs text-warm-600 mt-1">여러 개 선택할 수 있어요.</p>
+            </div>
+            {detail.registration_comment?.trim() && (
+              <button
+                type="button"
+                className="btn-secondary text-sm px-3 py-1.5 disabled:opacity-60"
+                disabled={isSavingComment}
+                onClick={() => void persistComment('')}
+              >
+                초기화
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {QUICK_COMMENT_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                disabled={isSavingComment}
+                onClick={() => void handleQuickCommentClick(option)}
+                className={`px-3 py-1.5 text-xs sm:text-sm rounded-full border transition-colors ${
+                  selectedQuickComments.includes(option)
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-primary-800 border-primary-200 hover:bg-primary-100'
+                } disabled:opacity-60`}
+              >
+                {option}
+              </button>
+            ))}
+            {customCommentChips.map((comment) => (
+              <button
+                key={`custom-${comment}`}
+                type="button"
+                disabled={isSavingComment}
+                onClick={() => void handleCustomCommentChipClick(comment)}
+                className="max-w-full px-3 py-1.5 text-xs sm:text-sm rounded-full border border-primary-600 bg-primary-600 text-white hover:bg-primary-700 truncate disabled:opacity-60"
+                title="클릭하면 해당 직접 입력 코멘트 선택이 해제됩니다."
+              >
+                {comment}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={isSavingComment}
+              onClick={() => {
+                setIsDirectCommentOpen(true);
+              }}
+              className={`px-3 py-1.5 text-xs sm:text-sm rounded-full border transition-colors ${
+                isDirectCommentOpen
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white text-primary-800 border-primary-200 hover:bg-primary-100'
+              } disabled:opacity-60`}
+            >
+              직접 입력
+            </button>
+          </div>
+
+          {isDirectCommentOpen && (
+            <div className="space-y-2">
+              <textarea
+                value={directCommentInput}
+                onChange={(event) => setDirectCommentInput(event.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="강사에게 전달할 컨디션/주의사항을 입력해 주세요."
+                className="input-field resize-none"
+                disabled={isSavingComment}
+              />
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-warm-500">{directCommentInput.trim().length}/500</p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const normalized = directCommentInput.trim();
+                    const nextCustomChips = normalized
+                      ? Array.from(new Set([...customCommentChips, normalized]))
+                      : customCommentChips;
+                    setCustomCommentChips(nextCustomChips);
+                    await saveComment(selectedQuickComments, nextCustomChips.join('\n'));
+                    setDirectCommentInput('');
+                    setIsDirectCommentOpen(false);
+                  }}
+                  disabled={isSavingComment}
+                  className="btn-primary text-sm px-4 py-2 disabled:opacity-60"
+                >
+                  {isSavingComment ? '저장 중...' : '코멘트 저장'}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="card space-y-3">
+          <h2 className="text-xl font-display font-semibold text-primary-800">수업 전 코멘트 (신청 시)</h2>
+          <p className="text-warm-700">{detail.registration_comment?.trim() || '-'}</p>
+        </section>
+      )}
 
       {detail.attendance_status === 'attended' && (
         <section className="card space-y-4">
