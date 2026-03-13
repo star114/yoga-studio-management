@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { classAPI } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 import { useAuth } from '../contexts/AuthContext';
-import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
+import { formatKoreanDate, formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 
 interface CustomerClassDetailData {
   id: number;
@@ -14,6 +14,9 @@ interface CustomerClassDetailData {
   class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
   registration_comment?: string | null;
   attendance_status?: 'reserved' | 'attended' | 'absent';
+  membership_id?: number | null;
+  membership_type_name?: string | null;
+  membership_created_date?: string | null;
 }
 
 const QUICK_COMMENT_OPTIONS = [
@@ -174,6 +177,9 @@ const CustomerClassDetail: React.FC = () => {
     : detail.attendance_status === 'absent'
       ? '결석'
       : '예약';
+  const linkedMembershipLabel = detail.membership_type_name
+    ? `${detail.membership_type_name}${detail.membership_created_date ? ` (지급일 ${formatKoreanDate(detail.membership_created_date, false)})` : ''}`
+    : '-';
 
   const handleSendThreadMessage = async () => {
     const requestClassId = classId;
@@ -259,6 +265,7 @@ const CustomerClassDetail: React.FC = () => {
       <section className="card space-y-3">
         <h2 className="text-xl font-display font-semibold text-primary-800">나의 수업 정보</h2>
         <p className="text-warm-700">출석 여부: <span className="font-semibold text-primary-800">{attendanceLabel}</span></p>
+        <p className="text-warm-700">연결 회원권: <span className="font-semibold text-primary-800">{linkedMembershipLabel}</span></p>
       </section>
 
       {detail.attendance_status === 'reserved' ? (

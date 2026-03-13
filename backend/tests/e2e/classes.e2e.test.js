@@ -2394,7 +2394,15 @@ test('customer class detail endpoint covers main branches', async () => {
 
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
-    { rows: [{ id: 11, title: '빈야사' }] }
+    {
+      rows: [{
+        id: 11,
+        title: '빈야사',
+        membership_id: 301,
+        membership_type_name: '빈야사 20회권',
+        membership_created_date: '2026-02-15',
+      }],
+    }
   );
   res = await h.runRoute({
     method: 'get',
@@ -2404,6 +2412,9 @@ test('customer class detail endpoint covers main branches', async () => {
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.title, '빈야사');
+  assert.equal(res.body.membership_id, 301);
+  assert.equal(res.body.membership_type_name, '빈야사 20회권');
+  assert.equal(res.body.membership_created_date, '2026-02-15');
 
   h.queryQueue.push({ rows: [{ id: 7 }] }, new Error('my detail fail'));
   res = await h.runRoute({

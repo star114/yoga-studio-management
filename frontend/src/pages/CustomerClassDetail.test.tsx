@@ -82,6 +82,9 @@ describe('CustomerClassDetail page', () => {
         end_time: '10:00:00',
         attendance_status: 'attended',
         registration_comment: '오늘 허리 뻐근함',
+        membership_id: 301,
+        membership_type_name: '빈야사 20회권',
+        membership_created_date: '2026-02-15',
       },
     });
     classGetMyCommentThreadMock.mockResolvedValue({
@@ -123,6 +126,7 @@ describe('CustomerClassDetail page', () => {
     await waitFor(() => expect(screen.getByText('출석')).toBeTruthy());
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('오늘 허리 뻐근함')).toBeTruthy();
+    expect(screen.getByText('빈야사 20회권 (지급일 2026년 2월 15일)')).toBeTruthy();
     expect(classGetMyCommentThreadMock).toHaveBeenCalledWith(1);
   });
 
@@ -154,6 +158,9 @@ describe('CustomerClassDetail page', () => {
         end_time: '10:00:00',
         attendance_status: 'absent',
         registration_comment: null,
+        membership_id: null,
+        membership_type_name: null,
+        membership_created_date: null,
       },
     });
 
@@ -174,12 +181,16 @@ describe('CustomerClassDetail page', () => {
         end_time: '10:00:00',
         attendance_status: 'reserved',
         registration_comment: null,
+        membership_id: 302,
+        membership_type_name: '아쉬탕가 10회권',
+        membership_created_date: null,
       },
     });
 
     renderPage();
     await waitFor(() => expect(screen.getByText('예약')).toBeTruthy());
     expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy();
+    expect(screen.getByText('아쉬탕가 10회권')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '대화 전송' })).toBeNull();
     expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
   });
