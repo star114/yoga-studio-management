@@ -300,6 +300,61 @@ describe('CustomerDashboard page', () => {
     expect(screen.queryByText('이전 페이지 응답')).toBeNull();
   });
 
+  it('retries thread loading when a previous page request was cancelled before completion', async () => {
+    let resolveFirstPageThread: (value: unknown) => void = () => {};
+    classGetMyCommentThreadMock.mockImplementation((classId: number) => {
+      if (classId === 101 && classGetMyCommentThreadMock.mock.calls.filter(([id]) => id === 101).length === 1) {
+        return new Promise((resolve) => {
+          resolveFirstPageThread = resolve;
+        });
+      }
+
+      if (classId === 101) {
+        return Promise.resolve({
+          data: {
+            messages: [
+              { id: 31, author_role: 'admin', message: '다시 불러온 응답', created_at: '2026-03-06T11:00:00.000Z' },
+            ],
+          },
+        });
+      }
+
+      return Promise.resolve({ data: { messages: [] } });
+    });
+
+    attendanceGetAllMock.mockResolvedValueOnce({
+      data: [
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+        { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
+      ],
+    });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+
+    resolveFirstPageThread({
+      data: {
+        messages: [
+          { id: 11, author_role: 'admin', message: '취소된 이전 응답', created_at: '2026-03-06T11:00:00.000Z' },
+        ],
+      },
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
+
+    await waitFor(() => expect(classGetMyCommentThreadMock.mock.calls.filter(([id]) => id === 101)).toHaveLength(2));
+    await waitFor(() => expect(screen.getByText('다시 불러온 응답')).toBeTruthy());
+  });
+
   it('embeds class comment conversations in attended class cards', async () => {
     attendanceGetAllMock.mockResolvedValueOnce({
       data: [

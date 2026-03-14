@@ -75,6 +75,7 @@ const CustomerDashboard: React.FC = () => {
   const [directCommentInput, setDirectCommentInput] = useState('');
   const [isSavingComment, setIsSavingComment] = useState(false);
   const loadedThreadClassIdsRef = useRef<Set<number>>(new Set());
+  const loadingThreadClassIdsRef = useRef<Set<number>>(new Set());
 
   const loadAttendanceData = useCallback(async () => {
     try {
@@ -104,6 +105,7 @@ const CustomerDashboard: React.FC = () => {
       setRecentAttendances(sortedAttendances);
       setAttendancePage(1);
       loadedThreadClassIdsRef.current.clear();
+      loadingThreadClassIdsRef.current.clear();
       setPendingConversations([]);
     } catch (error) {
       console.error('Failed to load attendance data:', error);
@@ -193,13 +195,16 @@ const CustomerDashboard: React.FC = () => {
   );
 
   useEffect(() => {
-    const classIdsToFetch = visibleAttendanceClassIds.filter((classId) => !loadedThreadClassIdsRef.current.has(classId));
+    const classIdsToFetch = visibleAttendanceClassIds.filter((classId) => (
+      !loadedThreadClassIdsRef.current.has(classId)
+      && !loadingThreadClassIdsRef.current.has(classId)
+    ));
     if (classIdsToFetch.length === 0) {
       return;
     }
 
     classIdsToFetch.forEach((classId) => {
-      loadedThreadClassIdsRef.current.add(classId);
+      loadingThreadClassIdsRef.current.add(classId);
     });
 
     let cancelled = false;
@@ -210,17 +215,22 @@ const CustomerDashboard: React.FC = () => {
       );
 
       if (cancelled) {
+        classIdsToFetch.forEach((classId) => {
+          loadingThreadClassIdsRef.current.delete(classId);
+        });
         return;
       }
 
       const nextItems: PendingConversation[] = [];
 
       threadResults.forEach((result, index) => {
+        const classId = classIdsToFetch[index];
+        loadingThreadClassIdsRef.current.delete(classId);
         if (result.status !== 'fulfilled') {
           return;
         }
 
-        const classId = classIdsToFetch[index];
+        loadedThreadClassIdsRef.current.add(classId);
         const messages = (result.value.data?.messages || []) as AttendanceCommentMessage[];
         if (messages.length === 0) {
           return;
