@@ -267,6 +267,9 @@ const CustomerDashboard: React.FC = () => {
 
     return () => {
       cancelled = true;
+      classIdsToFetch.forEach((classId) => {
+        loadingThreadClassIdsRef.current.delete(classId);
+      });
     };
   }, [recentAttendances, visibleAttendanceClassIds]);
 
