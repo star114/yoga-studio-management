@@ -58,6 +58,19 @@ const renderPage = () => render(
   </MemoryRouter>
 );
 
+const attendancePageResponse = (
+  items: Array<Record<string, unknown>>,
+  options?: { total?: number; offset?: number }
+) => ({
+  data: {
+    items,
+    total: options?.total ?? items.length,
+    limit: 5,
+    offset: options?.offset ?? 0,
+    has_more: (options?.offset ?? 0) + items.length < (options?.total ?? items.length),
+  },
+});
+
 describe('CustomerDashboard page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -78,7 +91,7 @@ describe('CustomerDashboard page', () => {
   });
 
   it('renders empty summaries when no upcoming or attendance data', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({ data: [] });
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
@@ -87,13 +100,55 @@ describe('CustomerDashboard page', () => {
     expect(screen.getByText('예정된 수업이 없습니다')).toBeTruthy();
     expect(screen.getByText('최근 출석 수업이 없습니다.')).toBeTruthy();
     expect(screen.queryByText('수업 후 코멘트 대화')).toBeNull();
-    expect(attendanceGetAllMock).toHaveBeenCalledWith({ customer_id: 1, limit: 200 });
+    expect(attendanceGetAllMock).toHaveBeenCalledWith({ customer_id: 1, limit: 5, offset: 0 });
     expect(classGetMyRegistrationsMock).toHaveBeenCalled();
     expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
   });
 
+  it('falls back safely when paginated attendance payload is sparse', async () => {
+    attendanceGetAllMock.mockResolvedValueOnce({ data: {} });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          registration_id: 11,
+          class_id: 6,
+          attendance_status: 'reserved',
+          title: '다음 수업',
+          class_date: '2099-01-01',
+          start_time: '08:00:00',
+          end_time: '09:00:00',
+          is_open: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('최근 출석 수업이 없습니다.')).toBeTruthy());
+    expect(screen.getAllByText('다음 수업').length).toBeGreaterThan(0);
+  });
+
+  it('falls back safely when a later attendance page payload is sparse', async () => {
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '첫 출석', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '둘째 출석', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '셋째 출석', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '넷째 출석', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '다섯째 출석', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockResolvedValueOnce({ data: {} });
+    classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /첫 출석/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(screen.getByText('최근 출석 수업이 없습니다.')).toBeTruthy());
+  });
+
   it('renders nearest class and hydrates saved comments', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({ data: [] });
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({
       data: [
         {
@@ -129,8 +184,23 @@ describe('CustomerDashboard page', () => {
     expect(screen.getByRole('button', { name: '초기화' })).toBeTruthy();
   });
 
+  it('keeps attendance history visible when upcoming-class loading fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
+      { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '출석 수업', class_date: '2026-03-06' },
+    ]));
+    classGetMyRegistrationsMock.mockRejectedValueOnce(new Error('registration fail'));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /출석 수업/ })).toBeTruthy();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
   it('saves quick comments, custom comment chip, and reset', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({ data: [] });
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({
       data: [
         {
@@ -170,8 +240,7 @@ describe('CustomerDashboard page', () => {
   });
 
   it('shows recent attendances and navigates only when class exists', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
         {
           id: 1,
           class_id: null,
@@ -188,8 +257,7 @@ describe('CustomerDashboard page', () => {
           class_date: '2026-03-02',
           class_start_time: '10:00:00',
         },
-      ],
-    });
+      ]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
@@ -204,21 +272,30 @@ describe('CustomerDashboard page', () => {
   });
 
   it('paginates all recent attendances instead of limiting to three cards', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
         { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
         { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
         { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
         { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
-      ],
-    });
+      ], { total: 6, offset: 5 }))
+      .mockResolvedValueOnce(attendancePageResponse([
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6, offset: 0 }));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
 
     await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
+    expect(attendanceGetAllMock).toHaveBeenNthCalledWith(1, { customer_id: 1, limit: 5, offset: 0 });
     expect(screen.getByText('6개 중 1-5개')).toBeTruthy();
     expect(screen.getByText('1 / 2')).toBeTruthy();
     expect(screen.getByRole('button', { name: /여섯째 수업/ })).toBeTruthy();
@@ -228,25 +305,28 @@ describe('CustomerDashboard page', () => {
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
 
     await waitFor(() => expect(screen.getByText('6개 중 6-6개')).toBeTruthy());
+    expect(attendanceGetAllMock).toHaveBeenNthCalledWith(2, { customer_id: 1, limit: 5, offset: 5 });
     expect(screen.getByText('2 / 2')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /첫째 수업/ })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('button', { name: /첫째 수업/ })).toBeTruthy());
     expect(screen.queryByRole('button', { name: /여섯째 수업/ })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '이전' }));
     await waitFor(() => expect(screen.getByText('6개 중 1-5개')).toBeTruthy());
+    expect(attendanceGetAllMock).toHaveBeenNthCalledWith(3, { customer_id: 1, limit: 5, offset: 0 });
   });
 
   it('loads comment threads only for the visible attendance page', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
         { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
         { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
         { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
         { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
-      ],
-    });
+      ], { total: 6, offset: 5 }));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
@@ -261,6 +341,91 @@ describe('CustomerDashboard page', () => {
     expect(classGetMyCommentThreadMock).toHaveBeenCalledTimes(6);
   });
 
+  it('does not reload page 1 when the same customer context object changes', async () => {
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
+      { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '같은 페이지 수업', class_date: '2026-03-06' },
+    ]));
+    classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
+
+    const view = renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: /같은 페이지 수업/ })).toBeTruthy());
+    expect(attendanceGetAllMock).toHaveBeenCalledTimes(1);
+
+    customerInfoState = { id: 1, name: '홍길동', phone: '010-1111-2222' };
+    view.rerender(
+      <MemoryRouter>
+        <CustomerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /같은 페이지 수업/ })).toBeTruthy());
+    expect(attendanceGetAllMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the current attendance page stable when the same customer context object changes', async () => {
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockResolvedValueOnce(attendancePageResponse([
+        { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
+      ], { total: 6, offset: 5 }));
+    classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
+
+    const view = renderPage();
+
+    await waitFor(() => expect(screen.getByText('1 / 2')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(screen.getByText('2 / 2')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: /첫째 수업/ })).toBeTruthy());
+    expect(attendanceGetAllMock).toHaveBeenCalledTimes(2);
+
+    customerInfoState = { id: 1, name: '홍길동', phone: '010-1111-2222' };
+    view.rerender(
+      <MemoryRouter>
+        <CustomerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByText('2 / 2')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /첫째 수업/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /여섯째 수업/ })).toBeNull();
+    expect(attendanceGetAllMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a cancelled attendance page response after leaving the page', async () => {
+    let resolveNextPage: (value: unknown) => void = () => {};
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveNextPage = resolve;
+      }));
+    classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    cleanup();
+
+    resolveNextPage(attendancePageResponse([
+      { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
+    ], { total: 6, offset: 5 }));
+
+    await Promise.resolve();
+    expect(screen.queryByText('첫째 수업')).toBeNull();
+  });
+
   it('ignores late thread responses from a previous attendance page', async () => {
     let resolveFirstPageThread: (value: unknown) => void = () => {};
     classGetMyCommentThreadMock
@@ -271,16 +436,17 @@ describe('CustomerDashboard page', () => {
       )
       .mockResolvedValue({ data: { messages: [] } });
 
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
         { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
         { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
         { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
         { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
-      ],
-    });
+      ], { total: 6, offset: 5 }));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
@@ -322,16 +488,24 @@ describe('CustomerDashboard page', () => {
       return Promise.resolve({ data: { messages: [] } });
     });
 
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
         { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
         { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
         { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
         { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockResolvedValueOnce(attendancePageResponse([
         { id: 6, class_id: 106, attendance_date: '2026-03-01T10:00:00.000Z', class_title: '첫째 수업', class_date: '2026-03-01' },
-      ],
-    });
+      ], { total: 6, offset: 5 }))
+      .mockResolvedValueOnce(attendancePageResponse([
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '여섯째 수업', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '다섯째 수업', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '넷째 수업', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '셋째 수업', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-02' },
+      ], { total: 6, offset: 0 }));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
@@ -356,8 +530,7 @@ describe('CustomerDashboard page', () => {
   });
 
   it('embeds class comment conversations in attended class cards', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
         {
           id: 1,
           class_id: 101,
@@ -373,8 +546,7 @@ describe('CustomerDashboard page', () => {
           class_type: '개인 레슨',
           class_date: '2026-03-02',
         },
-      ],
-    });
+      ]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
     classGetMyCommentThreadMock
       .mockResolvedValueOnce({
@@ -416,7 +588,15 @@ describe('CustomerDashboard page', () => {
     expect(consoleSpy).toHaveBeenCalled();
 
     cleanup();
-    attendanceGetAllMock.mockResolvedValueOnce({ data: [] });
+    attendanceGetAllMock
+      .mockResolvedValueOnce(attendancePageResponse([
+        { id: 1, class_id: 101, attendance_date: '2026-03-06T10:00:00.000Z', class_title: '첫 출석', class_date: '2026-03-06' },
+        { id: 2, class_id: 102, attendance_date: '2026-03-05T10:00:00.000Z', class_title: '둘째 출석', class_date: '2026-03-05' },
+        { id: 3, class_id: 103, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '셋째 출석', class_date: '2026-03-04' },
+        { id: 4, class_id: 104, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '넷째 출석', class_date: '2026-03-03' },
+        { id: 5, class_id: 105, attendance_date: '2026-03-02T10:00:00.000Z', class_title: '다섯째 출석', class_date: '2026-03-02' },
+      ], { total: 6 }))
+      .mockRejectedValueOnce(new Error('page fail'));
     classGetMyRegistrationsMock.mockResolvedValueOnce({
       data: [
         {
@@ -436,6 +616,8 @@ describe('CustomerDashboard page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getAllByText('다음 수업').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(consoleSpy).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
 
     await waitFor(() => expect(updateMyRegistrationCommentMock).toHaveBeenCalled());
@@ -444,8 +626,7 @@ describe('CustomerDashboard page', () => {
   });
 
   it('ignores failed thread summary call and handles no class-id branch', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
         {
           id: 1,
           class_id: null,
@@ -454,20 +635,18 @@ describe('CustomerDashboard page', () => {
           class_type: null,
           class_date: null,
         },
-      ],
-    });
+      ]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
 
     await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
-    await waitFor(() => expect(screen.getByText('수업 기록')).toBeTruthy());
+    expect(await screen.findByRole('button', { name: /수업 기록/ })).toBeTruthy();
     expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
     expect(screen.queryByText('수업 후 코멘트 대화')).toBeNull();
 
     cleanup();
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
         {
           id: 2,
           class_id: 333,
@@ -475,8 +654,7 @@ describe('CustomerDashboard page', () => {
           class_title: '스레드 실패 수업',
           class_date: '2026-03-02',
         },
-      ],
-    });
+      ]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
     classGetMyCommentThreadMock.mockRejectedValueOnce(new Error('thread fail'));
 
@@ -488,7 +666,7 @@ describe('CustomerDashboard page', () => {
   });
 
   it('toggles quick comment off and saves empty direct input', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({ data: [] });
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({
       data: [
         {
@@ -534,23 +712,20 @@ describe('CustomerDashboard page', () => {
         },
       });
 
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
         { id: 1, class_id: 201, attendance_date: '2026-03-03T10:00:00.000Z', class_title: '첫 수업', class_date: '2026-03-03' },
         { id: 2, class_id: 202, attendance_date: '2026-03-04T10:00:00.000Z', class_title: '둘째 수업', class_date: '2026-03-04' },
-      ],
-    });
+      ]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
     await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
-    await waitFor(() => expect(screen.getByText('먼저 답변')).toBeTruthy());
+    expect(await screen.findByText('먼저 답변')).toBeTruthy();
     expect(screen.getByText('나중 답변')).toBeTruthy();
   });
 
   it('uses class id/title-date fallbacks when thread metadata is sparse', async () => {
-    attendanceGetAllMock.mockResolvedValueOnce({
-      data: [
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([
         {
           id: 1,
           class_id: 444,
@@ -566,8 +741,7 @@ describe('CustomerDashboard page', () => {
           class_title: '빈 메시지 수업',
           class_date: '2026-03-04',
         },
-      ],
-    });
+      ]));
     classGetMyRegistrationsMock.mockResolvedValueOnce({ data: [] });
     classGetMyCommentThreadMock
       .mockResolvedValueOnce({
@@ -578,7 +752,7 @@ describe('CustomerDashboard page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
-    await waitFor(() => expect(screen.getByText('수업 기록')).toBeTruthy());
+    expect(await screen.findByRole('button', { name: /수업 기록/ })).toBeTruthy();
     expect(screen.getByText('후속 확인 부탁해요')).toBeTruthy();
     const attendanceCard = screen.getByRole('button', { name: /빈 메시지 수업/ });
     expect(within(attendanceCard).queryByText('후속 확인 부탁해요')).toBeNull();

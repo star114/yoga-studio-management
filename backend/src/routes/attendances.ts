@@ -67,7 +67,7 @@ const isValidAttendanceDateFilter = (value: string): boolean => {
 
 // 출석 기록 조회 (필터링 가능)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
-  const { customer_id, start_date, end_date, limit = 50 } = req.query;
+  const { customer_id, start_date, end_date, limit = 50, offset } = req.query;
 
   try {
     let customerIdFilter =
@@ -148,9 +148,43 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     }
 
     const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
     const safeLimit = Number.isFinite(parsedLimit)
       ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 200)
       : 50;
+    const safeOffset = Number.isFinite(parsedOffset)
+      ? Math.max(Math.trunc(parsedOffset), 0)
+      : 0;
+    const isPaginatedRequest = offset !== undefined;
+
+    if (isPaginatedRequest) {
+      const countQuery = `
+        SELECT COUNT(*)::int AS total
+        FROM yoga_attendances a
+        WHERE 1=1
+        ${customerIdFilter ? ` AND a.customer_id = $1` : ''}
+        ${startDateFilter ? ` AND a.attendance_date >= $${customerIdFilter ? 2 : 1}` : ''}
+        ${endDateFilter ? ` AND a.attendance_date <= $${
+          (customerIdFilter ? 1 : 0) + (startDateFilter ? 1 : 0) + 1
+        }` : ''}
+      `;
+      const countParams = [...params];
+      const countResult = await pool.query(countQuery, countParams);
+
+      query += ` ORDER BY a.attendance_date DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      params.push(safeLimit, safeOffset);
+
+      const result = await pool.query(query, params);
+      const total = Number(countResult.rows[0]?.total ?? 0);
+
+      return res.json({
+        items: result.rows,
+        total,
+        limit: safeLimit,
+        offset: safeOffset,
+        has_more: safeOffset + result.rows.length < total,
+      });
+    }
 
     query += ` ORDER BY a.attendance_date DESC LIMIT $${paramIndex}`;
     params.push(safeLimit);

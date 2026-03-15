@@ -42,6 +42,14 @@ interface PendingConversation {
   last_created_at: string;
 }
 
+interface AttendanceListResponse {
+  items: CustomerAttendance[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 const normalizeDate = (value: string) => value.slice(0, 10);
 const ATTENDANCE_PAGE_SIZE = 5;
 const QUICK_COMMENT_OPTIONS = [
@@ -64,8 +72,10 @@ const CustomerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { customerInfo } = useAuth();
+  const customerId = customerInfo?.id ?? null;
   const [nextUpcomingClass, setNextUpcomingClass] = useState<MyRegistrationClass | null>(null);
   const [recentAttendances, setRecentAttendances] = useState<CustomerAttendance[]>([]);
+  const [attendanceTotalCount, setAttendanceTotalCount] = useState(0);
   const [pendingConversations, setPendingConversations] = useState<PendingConversation[]>([]);
   const [attendancePage, setAttendancePage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,15 +86,11 @@ const CustomerDashboard: React.FC = () => {
   const [isSavingComment, setIsSavingComment] = useState(false);
   const loadedThreadClassIdsRef = useRef<Set<number>>(new Set());
   const loadingThreadClassIdsRef = useRef<Set<number>>(new Set());
+  const lastLoadedAttendancePageRef = useRef(1);
 
-  const loadAttendanceData = useCallback(async () => {
+  const loadUpcomingClassData = useCallback(async () => {
     try {
-      const [attendancesRes, registrationsRes] = await Promise.all([
-        attendanceAPI.getAll({ customer_id: customerInfo.id, limit: 200 }),
-        classAPI.getMyRegistrations(),
-      ]);
-
-      const attendanceItems = attendancesRes.data as CustomerAttendance[];
+      const registrationsRes = await classAPI.getMyRegistrations();
       const registrationItems = registrationsRes.data as MyRegistrationClass[];
 
       const now = new Date();
@@ -98,27 +104,94 @@ const CustomerDashboard: React.FC = () => {
         return aStartAt - bStartAt;
       });
       setNextUpcomingClass(nextClasses[0] || null);
-
-      const sortedAttendances = [...attendanceItems].sort((a, b) => (
-        new Date(b.attendance_date).getTime() - new Date(a.attendance_date).getTime()
-      ));
-      setRecentAttendances(sortedAttendances);
-      setAttendancePage(1);
-      loadedThreadClassIdsRef.current.clear();
-      loadingThreadClassIdsRef.current.clear();
-      setPendingConversations([]);
     } catch (error) {
-      console.error('Failed to load attendance data:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to load upcoming class data:', error);
     }
-  }, [customerInfo]);
+  }, []);
+
+  const loadAttendancePage = useCallback(async (page: number) => {
+    const offset = (page - 1) * ATTENDANCE_PAGE_SIZE;
+    const attendancesRes = await attendanceAPI.getAll({
+      customer_id: customerId!,
+      limit: ATTENDANCE_PAGE_SIZE,
+      offset,
+    });
+    const attendanceData = attendancesRes.data as AttendanceListResponse;
+
+    setRecentAttendances(attendanceData.items || []);
+    setAttendanceTotalCount(attendanceData.total || 0);
+  }, [customerId]);
 
   useEffect(() => {
-    if (customerInfo) {
-      void loadAttendanceData();
+    if (customerId === null) {
+      return;
     }
-  }, [customerInfo, loadAttendanceData]);
+
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          loadUpcomingClassData(),
+          loadAttendancePage(1),
+        ]);
+        lastLoadedAttendancePageRef.current = 1;
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadInitialData();
+  }, [customerId, loadAttendancePage, loadUpcomingClassData]);
+
+  useEffect(() => {
+    loadedThreadClassIdsRef.current.clear();
+    loadingThreadClassIdsRef.current.clear();
+    lastLoadedAttendancePageRef.current = 1;
+    setAttendancePage(1);
+    setPendingConversations([]);
+  }, [customerId]);
+
+  useEffect(() => {
+    if (customerId === null || isLoading) {
+      return;
+    }
+
+    if (attendancePage === lastLoadedAttendancePageRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCurrentAttendancePage = async () => {
+      try {
+        const offset = (attendancePage - 1) * ATTENDANCE_PAGE_SIZE;
+        const attendancesRes = await attendanceAPI.getAll({
+          customer_id: customerId,
+          limit: ATTENDANCE_PAGE_SIZE,
+          offset,
+        });
+        if (cancelled) {
+          return;
+        }
+
+        const attendanceData = attendancesRes.data as AttendanceListResponse;
+        setRecentAttendances(attendanceData.items || []);
+        setAttendanceTotalCount(attendanceData.total || 0);
+        lastLoadedAttendancePageRef.current = attendancePage;
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load attendance page:', error);
+        }
+      }
+    };
+
+    void loadCurrentAttendancePage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attendancePage, customerId, isLoading]);
 
   useEffect(() => {
     const savedComment = (nextUpcomingClass?.registration_comment || '').trim();
@@ -177,18 +250,14 @@ const CustomerDashboard: React.FC = () => {
   };
 
   const attendanceTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(recentAttendances.length / ATTENDANCE_PAGE_SIZE)),
-    [recentAttendances.length]
+    () => Math.max(1, Math.ceil(attendanceTotalCount / ATTENDANCE_PAGE_SIZE)),
+    [attendanceTotalCount]
   );
-  const attendedSummary = useMemo(() => {
-    const startIndex = (attendancePage - 1) * ATTENDANCE_PAGE_SIZE;
-    return recentAttendances.slice(startIndex, startIndex + ATTENDANCE_PAGE_SIZE);
-  }, [attendancePage, recentAttendances]);
   const visibleAttendanceClassIds = useMemo(() => Array.from(new Set(
-    attendedSummary
+    recentAttendances
       .map((item) => (typeof item.class_id === 'number' ? item.class_id : null))
       .filter((classId): classId is number => classId !== null)
-  )), [attendedSummary]);
+  )), [recentAttendances]);
   const pendingConversationByClassId = useMemo(
     () => new Map(pendingConversations.map((item) => [item.class_id, item])),
     [pendingConversations]
@@ -406,10 +475,10 @@ const CustomerDashboard: React.FC = () => {
             <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
             <p className="text-sm text-warm-600">최근 출석 수업과 수업 후 코멘트 대화를 함께 확인할 수 있습니다.</p>
           </div>
-          {recentAttendances.length > 0 && (
+          {attendanceTotalCount > 0 && (
             <div className="flex items-center justify-between gap-3 sm:justify-end">
               <p className="text-xs text-warm-600">
-                {recentAttendances.length}개 중 {(attendancePage - 1) * ATTENDANCE_PAGE_SIZE + 1}-{Math.min(attendancePage * ATTENDANCE_PAGE_SIZE, recentAttendances.length)}개
+                {attendanceTotalCount}개 중 {(attendancePage - 1) * ATTENDANCE_PAGE_SIZE + 1}-{Math.min(attendancePage * ATTENDANCE_PAGE_SIZE, attendanceTotalCount)}개
               </p>
               <div className="inline-flex items-center gap-2">
                 <button
@@ -435,11 +504,11 @@ const CustomerDashboard: React.FC = () => {
             </div>
           )}
         </div>
-        {attendedSummary.length === 0 ? (
+        {recentAttendances.length === 0 ? (
           <p className="text-warm-500 py-4">최근 출석 수업이 없습니다.</p>
         ) : (
           <div className="space-y-2">
-            {attendedSummary.map((item) => {
+            {recentAttendances.map((item) => {
               const pendingConversation = typeof item.class_id === 'number'
                 ? pendingConversationByClassId.get(item.class_id)
                 : undefined;

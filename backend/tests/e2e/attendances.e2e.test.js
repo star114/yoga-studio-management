@@ -284,6 +284,83 @@ test('attendances list/update/today routes cover success and errors', async () =
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 0);
 
+  h.queryQueue.push(
+    { rows: [{ total: 21 }] },
+    { rows: [{ id: 7 }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { customer_id: '3', limit: '5', offset: '10' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.items.length, 1);
+  assert.equal(res.body.total, 21);
+  assert.equal(res.body.limit, 5);
+  assert.equal(res.body.offset, 10);
+  assert.equal(res.body.has_more, true);
+
+  h.queryQueue.push(
+    { rows: [{ total: 1 }] },
+    { rows: [{ id: 8 }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: {
+      customer_id: '3',
+      start_date: '2026-01-01',
+      end_date: '2026-01-31',
+      limit: '5',
+      offset: '0',
+    },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.items.length, 1);
+  assert.equal(res.body.has_more, false);
+
+  h.queryQueue.push(
+    { rows: [{ total: 2 }] },
+    { rows: [{ id: 9 }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { start_date: '2026-01-01', limit: '5', offset: '0' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.items.length, 1);
+
+  h.queryQueue.push(
+    { rows: [{ total: 1 }] },
+    { rows: [{ id: 10 }] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { end_date: '2026-01-31', limit: '5', offset: '0' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.items.length, 1);
+
+  h.queryQueue.push(
+    { rows: [] },
+    { rows: [] }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/',
+    query: { limit: '5', offset: '0' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.total, 0);
+  assert.equal(res.body.has_more, false);
+
   h.queryQueue.push(new Error('list fail'));
   res = await h.runRoute({
     method: 'get',
