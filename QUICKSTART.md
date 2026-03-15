@@ -9,14 +9,14 @@
 
 ## 설치 단계
 
-### 1️⃣ 다운로드 및 압축 해제
+### 1. 다운로드 및 이동
 
 ```bash
 tar -xzf yoga-studio-management.tar.gz
 cd yoga-studio-management
 ```
 
-### 2️⃣ 환경 설정
+### 2. 환경 설정
 
 ```bash
 # .env 파일 생성
@@ -33,7 +33,7 @@ DB_PASSWORD=여기에_생성한_비밀번호_입력
 JWT_SECRET=여기에_생성한_JWT_시크릿_입력
 ```
 
-### 3️⃣ 시작!
+### 3. 시작
 
 ```bash
 ./start.sh
@@ -41,12 +41,12 @@ JWT_SECRET=여기에_생성한_JWT_시크릿_입력
 
 또는 수동으로:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 `start.sh`는 DB 준비 완료 후 마이그레이션(`npm run migrate`)을 자동 적용합니다.
 
-### 4️⃣ 접속
+### 4. 접속
 
 브라우저에서 http://localhost:3000 열기
 
@@ -60,25 +60,31 @@ docker-compose up -d --build
 
 ```bash
 # 상태 확인
-docker-compose ps
+docker compose ps
 
 # 로그 확인
-docker-compose logs -f
+docker compose logs -f
 
 # 중지
-docker-compose down
+docker compose down
 
 # 재시작
-docker-compose restart
+docker compose restart
 
 # 백업
 ./backup.sh
 
 # 수동 마이그레이션 (필요 시)
-docker-compose exec -T backend npm run migrate
+docker compose exec -T backend npm run migrate
+
+# 운영 이미지 배포
+./deploy.sh
+
+# cron용 자동 업데이트
+./auto-update.sh
 
 # 완전 삭제 (데이터 포함)
-docker-compose down -v
+docker compose down -v
 ```
 
 ## 다음 단계
@@ -86,13 +92,13 @@ docker-compose down -v
 1. **관리자 비밀번호 변경** (보안 필수!)
 2. 회원권 관리 항목 추가 (1개월 무제한, 10회권 등)
 3. 수업 생성 후 수련생 등록/출석 체크 진행
-4. 고객 뷰에서 수련기록(다음 수업/코멘트)과 회원권 탭 캘린더 확인
+4. 고객 뷰에서 수련기록(다음 수업/최근 출석 페이지네이션/코멘트)과 회원권 탭 캘린더 확인
 
 ## 문제 발생 시
 
-- 로그 확인: `docker-compose logs -f`
+- 로그 확인: `docker compose logs -f`
 - 상세 트러블슈팅: `TROUBLESHOOTING.md` 참고
-- 전체 재시작: `docker-compose down && docker-compose up -d`
+- 전체 재시작: `docker compose down && docker compose up -d`
 
 ## 품질 게이트 확인 (선택)
 
@@ -104,15 +110,20 @@ cd ../frontend
 npm run lint && npm run test && npm run build && npm run test:coverage:all-src
 ```
 
+## 운영 자동 업데이트 예시
+
+```bash
+# 10분마다 최신 운영 이미지 pull + compose up -d
+*/10 * * * * cd /path/to/yoga-studio-management && /bin/bash ./auto-update.sh >> /var/log/yoga-auto-update.log 2>&1
+```
+
 ## 데이터 백업 (중요!)
 
 ```bash
-# 정기 백업 설정 (cron)
 # 매일 새벽 3시 백업
 0 3 * * * cd /path/to/yoga-studio-management && ./backup.sh
 ```
 
-## 성공! 🎉
+## 성공
 
 이제 요가원 회원관리를 시작할 수 있습니다.
-차분하고 평온한 관리 경험을 누리세요! 🧘‍♀️

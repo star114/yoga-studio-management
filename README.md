@@ -23,8 +23,9 @@
   - 고객별 출석 전체 내역(기간 필터, 페이지네이션)
 
 ### 고객
-- 수련기록: 다음 수업 확인, 수업 전 코멘트 작성, 최근 출석 수업/수업 후 코멘트 대화 확인
+- 수련기록: 다음 수업 확인, 수업 전 코멘트 작성, 최근 출석 수업 페이지네이션, 수업 후 코멘트 대화 확인
 - 회원권 탭: 활성 회원권, 잔여 횟수, 시작일, 예상 종료일, 수업 캘린더(월/주/일) 조회
+- 고객 수업 상세: 예약/출석/결석 상태, 연결된 회원권, 수업 전/후 코멘트 확인
 - 내 정보 탭: 프로필/비밀번호 관리
 
 ## 로그인 정책
@@ -37,6 +38,8 @@
   - `remaining_sessions <= 0` 이면 자동 비활성(`is_active = false`)
   - 출석 삭제 등으로 횟수 복원 시 자동 재활성화 가능
 - 출석 체크 시 회원권 미지정이면 수업명과 회원권명 일치 항목을 우선 선택
+- 관리자 수업 상세에서 고객 등록 시 `membership_id`를 지정하면 해당 지급 회원권으로 예약/출석을 연결할 수 있음
+- 고객 수업 상세의 연결 회원권 표시는 등록 레코드 또는 출석 레코드 기준으로 노출됨
 
 ## 기술 스택
 - Backend: Node.js 22, Express, TypeScript
@@ -64,7 +67,7 @@ cp .env.example .env
 
 또는 수동 실행:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### 3. 접속
@@ -105,7 +108,7 @@ docker-compose up -d --build
 
 ### 마이그레이션
 ```bash
-docker-compose exec -T backend npm run migrate
+docker compose exec -T backend npm run migrate
 ```
 
 - migration 파일 위치: `backend/migrations/`
@@ -157,6 +160,25 @@ npm run test:coverage:all-src
 ./deploy.sh
 ```
 
+`deploy.sh` 동작:
+- `docker-compose`가 있으면 우선 사용하고, 없으면 `docker compose`를 사용합니다.
+- `docker-compose.prod.yml` 기준으로 이미지 pull 후 `up -d`를 실행합니다.
+- DB readiness 확인까지만 수행하며, 운영 마이그레이션은 별도 실행이 필요할 수 있습니다.
+
+cron용 자동 업데이트 실행:
+```bash
+./auto-update.sh
+```
+
+예시 cron:
+```bash
+*/10 * * * * cd /opt/yoga-studio-management && /bin/bash ./auto-update.sh >> /var/log/yoga-auto-update.log 2>&1
+```
+
+- 중복 실행 방지를 위해 lock 디렉토리를 사용합니다.
+- 실제 이미지 pull / container restart는 `deploy.sh`를 그대로 재사용합니다.
+- 실패/성공 로그는 stdout으로 남기므로 cron에서 파일 리다이렉션해 두는 것을 권장합니다.
+
 ## 운영 유틸리티
 
 ### 백업
@@ -173,6 +195,7 @@ npm run test:coverage:all-src
 - 개발/로컬 Docker 실행: `start.sh`
 - 개발 핫리로드 실행: `start-local.sh`
 - 운영 배포 실행: `deploy.sh`
+- cron용 운영 자동 업데이트: `auto-update.sh`
 - 로컬 Docker 구성: `docker-compose.yml`
 - 운영 Docker 구성: `docker-compose.prod.yml`
 - 트러블슈팅: `TROUBLESHOOTING.md`
