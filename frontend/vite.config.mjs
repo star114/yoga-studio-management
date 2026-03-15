@@ -23,7 +23,6 @@ const scopeConfigMap = {
       'src/pages/ClassDetail.tsx',
       'src/pages/CustomerManagement.tsx',
       'src/pages/CustomerDetail.tsx',
-      'src/pages/MembershipManagement.tsx',
       'src/pages/MembershipTypeManagement.tsx',
     ],
     exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx'],

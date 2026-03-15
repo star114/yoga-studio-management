@@ -32,6 +32,19 @@
 - [ ] Manual checks for changed flows completed
 - [ ] No secrets or sensitive data introduced
 
+## Manual Test Scenarios
+### Changed Areas
+- Example: `CustomerDashboard.tsx`, `classes.ts`, `deploy.sh`
+
+### Executed Scenarios
+- Example: `CUST-DASH-01 PASS`
+- Example: `CUST-DASH-03 PASS`
+- Example: `ADM-CLASS-DETAIL-06 PASS`
+
+### Not Executed / Blocked
+- Scenario ID:
+- Reason:
+
 ## Risk
 - Risk level: Low / Medium / High
 - Main risks:
@@ -43,4 +56,3 @@
 - [ ] DB migration impact documented (if any)
 - [ ] API contract changes documented (if any)
 - [ ] Monitoring/logging impact considered
-
