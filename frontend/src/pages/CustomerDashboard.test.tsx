@@ -616,8 +616,14 @@ describe('CustomerDashboard page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getAllByText('다음 수업').length).toBeGreaterThan(0));
+    expect(screen.getByText('1 / 2')).toBeTruthy();
+    expect(screen.getByText('6개 중 1-5개')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
     await waitFor(() => expect(consoleSpy).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('1 / 2')).toBeTruthy());
+    expect(screen.getByText('6개 중 1-5개')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /첫 출석/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /2 \/ 2/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
 
     await waitFor(() => expect(updateMyRegistrationCommentMock).toHaveBeenCalled());

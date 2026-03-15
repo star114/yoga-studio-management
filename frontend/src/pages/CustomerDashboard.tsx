@@ -182,6 +182,7 @@ const CustomerDashboard: React.FC = () => {
       } catch (error) {
         if (!cancelled) {
           console.error('Failed to load attendance page:', error);
+          setAttendancePage(lastLoadedAttendancePageRef.current);
         }
       }
     };
