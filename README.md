@@ -198,6 +198,7 @@ cron용 자동 업데이트 실행:
 - cron용 운영 자동 업데이트: `auto-update.sh`
 - 로컬 Docker 구성: `docker-compose.yml`
 - 운영 Docker 구성: `docker-compose.prod.yml`
+- 수동 테스트 시나리오: `docs/manual-test-scenarios.md`
 - 트러블슈팅: `TROUBLESHOOTING.md`
 - 빠른 가이드: `QUICKSTART.md`
 - 마이그레이션 러너: `backend/src/scripts/migrate.ts`

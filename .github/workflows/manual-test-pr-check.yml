@@ -1,0 +1,104 @@
+name: Manual Test PR Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate-manual-test-section:
+    name: Validate Manual Test Scenarios Section
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR body manual test scenarios
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || "";
+
+            const requiredSections = [
+              "## Summary",
+              "## Scope",
+              "## Agent Outputs",
+              "## Validation",
+              "## Manual Test Scenarios",
+              "## Risk",
+              "## Checklist",
+            ];
+
+            const missingSections = requiredSections.filter((section) => !body.includes(section));
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const changedFiles = files.map((file) => file.filename);
+            const manualImpactPatterns = [
+              /^frontend\/src\/pages\//,
+              /^backend\/src\/routes\//,
+              /^(start|start-local|deploy|auto-update|backup|restore)\.sh$/,
+              /^docker-compose(\.prod)?\.ya?ml$/,
+            ];
+
+            const requiresManualScenarios = changedFiles.some((filename) =>
+              manualImpactPatterns.some((pattern) => pattern.test(filename))
+            );
+
+            const manualSectionMatch = body.match(/## Manual Test Scenarios([\s\S]*?)(?:\n## |\s*$)/);
+            const manualSection = manualSectionMatch ? manualSectionMatch[1] : "";
+
+            const changedAreaRegex = /(### Changed Areas|Changed Areas)/i;
+            const executedScenarioRegex = /`?([A-Z]+(?:-[A-Z]+)*-\d{2})`?\s+(PASS|FAIL|BLOCKED)/g;
+            const notExecutedRegex = /(### Not Executed \/ Blocked|Not Executed \/ Blocked)/i;
+
+            const executedScenarios = [...manualSection.matchAll(executedScenarioRegex)];
+            const problems = [];
+
+            if (missingSections.length > 0) {
+              problems.push(
+                `Missing required PR template sections: ${missingSections.join(", ")}`
+              );
+            }
+
+            if (!changedAreaRegex.test(manualSection)) {
+              problems.push("`## Manual Test Scenarios` section must include `### Changed Areas`.");
+            }
+
+            if (requiresManualScenarios && executedScenarios.length === 0) {
+              problems.push(
+                "Manual-impact changes detected, but no executed scenario IDs were found. Add entries like `CUST-DASH-03 PASS`."
+              );
+            }
+
+            if (!notExecutedRegex.test(manualSection)) {
+              problems.push(
+                "`## Manual Test Scenarios` section must include `### Not Executed / Blocked` even if empty."
+              );
+            }
+
+            if (problems.length > 0) {
+              core.setFailed(
+                [
+                  "PR body validation failed.",
+                  "",
+                  ...problems.map((problem) => `- ${problem}`),
+                  "",
+                  "Changed files considered manual-impact:",
+                  ...changedFiles.map((filename) => `- ${filename}`),
+                ].join("\n")
+              );
+              return;
+            }
+
+            core.info(
+              `Validated manual test section successfully. Manual-impact required: ${requiresManualScenarios}`
+            );
