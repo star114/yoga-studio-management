@@ -16,7 +16,7 @@ interface ApiErrorPayload {
   errors?: ValidationErrorItem[];
 }
 
-export const getApiErrorPayload = (error: unknown): ApiErrorPayload | undefined => {
+const getApiErrorPayload = (error: unknown): ApiErrorPayload | undefined => {
   if (!(error instanceof AxiosError)) {
     return undefined;
   }
