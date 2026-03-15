@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.4](https://github.com/star114/yoga-studio-management/compare/v2.4.3...v2.4.4) (2026-03-15)
+
+
+### Bug Fixes
+
+* improve customer class detail and activity UX ([#47](https://github.com/star114/yoga-studio-management/issues/47)) ([aaa3bea](https://github.com/star114/yoga-studio-management/commit/aaa3bea4c691d9ec546a571ccfbec51c7f41f78a))
+
 ## [2.4.3](https://github.com/star114/yoga-studio-management/compare/v2.4.2...v2.4.3) (2026-03-12)
 
 
