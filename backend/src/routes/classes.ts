@@ -277,19 +277,26 @@ router.get('/:id/me',
            r.id AS registration_id,
            r.registration_comment,
            r.attendance_status,
-           a.id AS attendance_id
+           a.id AS attendance_id,
+           m.id AS membership_id,
+           mt.name AS membership_type_name,
+           m.created_at::date AS membership_created_date
          FROM yoga_classes c
          LEFT JOIN yoga_class_registrations r
            ON r.class_id = c.id
           AND r.customer_id = $2
          LEFT JOIN LATERAL (
-           SELECT id
+           SELECT id, membership_id
            FROM yoga_attendances
            WHERE class_id = c.id
              AND customer_id = $2
            ORDER BY attendance_date DESC, id DESC
            LIMIT 1
          ) a ON TRUE
+         LEFT JOIN yoga_memberships m
+           ON m.id = COALESCE(r.membership_id, a.membership_id)
+         LEFT JOIN yoga_membership_types mt
+           ON mt.id = m.membership_type_id
          WHERE c.id = $1
            AND (r.id IS NOT NULL OR a.id IS NOT NULL)
          LIMIT 1`,

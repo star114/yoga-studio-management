@@ -8,12 +8,16 @@ const {
   classGetMyClassDetailMock,
   classGetMyCommentThreadMock,
   classPostMyCommentThreadMock,
+  classUpdateMyRegistrationCommentMock,
   parseApiErrorMock,
+  navigateMock,
 } = vi.hoisted(() => ({
   classGetMyClassDetailMock: vi.fn(),
   classGetMyCommentThreadMock: vi.fn(),
   classPostMyCommentThreadMock: vi.fn(),
+  classUpdateMyRegistrationCommentMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
+  navigateMock: vi.fn(),
 }));
 
 let authState: {
@@ -23,12 +27,20 @@ let authState: {
 };
 
 let routeId = '1';
+let locationState: unknown = undefined;
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
     useParams: () => ({ id: routeId }),
+    useNavigate: () => navigateMock,
+    useLocation: () => ({
+      pathname: `/classes/${routeId}`,
+      search: '',
+      hash: '',
+      state: locationState,
+    }),
   };
 });
 
@@ -41,6 +53,7 @@ vi.mock('../services/api', () => ({
     getMyClassDetail: classGetMyClassDetailMock,
     getMyCommentThread: classGetMyCommentThreadMock,
     postMyCommentThread: classPostMyCommentThreadMock,
+    updateMyRegistrationComment: classUpdateMyRegistrationCommentMock,
   },
 }));
 
@@ -59,6 +72,7 @@ describe('CustomerClassDetail page', () => {
     vi.resetAllMocks();
     authState = { user: { id: 1, login_id: 'customer', role: 'customer' } };
     routeId = '1';
+    locationState = undefined;
     classGetMyClassDetailMock.mockResolvedValue({
       data: {
         id: 1,
@@ -68,6 +82,9 @@ describe('CustomerClassDetail page', () => {
         end_time: '10:00:00',
         attendance_status: 'attended',
         registration_comment: '오늘 허리 뻐근함',
+        membership_id: 301,
+        membership_type_name: '빈야사 20회권',
+        membership_created_date: '2026-02-15',
       },
     });
     classGetMyCommentThreadMock.mockResolvedValue({
@@ -83,6 +100,7 @@ describe('CustomerClassDetail page', () => {
         created_at: '2026-03-01T03:00:00.000Z',
       },
     });
+    classUpdateMyRegistrationCommentMock.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -108,7 +126,26 @@ describe('CustomerClassDetail page', () => {
     await waitFor(() => expect(screen.getByText('출석')).toBeTruthy());
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('오늘 허리 뻐근함')).toBeTruthy();
+    expect(screen.getByText('빈야사 20회권 (지급일 2026년 2월 15일)')).toBeTruthy();
     expect(classGetMyCommentThreadMock).toHaveBeenCalledWith(1);
+  });
+
+  it('returns to previous page when navigation state is present', async () => {
+    locationState = { from: '/memberships' };
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '이전 페이지로' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '이전 페이지로' }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/memberships');
+  });
+
+  it('falls back to home when previous page state is missing', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '이전 페이지로' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '이전 페이지로' }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/');
   });
 
   it('renders absent status and fallback comments', async () => {
@@ -121,6 +158,9 @@ describe('CustomerClassDetail page', () => {
         end_time: '10:00:00',
         attendance_status: 'absent',
         registration_comment: null,
+        membership_id: null,
+        membership_type_name: null,
+        membership_created_date: null,
       },
     });
 
@@ -141,13 +181,105 @@ describe('CustomerClassDetail page', () => {
         end_time: '10:00:00',
         attendance_status: 'reserved',
         registration_comment: null,
+        membership_id: 302,
+        membership_type_name: '아쉬탕가 10회권',
+        membership_created_date: null,
       },
     });
 
     renderPage();
     await waitFor(() => expect(screen.getByText('예약')).toBeTruthy());
+    expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy();
+    expect(screen.getByText('아쉬탕가 10회권')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '대화 전송' })).toBeNull();
     expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
+  });
+
+  it('saves quick comments, custom comment, and reset in reserved detail view', async () => {
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '빈야사',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: null,
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+    await waitFor(() => expect(classUpdateMyRegistrationCommentMock).toHaveBeenCalledWith(1, '월경 중입니다'));
+
+    fireEvent.click(screen.getByRole('button', { name: '직접 입력' }));
+    fireEvent.change(screen.getByPlaceholderText('강사에게 전달할 컨디션/주의사항을 입력해 주세요.'), {
+      target: { value: '허리가 뻐근합니다' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
+
+    await waitFor(() => expect(classUpdateMyRegistrationCommentMock).toHaveBeenLastCalledWith(1, '월경 중입니다\n허리가 뻐근합니다'));
+    expect(screen.getByText('허리가 뻐근합니다')).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle('클릭하면 해당 직접 입력 코멘트 선택이 해제됩니다.'));
+    await waitFor(() => expect(classUpdateMyRegistrationCommentMock).toHaveBeenLastCalledWith(1, '월경 중입니다'));
+
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
+    await waitFor(() => expect(classUpdateMyRegistrationCommentMock).toHaveBeenLastCalledWith(1, ''));
+  });
+
+  it('removes quick comment and saves empty direct input in reserved detail view', async () => {
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '빈야사',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: '월경 중입니다',
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+    await waitFor(() => expect(classUpdateMyRegistrationCommentMock).toHaveBeenCalledWith(1, ''));
+
+    fireEvent.click(screen.getByRole('button', { name: '직접 입력' }));
+    fireEvent.change(screen.getByPlaceholderText('강사에게 전달할 컨디션/주의사항을 입력해 주세요.'), {
+      target: { value: '   ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 저장' }));
+
+    await waitFor(() => expect(classUpdateMyRegistrationCommentMock).toHaveBeenLastCalledWith(1, ''));
+  });
+
+  it('shows comment save error in reserved detail view', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '빈야사',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: null,
+      },
+    });
+    classUpdateMyRegistrationCommentMock.mockRejectedValueOnce(new Error('save failed'));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 
   it('renders loaded attendance comment thread and sends a message', async () => {
@@ -234,6 +366,142 @@ describe('CustomerClassDetail page', () => {
     classGetMyClassDetailMock.mockResolvedValueOnce({ data: null });
     renderPage();
     await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
+  });
+
+  it('ignores late reserved comment save response after leaving detail', async () => {
+    let resolveSave: (value: unknown) => void = () => {};
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '빈야사',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: null,
+      },
+    });
+    classUpdateMyRegistrationCommentMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveSave = resolve;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: null,
+    });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy());
+
+    resolveSave({});
+    await Promise.resolve();
+    expect(screen.getByText('수업 정보를 찾을 수 없습니다.')).toBeTruthy();
+  });
+
+  it('does not overwrite another reserved class detail with stale save response', async () => {
+    let resolveSave: (value: unknown) => void = () => {};
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '첫 번째 수업',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: null,
+      },
+    });
+    classUpdateMyRegistrationCommentMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveSave = resolve;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '두 번째 수업',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'reserved',
+        registration_comment: '두 번째 코멘트',
+      },
+    });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText('두 번째 코멘트')).toBeTruthy());
+
+    resolveSave({});
+    await Promise.resolve();
+    expect(screen.getByText('두 번째 코멘트')).toBeTruthy();
+  });
+
+  it('ignores stale reserved comment save error after route changes', async () => {
+    let rejectSave: (reason?: unknown) => void = () => {};
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '첫 번째 수업',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'reserved',
+        registration_comment: null,
+      },
+    });
+    classUpdateMyRegistrationCommentMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectSave = reject;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('강사에게 전달할 코멘트')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '월경 중입니다' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '두 번째 수업',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'reserved',
+        registration_comment: '두 번째 코멘트',
+      },
+    });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText('두 번째 코멘트')).toBeTruthy());
+
+    rejectSave(new Error('late save failure'));
+    await Promise.resolve();
+    expect(screen.queryByText('요청 실패')).toBeNull();
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 
   it('keeps detail and shows error banner when a later reload fails', async () => {

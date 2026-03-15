@@ -10,22 +10,22 @@
 
 ```bash
 # 1. DB 컨테이너가 실행 중인지 확인
-docker-compose ps
+docker compose ps
 
 # 2. DB 헬스체크 확인
-docker-compose logs db
+docker compose logs db
 
 # 3. DB가 준비될 때까지 백엔드가 기다리는지 확인
 # docker-compose.yml의 depends_on 섹션에 condition: service_healthy 설정 확인
 
 # 4. 수동으로 DB 연결 테스트
-docker-compose exec db psql -U yoga_admin -d yoga_studio
+docker compose exec db psql -U yoga_admin -d yoga_studio
 
 # 5. .env 파일 확인
 # DB_PASSWORD가 올바른지 확인
 
 # 6. 컨테이너 재시작
-docker-compose restart backend
+docker compose restart backend
 ```
 
 ### 2. "npm ci can only install with an existing package-lock.json"
@@ -41,7 +41,7 @@ cd ../frontend
 npm install
 
 # 다시 빌드
-docker-compose build
+docker compose build
 ```
 
 ### 3. 데이터베이스 스키마가 적용되지 않음
@@ -51,14 +51,14 @@ docker-compose build
 **해결**:
 ```bash
 # 1. 테이블 확인
-docker-compose exec db psql -U yoga_admin -d yoga_studio -c "\dt"
+docker compose exec db psql -U yoga_admin -d yoga_studio -c "\dt"
 
 # 2. 마이그레이션 상태 확인/적용
-docker-compose exec -T backend npm run migrate
+docker compose exec -T backend npm run migrate
 
 # 3. 신규 DB 초기화가 필요하면 재생성
-docker-compose down -v  # ⚠️ 주의: 데이터가 삭제됩니다!
-docker-compose up -d
+docker compose down -v  # 주의: 데이터가 삭제됩니다.
+docker compose up -d
 ```
 
 참고:
@@ -68,11 +68,11 @@ docker-compose up -d
 
 ### 4. "Permission denied" - 스크립트 실행 오류
 
-**증상**: `start.sh` 또는 `start-local.sh` 실행 불가
+**증상**: `start.sh`, `deploy.sh`, `auto-update.sh` 등이 실행되지 않음
 
 **해결**:
 ```bash
-chmod +x start.sh start-local.sh deploy.sh backup.sh restore.sh
+chmod +x start.sh start-local.sh deploy.sh auto-update.sh backup.sh restore.sh
 ./start.sh
 ```
 
@@ -87,7 +87,7 @@ CORS_ORIGIN=http://localhost:3000
 
 # nginx.conf 확인 (proxy_pass가 올바른지)
 # 컨테이너 재시작
-docker-compose restart
+docker compose restart
 ```
 
 ### 6. "Unknown authentication method"
@@ -110,8 +110,8 @@ docker exec -it <postgres-container> cat /var/lib/postgresql/data/pg_hba.conf
 **해결**:
 ```bash
 # 로그 확인
-docker-compose logs backend
-docker-compose logs frontend
+docker compose logs backend
+docker compose logs frontend
 
 # 일반적인 원인:
 # - 환경 변수 누락 (.env 파일 확인)
@@ -133,10 +133,10 @@ lsof -i :3001
 # ADMIN_ID, ADMIN_PASSWORD 값이 올바른지 확인
 
 # 백엔드 재시작 (admin 계정은 시작 시 ensure/upsert 됩니다)
-docker-compose restart backend
+docker compose restart backend
 
 # 계정 존재 확인
-docker-compose exec -T db psql -U yoga_admin -d yoga_studio -c \
+docker compose exec -T db psql -U yoga_admin -d yoga_studio -c \
 "SELECT login_id, role, updated_at FROM yoga_users WHERE login_id = 'admin';"
 ```
 
@@ -151,7 +151,7 @@ docker-compose exec -T db psql -U yoga_admin -d yoga_studio -c \
 # - Network 탭: API 요청 확인
 
 # 백엔드 로그 확인
-docker-compose logs -f backend
+docker compose logs -f backend
 
 # API 직접 테스트
 curl http://localhost:3001/health
@@ -170,9 +170,25 @@ docker system prune -a
 #   - /app/node_modules
 ```
 
+### 11. auto-update cron이 겹쳐서 여러 번 실행될까 걱정됨
+
+**증상**: cron을 짧은 주기로 돌릴 때 이전 배포와 겹칠까 우려됨
+
+**해결**:
+```bash
+# auto-update.sh는 프로젝트 루트에 .auto-update.lock 디렉토리를 만들어
+# 중복 실행을 막습니다. 이미 실행 중이면 아래처럼 skip 로그만 남기고 종료합니다.
+./auto-update.sh
+```
+
+로그 예시:
+```text
+[2026-03-15 10:00:00] Another auto-update run is already in progress. Skipping.
+```
+
 ## 도움이 더 필요하신가요?
 
-1. 로그 전체 확인: `docker-compose logs > logs.txt`
+1. 로그 전체 확인: `docker compose logs > logs.txt`
 2. 컨테이너 상태 확인: `docker ps -a`
 3. 네트워크 상태 확인: `docker network inspect <network-name>`
 4. DB 연결 테스트:

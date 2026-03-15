@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceAPI, classAPI } from '../services/api';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
@@ -42,7 +42,16 @@ interface PendingConversation {
   last_created_at: string;
 }
 
+interface AttendanceListResponse {
+  items: CustomerAttendance[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 const normalizeDate = (value: string) => value.slice(0, 10);
+const ATTENDANCE_PAGE_SIZE = 5;
 const QUICK_COMMENT_OPTIONS = [
   '월경 중입니다',
   '오늘은 조용히 수련하고 싶어요',
@@ -61,25 +70,27 @@ const composeRegistrationComment = (quickComments: string[], directInput: string
 
 const CustomerDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { customerInfo } = useAuth();
+  const customerId = customerInfo?.id ?? null;
   const [nextUpcomingClass, setNextUpcomingClass] = useState<MyRegistrationClass | null>(null);
   const [recentAttendances, setRecentAttendances] = useState<CustomerAttendance[]>([]);
+  const [attendanceTotalCount, setAttendanceTotalCount] = useState(0);
   const [pendingConversations, setPendingConversations] = useState<PendingConversation[]>([]);
+  const [attendancePage, setAttendancePage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedQuickComments, setSelectedQuickComments] = useState<string[]>([]);
   const [customCommentChips, setCustomCommentChips] = useState<string[]>([]);
   const [isDirectCommentOpen, setIsDirectCommentOpen] = useState(false);
   const [directCommentInput, setDirectCommentInput] = useState('');
   const [isSavingComment, setIsSavingComment] = useState(false);
+  const loadedThreadClassIdsRef = useRef<Set<number>>(new Set());
+  const loadingThreadClassIdsRef = useRef<Set<number>>(new Set());
+  const lastLoadedAttendancePageRef = useRef(1);
 
-  const loadAttendanceData = useCallback(async () => {
+  const loadUpcomingClassData = useCallback(async () => {
     try {
-      const [attendancesRes, registrationsRes] = await Promise.all([
-        attendanceAPI.getAll({ customer_id: customerInfo.id, limit: 20 }),
-        classAPI.getMyRegistrations(),
-      ]);
-
-      const attendanceItems = attendancesRes.data as CustomerAttendance[];
+      const registrationsRes = await classAPI.getMyRegistrations();
       const registrationItems = registrationsRes.data as MyRegistrationClass[];
 
       const now = new Date();
@@ -93,67 +104,95 @@ const CustomerDashboard: React.FC = () => {
         return aStartAt - bStartAt;
       });
       setNextUpcomingClass(nextClasses[0] || null);
-
-      const sortedAttendances = [...attendanceItems].sort((a, b) => (
-        new Date(b.attendance_date).getTime() - new Date(a.attendance_date).getTime()
-      ));
-      setRecentAttendances(sortedAttendances.slice(0, 5));
-
-      const recentClassIds = Array.from(new Set(
-        sortedAttendances
-          .map((item) => (typeof item.class_id === 'number' ? item.class_id : null))
-          .filter((id): id is number => id !== null)
-      )).slice(0, 8);
-
-      if (recentClassIds.length === 0) {
-        setPendingConversations([]);
-        return;
-      }
-
-      const threadResults = await Promise.allSettled(
-        recentClassIds.map((classId) => classAPI.getMyCommentThread(classId))
-      );
-
-      const pendingItems: PendingConversation[] = [];
-
-      threadResults.forEach((result, index) => {
-        if (result.status !== 'fulfilled') {
-          return;
-        }
-        const classId = recentClassIds[index];
-        const messages = (result.value.data?.messages || []) as AttendanceCommentMessage[];
-        if (messages.length === 0) {
-          return;
-        }
-
-        const lastMessage = messages[messages.length - 1];
-
-        const classInfo = sortedAttendances.find((item) => item.class_id === classId);
-        pendingItems.push({
-          class_id: classId,
-          title: String(classInfo?.class_title || classInfo?.class_type || `수업 #${classId}`),
-          class_date: classInfo?.class_date || classInfo?.attendance_date || '',
-          messages,
-          last_created_at: lastMessage.created_at,
-        });
-      });
-
-      pendingItems.sort((a, b) => (
-        new Date(b.last_created_at).getTime() - new Date(a.last_created_at).getTime()
-      ));
-      setPendingConversations(pendingItems);
     } catch (error) {
-      console.error('Failed to load attendance data:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to load upcoming class data:', error);
     }
-  }, [customerInfo]);
+  }, []);
+
+  const loadAttendancePage = useCallback(async (page: number) => {
+    const offset = (page - 1) * ATTENDANCE_PAGE_SIZE;
+    const attendancesRes = await attendanceAPI.getAll({
+      customer_id: customerId!,
+      limit: ATTENDANCE_PAGE_SIZE,
+      offset,
+    });
+    const attendanceData = attendancesRes.data as AttendanceListResponse;
+
+    setRecentAttendances(attendanceData.items || []);
+    setAttendanceTotalCount(attendanceData.total || 0);
+  }, [customerId]);
 
   useEffect(() => {
-    if (customerInfo) {
-      void loadAttendanceData();
+    if (customerId === null) {
+      return;
     }
-  }, [customerInfo, loadAttendanceData]);
+
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          loadUpcomingClassData(),
+          loadAttendancePage(1),
+        ]);
+        lastLoadedAttendancePageRef.current = 1;
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadInitialData();
+  }, [customerId, loadAttendancePage, loadUpcomingClassData]);
+
+  useEffect(() => {
+    loadedThreadClassIdsRef.current.clear();
+    loadingThreadClassIdsRef.current.clear();
+    lastLoadedAttendancePageRef.current = 1;
+    setAttendancePage(1);
+    setPendingConversations([]);
+  }, [customerId]);
+
+  useEffect(() => {
+    if (customerId === null || isLoading) {
+      return;
+    }
+
+    if (attendancePage === lastLoadedAttendancePageRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCurrentAttendancePage = async () => {
+      try {
+        const offset = (attendancePage - 1) * ATTENDANCE_PAGE_SIZE;
+        const attendancesRes = await attendanceAPI.getAll({
+          customer_id: customerId,
+          limit: ATTENDANCE_PAGE_SIZE,
+          offset,
+        });
+        if (cancelled) {
+          return;
+        }
+
+        const attendanceData = attendancesRes.data as AttendanceListResponse;
+        setRecentAttendances(attendanceData.items || []);
+        setAttendanceTotalCount(attendanceData.total || 0);
+        lastLoadedAttendancePageRef.current = attendancePage;
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load attendance page:', error);
+          setAttendancePage(lastLoadedAttendancePageRef.current);
+        }
+      }
+    };
+
+    void loadCurrentAttendancePage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attendancePage, customerId, isLoading]);
 
   useEffect(() => {
     const savedComment = (nextUpcomingClass?.registration_comment || '').trim();
@@ -211,11 +250,98 @@ const CustomerDashboard: React.FC = () => {
     await saveComment(selectedQuickComments, nextCustomChips.join('\n'));
   };
 
-  const attendedSummary = useMemo(() => recentAttendances.slice(0, 3), [recentAttendances]);
+  const attendanceTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(attendanceTotalCount / ATTENDANCE_PAGE_SIZE)),
+    [attendanceTotalCount]
+  );
+  const visibleAttendanceClassIds = useMemo(() => Array.from(new Set(
+    recentAttendances
+      .map((item) => (typeof item.class_id === 'number' ? item.class_id : null))
+      .filter((classId): classId is number => classId !== null)
+  )), [recentAttendances]);
   const pendingConversationByClassId = useMemo(
     () => new Map(pendingConversations.map((item) => [item.class_id, item])),
     [pendingConversations]
   );
+
+  useEffect(() => {
+    const classIdsToFetch = visibleAttendanceClassIds.filter((classId) => (
+      !loadedThreadClassIdsRef.current.has(classId)
+      && !loadingThreadClassIdsRef.current.has(classId)
+    ));
+    if (classIdsToFetch.length === 0) {
+      return;
+    }
+
+    classIdsToFetch.forEach((classId) => {
+      loadingThreadClassIdsRef.current.add(classId);
+    });
+
+    let cancelled = false;
+
+    const loadVisibleThreads = async () => {
+      const threadResults = await Promise.allSettled(
+        classIdsToFetch.map((classId) => classAPI.getMyCommentThread(classId))
+      );
+
+      if (cancelled) {
+        classIdsToFetch.forEach((classId) => {
+          loadingThreadClassIdsRef.current.delete(classId);
+        });
+        return;
+      }
+
+      const nextItems: PendingConversation[] = [];
+
+      threadResults.forEach((result, index) => {
+        const classId = classIdsToFetch[index];
+        loadingThreadClassIdsRef.current.delete(classId);
+        if (result.status !== 'fulfilled') {
+          return;
+        }
+
+        loadedThreadClassIdsRef.current.add(classId);
+        const messages = (result.value.data?.messages || []) as AttendanceCommentMessage[];
+        if (messages.length === 0) {
+          return;
+        }
+
+        const classInfo = recentAttendances.find((item) => item.class_id === classId);
+        const lastMessage = messages[messages.length - 1];
+
+        nextItems.push({
+          class_id: classId,
+          title: String(classInfo?.class_title || classInfo?.class_type || `수업 #${classId}`),
+          class_date: classInfo?.class_date || classInfo?.attendance_date || '',
+          messages,
+          last_created_at: lastMessage.created_at,
+        });
+      });
+
+      if (nextItems.length === 0) {
+        return;
+      }
+
+      setPendingConversations((prev) => {
+        const merged = new Map(prev.map((item) => [item.class_id, item]));
+        nextItems.forEach((item) => {
+          merged.set(item.class_id, item);
+        });
+        return [...merged.values()].sort((a, b) => (
+          new Date(b.last_created_at).getTime() - new Date(a.last_created_at).getTime()
+        ));
+      });
+    };
+
+    void loadVisibleThreads();
+
+    return () => {
+      cancelled = true;
+      classIdsToFetch.forEach((classId) => {
+        loadingThreadClassIdsRef.current.delete(classId);
+      });
+    };
+  }, [recentAttendances, visibleAttendanceClassIds]);
 
   if (isLoading) {
     return (
@@ -345,15 +471,45 @@ const CustomerDashboard: React.FC = () => {
       </div>
 
       <section className="card space-y-4">
-        <div>
-          <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
-          <p className="text-sm text-warm-600">최근 출석 수업과 수업 후 코멘트 대화를 함께 확인할 수 있습니다.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
+            <p className="text-sm text-warm-600">최근 출석 수업과 수업 후 코멘트 대화를 함께 확인할 수 있습니다.</p>
+          </div>
+          {attendanceTotalCount > 0 && (
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
+              <p className="text-xs text-warm-600">
+                {attendanceTotalCount}개 중 {(attendancePage - 1) * ATTENDANCE_PAGE_SIZE + 1}-{Math.min(attendancePage * ATTENDANCE_PAGE_SIZE, attendanceTotalCount)}개
+              </p>
+              <div className="inline-flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+                  disabled={attendancePage === 1}
+                  onClick={() => setAttendancePage((prev) => Math.max(1, prev - 1))}
+                >
+                  이전
+                </button>
+                <span className="text-sm font-medium text-primary-800">
+                  {attendancePage} / {attendanceTotalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+                  disabled={attendancePage === attendanceTotalPages}
+                  onClick={() => setAttendancePage((prev) => Math.min(attendanceTotalPages, prev + 1))}
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-        {attendedSummary.length === 0 ? (
+        {recentAttendances.length === 0 ? (
           <p className="text-warm-500 py-4">최근 출석 수업이 없습니다.</p>
         ) : (
           <div className="space-y-2">
-            {attendedSummary.map((item) => {
+            {recentAttendances.map((item) => {
               const pendingConversation = typeof item.class_id === 'number'
                 ? pendingConversationByClassId.get(item.class_id)
                 : undefined;
@@ -364,7 +520,9 @@ const CustomerDashboard: React.FC = () => {
                   type="button"
                   onClick={() => {
                     if (item.class_id) {
-                      navigate(`/classes/${item.class_id}`);
+                      navigate(`/classes/${item.class_id}`, {
+                        state: { from: `${location.pathname}${location.search}${location.hash}` },
+                      });
                     }
                   }}
                   disabled={!item.class_id}
