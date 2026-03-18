@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.5](https://github.com/star114/yoga-studio-management/compare/v2.4.4...v2.4.5) (2026-03-18)
+
+
+### Bug Fixes
+
+* paginate recommended classes in customer detail ([#50](https://github.com/star114/yoga-studio-management/issues/50)) ([1e36637](https://github.com/star114/yoga-studio-management/commit/1e36637e06e225544c4b4104ceef1b1e63fac395))
+
 ## [2.4.4](https://github.com/star114/yoga-studio-management/compare/v2.4.3...v2.4.4) (2026-03-15)
 
 
