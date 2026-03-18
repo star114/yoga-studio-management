@@ -14,15 +14,56 @@ const hasCustomerAccess = async (customerId: string, userId: number) => {
   return checkResult.rows.length > 0;
 };
 
+const normalizeClassTitle = (value: string): string => {
+  return String(value ?? '')
+    .replace(/\u00A0/g, ' ')
+    .trim();
+};
+
+const normalizeReservableClassTitles = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const titles: string[] = [];
+
+  for (const rawTitle of value) {
+    if (typeof rawTitle !== 'string') {
+      continue;
+    }
+
+    const title = normalizeClassTitle(rawTitle);
+    if (!title || seen.has(title)) {
+      continue;
+    }
+
+    seen.add(title);
+    titles.push(title);
+  }
+
+  return titles;
+};
+
+const buildMembershipTypeQuery = (includeInactive: boolean) => `
+  SELECT
+    mt.*,
+    COALESCE(titles.reservable_class_titles, ARRAY[]::text[]) AS reservable_class_titles
+  FROM yoga_membership_types mt
+  LEFT JOIN LATERAL (
+    SELECT ARRAY_AGG(t.class_title ORDER BY t.id ASC) AS reservable_class_titles
+    FROM yoga_membership_type_class_titles t
+    WHERE t.membership_type_id = mt.id
+  ) titles ON true
+  ${includeInactive ? '' : 'WHERE mt.is_active = true'}
+  ORDER BY mt.created_at DESC
+`;
+
 // 회원권 종류 조회
 router.get('/types', authenticate, async (req: AuthRequest, res) => {
   try {
     const includeInactive = req.user?.role === 'admin' && req.query.include_inactive === 'true';
-    const result = await pool.query(
-      includeInactive
-        ? 'SELECT * FROM yoga_membership_types ORDER BY created_at DESC'
-        : 'SELECT * FROM yoga_membership_types WHERE is_active = true ORDER BY created_at DESC'
-    );
+    const result = await pool.query(buildMembershipTypeQuery(includeInactive));
     res.json(result.rows);
   } catch (error) {
     console.error('Get membership types error:', error);
@@ -36,15 +77,47 @@ router.post('/types',
   requireAdmin,
   body('name').notEmpty(),
   body('total_sessions').isInt({ min: 1 }),
+  body('reservable_class_titles')
+    .optional()
+    .custom((value) => normalizeReservableClassTitles(value).length > 0),
   validateRequest,
   async (req, res) => {
     const { name, description, total_sessions } = req.body;
+    const hasReservableClassTitles = Object.prototype.hasOwnProperty.call(req.body, 'reservable_class_titles');
+    const reservableClassTitles = hasReservableClassTitles
+      ? normalizeReservableClassTitles(req.body.reservable_class_titles)
+      : normalizeReservableClassTitles([name]);
+
+    if (reservableClassTitles.length === 0) {
+      return res.status(400).json({
+        error: 'reservable_class_titles must contain at least one class title',
+      });
+    }
 
     try {
       const result = await pool.query(
-        `INSERT INTO yoga_membership_types (name, description, total_sessions)
-         VALUES ($1, $2, $3) RETURNING *`,
-        [name, description || null, total_sessions]
+        `WITH inserted_type AS (
+           INSERT INTO yoga_membership_types (name, description, total_sessions)
+           VALUES ($1, $2, $3)
+           RETURNING *
+         ),
+         inserted_titles AS (
+           INSERT INTO yoga_membership_type_class_titles (membership_type_id, class_title)
+           SELECT inserted_type.id, title.value
+           FROM inserted_type
+           CROSS JOIN unnest($4::text[]) WITH ORDINALITY AS title(value, ordinality)
+           RETURNING membership_type_id, class_title, id
+         )
+         SELECT
+           inserted_type.*,
+           COALESCE(titles.reservable_class_titles, ARRAY[]::text[]) AS reservable_class_titles
+         FROM inserted_type
+         LEFT JOIN LATERAL (
+           SELECT ARRAY_AGG(t.class_title ORDER BY t.id ASC) AS reservable_class_titles
+           FROM inserted_titles t
+           WHERE t.membership_type_id = inserted_type.id
+         ) titles ON true`,
+        [name, description || null, total_sessions, reservableClassTitles]
       );
 
       res.status(201).json(result.rows[0]);
@@ -60,51 +133,134 @@ router.put('/types/:id',
   authenticate,
   requireAdmin,
   body('total_sessions').optional().isInt({ min: 1 }),
+  body('reservable_class_titles')
+    .optional()
+    .custom((value) => normalizeReservableClassTitles(value).length > 0),
   validateRequest,
   async (req, res) => {
     const { id } = req.params;
     const { name, description, total_sessions, is_active } = req.body;
+    const hasReservableClassTitles = Object.prototype.hasOwnProperty.call(req.body, 'reservable_class_titles');
+    const reservableClassTitles = hasReservableClassTitles
+      ? normalizeReservableClassTitles(req.body.reservable_class_titles)
+      : [];
+
+    if (hasReservableClassTitles && reservableClassTitles.length === 0) {
+      return res.status(400).json({
+        error: 'reservable_class_titles must contain at least one class title',
+      });
+    }
+
+    const hasName = Object.prototype.hasOwnProperty.call(req.body, 'name');
+    const hasDescription = Object.prototype.hasOwnProperty.call(req.body, 'description');
+    const hasTotalSessions = Object.prototype.hasOwnProperty.call(req.body, 'total_sessions');
+    const hasIsActive = Object.prototype.hasOwnProperty.call(req.body, 'is_active');
+
+    let client: {
+      query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }>;
+      release: () => void;
+    } | null = null;
 
     try {
-      const result = await pool.query(
-        `UPDATE yoga_membership_types
-         SET name = CASE
-               WHEN $1::text IS NULL THEN name
-               ELSE $1::text
-             END,
-             description = CASE
-               WHEN $2::boolean THEN $3::text
-               ELSE description
-             END,
-             total_sessions = CASE
-               WHEN $4::boolean THEN $5::integer
-               ELSE total_sessions
-             END,
-             is_active = CASE
-               WHEN $6::boolean IS NULL THEN is_active
-               ELSE $6::boolean
-             END
-         WHERE id = $7::integer
-         RETURNING *`,
-        [
-          name ?? null,
-          Object.prototype.hasOwnProperty.call(req.body, 'description'),
-          description ?? null,
-          Object.prototype.hasOwnProperty.call(req.body, 'total_sessions'),
-          total_sessions,
-          is_active ?? null,
-          id,
-        ]
+      client = await pool.connect();
+      await client.query('BEGIN');
+
+      const existingResult = await client.query(
+        `SELECT
+           mt.*,
+           COALESCE(titles.reservable_class_titles, ARRAY[]::text[]) AS reservable_class_titles
+         FROM yoga_membership_types mt
+         LEFT JOIN LATERAL (
+           SELECT ARRAY_AGG(t.class_title ORDER BY t.id ASC) AS reservable_class_titles
+           FROM yoga_membership_type_class_titles t
+           WHERE t.membership_type_id = mt.id
+         ) titles ON true
+         WHERE mt.id = $1
+         FOR UPDATE`,
+        [id]
       );
 
-      if (result.rows.length === 0) {
+      if (existingResult.rows.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Membership type not found' });
       }
 
-      res.json(result.rows[0]);
+      if (!hasName && !hasDescription && !hasTotalSessions && !hasIsActive && !hasReservableClassTitles) {
+        await client.query('COMMIT');
+        return res.json(existingResult.rows[0]);
+      }
+
+      const updateResult = await client.query(
+        `WITH updated_type AS (
+           UPDATE yoga_membership_types
+           SET name = CASE
+                 WHEN $1::boolean THEN $2::text
+                 ELSE name
+               END,
+               description = CASE
+                 WHEN $3::boolean THEN $4::text
+                 ELSE description
+               END,
+               total_sessions = CASE
+                 WHEN $5::boolean THEN $6::integer
+                 ELSE total_sessions
+               END,
+               is_active = CASE
+                 WHEN $7::boolean IS NULL THEN is_active
+                 ELSE $7::boolean
+               END
+           WHERE id = $8::integer
+           RETURNING *
+         ),
+         deleted_titles AS (
+           DELETE FROM yoga_membership_type_class_titles
+           WHERE membership_type_id = $8::integer
+             AND $9::boolean = true
+         ),
+         inserted_titles AS (
+           INSERT INTO yoga_membership_type_class_titles (membership_type_id, class_title)
+           SELECT $8::integer, title.value
+           FROM unnest(CASE WHEN $9::boolean = true THEN $10::text[] ELSE ARRAY[]::text[] END) WITH ORDINALITY AS title(value, ordinality)
+           RETURNING membership_type_id, class_title, id
+         )
+         SELECT
+           updated_type.*,
+           COALESCE(titles.reservable_class_titles, ARRAY[]::text[]) AS reservable_class_titles
+         FROM updated_type
+         LEFT JOIN LATERAL (
+           SELECT ARRAY_AGG(t.class_title ORDER BY t.id ASC) AS reservable_class_titles
+           FROM yoga_membership_type_class_titles t
+           WHERE t.membership_type_id = updated_type.id
+         ) titles ON true`,
+        [
+          hasName,
+          name ?? null,
+          hasDescription,
+          description ?? null,
+          hasTotalSessions,
+          total_sessions,
+          is_active ?? null,
+          id,
+          hasReservableClassTitles,
+          reservableClassTitles,
+        ]
+      );
+
+      if (updateResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Membership type not found' });
+      }
+
+      await client.query('COMMIT');
+      res.json(updateResult.rows[0]);
     } catch (error) {
+      if (client) {
+        await client.query('ROLLBACK');
+      }
       console.error('Update membership type error:', error);
       res.status(500).json({ error: 'Server error' });
+    } finally {
+      client?.release();
     }
   }
 );
@@ -188,6 +344,7 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
         mt.name as membership_type_name,
         mt.description,
         mt.total_sessions,
+        COALESCE(titles.reservable_class_titles, ARRAY[]::text[]) AS reservable_class_titles,
         COALESCE(reserved_summary.reserved_count, 0) AS reserved_count,
         GREATEST(m.remaining_sessions - COALESCE(reserved_summary.reserved_count, 0), 0) AS available_sessions,
         COALESCE(usage_summary.consumed_sessions, 0) AS consumed_sessions,
@@ -195,6 +352,11 @@ router.get('/customer/:customerId', authenticate, async (req: AuthRequest, res) 
         projection.expected_end_date
       FROM yoga_memberships m
       LEFT JOIN yoga_membership_types mt ON m.membership_type_id = mt.id
+      LEFT JOIN LATERAL (
+        SELECT ARRAY_AGG(t.class_title ORDER BY t.id ASC) AS reservable_class_titles
+        FROM yoga_membership_type_class_titles t
+        WHERE t.membership_type_id = mt.id
+      ) titles ON true
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS reserved_count
         FROM yoga_class_registrations r

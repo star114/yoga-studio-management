@@ -1,29 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { membershipAPI } from '../services/api';
+import { membershipAPI, type MembershipTypeRecord } from '../services/api';
 import { parseApiError } from '../utils/apiError';
-
-interface MembershipType {
-  id: number;
-  name: string;
-  description?: string | null;
-  total_sessions: number;
-  is_active: boolean;
-}
 
 interface TypeForm {
   name: string;
   description: string;
   total_sessions: string;
+  reservable_class_titles: string;
 }
 
 const INITIAL_TYPE_FORM: TypeForm = {
   name: '',
   description: '',
   total_sessions: '',
+  reservable_class_titles: '',
+};
+
+const normalizeReservableClassTitles = (value: string): string[] => {
+  const titles = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(titles));
+};
+
+const formatReservableClassTitles = (titles: string[] | undefined): string => {
+  return (titles ?? []).join('\n');
 };
 
 const MembershipTypeManagement: React.FC = () => {
-  const [types, setTypes] = useState<MembershipType[]>([]);
+  const [types, setTypes] = useState<MembershipTypeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -59,12 +66,13 @@ const MembershipTypeManagement: React.FC = () => {
     setEditingTypeId(null);
   };
 
-  const startEdit = (type: MembershipType) => {
+  const startEdit = (type: MembershipTypeRecord) => {
     setEditingTypeId(type.id);
     setForm({
       name: type.name,
       description: type.description || '',
       total_sessions: String(type.total_sessions),
+      reservable_class_titles: formatReservableClassTitles(type.reservable_class_titles),
     });
   };
 
@@ -74,10 +82,17 @@ const MembershipTypeManagement: React.FC = () => {
     setError('');
 
     try {
+      const reservableClassTitles = normalizeReservableClassTitles(form.reservable_class_titles);
+      if (reservableClassTitles.length === 0) {
+        setError('신청 가능한 수업명은 최소 1개 이상 입력해야 합니다.');
+        return;
+      }
+
       const payload = {
         name: form.name,
         description: form.description || null,
         total_sessions: Number(form.total_sessions),
+        reservable_class_titles: reservableClassTitles,
       };
 
       if (editingTypeId) {
@@ -98,7 +113,7 @@ const MembershipTypeManagement: React.FC = () => {
     }
   };
 
-  const handleDeactivate = async (type: MembershipType) => {
+  const handleDeactivate = async (type: MembershipTypeRecord) => {
     const ok = window.confirm(`"${type.name}" 회원권 관리 항목을 비활성화할까요?`);
     if (!ok) return;
 
@@ -115,7 +130,7 @@ const MembershipTypeManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (type: MembershipType) => {
+  const handleDelete = async (type: MembershipTypeRecord) => {
     const ok = window.confirm(`"${type.name}" 회원권 관리 항목을 완전히 삭제할까요?`);
     if (!ok) return;
 
@@ -179,6 +194,20 @@ const MembershipTypeManagement: React.FC = () => {
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               />
             </div>
+            <div>
+              <label className="label" htmlFor="type-reservable-class-titles">신청 가능한 수업명</label>
+              <textarea
+                id="type-reservable-class-titles"
+                className="input-field min-h-[120px]"
+                value={form.reservable_class_titles}
+                onChange={(e) => setForm((prev) => ({ ...prev, reservable_class_titles: e.target.value }))}
+                placeholder={"아침요가\n아침요가 3개월"}
+                required
+              />
+              <p className="mt-1 text-xs text-warm-500">
+                한 줄에 하나씩 입력하세요. 빈 줄은 자동으로 제거되고 중복된 값은 정리됩니다.
+              </p>
+            </div>
             <div className="flex gap-2">
               <button type="submit" disabled={isSubmitting} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSubmitting ? '저장 중...' : editingTypeId ? '수정 저장' : '종류 추가'}
@@ -200,35 +229,50 @@ const MembershipTypeManagement: React.FC = () => {
             <p className="text-warm-600 py-8 text-center">등록된 회원권 관리 항목이 없습니다.</p>
           ) : (
             <div className="space-y-3">
-              {types.map((type) => (
-                <div key={type.id} className="border border-warm-200 rounded-lg p-4 bg-warm-50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-primary-800">{type.name}</p>
-                      <p className="text-sm text-warm-600">
-                        횟수: {type.total_sessions}회
-                      </p>
-                      {type.description && <p className="text-sm text-warm-700 mt-1">{type.description}</p>}
+              {types.map((type) => {
+                const reservableClassTitles = type.reservable_class_titles ?? [];
+
+                return (
+                  <div key={type.id} className="border border-warm-200 rounded-lg p-4 bg-warm-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-primary-800">{type.name}</p>
+                        <p className="text-sm text-warm-600">
+                          횟수: {type.total_sessions}회
+                        </p>
+                        {type.description && <p className="text-sm text-warm-700 mt-1">{type.description}</p>}
+                        {reservableClassTitles.length ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {reservableClassTitles.map((title) => (
+                              <span key={`${type.id}-${title}`} className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-700">
+                                {title}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-warm-500">신청 가능한 수업명이 없습니다.</p>
+                        )}
+                      </div>
+                      <span className={`px-2.5 py-1 text-xs rounded-full ${type.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                        {type.is_active ? '활성' : '비활성'}
+                      </span>
                     </div>
-                    <span className={`px-2.5 py-1 text-xs rounded-full ${type.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
-                      {type.is_active ? '활성' : '비활성'}
-                    </span>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEdit(type)}>
-                      수정
-                    </button>
-                    {type.is_active ? (
-                      <button type="button" className="px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200" onClick={() => void handleDeactivate(type)}>
-                        비활성화
+                    <div className="flex gap-2 mt-3">
+                      <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEdit(type)}>
+                        수정
                       </button>
-                    ) : null}
-                    <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDelete(type)}>
-                      삭제
-                    </button>
+                      {type.is_active ? (
+                        <button type="button" className="px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200" onClick={() => void handleDeactivate(type)}>
+                          비활성화
+                        </button>
+                      ) : null}
+                      <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDelete(type)}>
+                        삭제
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

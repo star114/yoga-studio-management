@@ -27,8 +27,8 @@
 | 로그인/권한 (`auth.ts`, `Login.tsx`, `AuthContext.tsx`) | `AUTH-01`, `AUTH-02`, `AUTH-03`, `AUTH-04` |
 | 관리자 대시보드 (`AdminDashboard.tsx`, `attendances.ts` 일부) | `ADM-DASH-01`, `ADM-DASH-02`, `ADM-DASH-03`, `ADM-DASH-04` |
 | 고객 관리 목록 (`CustomerManagement.tsx`) | `ADM-CUST-01`, `ADM-CUST-02`, `ADM-CUST-03`, `ADM-CUST-04` |
-| 고객 상세/회원권/추천 수업 (`CustomerDetail.tsx`, `customers.ts`, `memberships.ts`) | `ADM-CUST-DETAIL-01`, `ADM-CUST-DETAIL-04`, `ADM-CUST-DETAIL-07`, `ADM-CUST-DETAIL-09`, `ADM-CUST-DETAIL-10` |
-| 회원권 종류 관리 (`MembershipTypeManagement.tsx`) | `ADM-MTYPE-01`, `ADM-MTYPE-02`, `ADM-MTYPE-03`, `ADM-MTYPE-04` |
+| 고객 상세/회원권/추천 수업 (`CustomerDetail.tsx`, `customers.ts`, `memberships.ts`) | `ADM-CUST-DETAIL-01`, `ADM-CUST-DETAIL-04`, `ADM-CUST-DETAIL-07`, `ADM-CUST-DETAIL-08`, `ADM-CUST-DETAIL-09`, `ADM-CUST-DETAIL-10` |
+| 회원권 종류 관리 (`MembershipTypeManagement.tsx`) | `ADM-MTYPE-01`, `ADM-MTYPE-02`, `ADM-MTYPE-03`, `ADM-MTYPE-04`, `ADM-MTYPE-05` |
 | 수업 목록/생성 (`ClassManagement.tsx`) | `ADM-CLASS-01`, `ADM-CLASS-02`, `ADM-CLASS-03`, `ADM-CLASS-04`, `ADM-CLASS-05` |
 | 수업 상세/수동 등록/출석/대화 (`ClassDetail.tsx`, `classes.ts`) | `ADM-CLASS-DETAIL-01`, `ADM-CLASS-DETAIL-03`, `ADM-CLASS-DETAIL-06`, `ADM-CLASS-DETAIL-09`, `ADM-CLASS-DETAIL-11` |
 | 관리자 계정 (`AdminAccountManagement.tsx`, `adminAccounts.ts`) | `ADM-ACC-01`, `ADM-ACC-03`, `ADM-ACC-04`, `ADM-ACC-05` |
@@ -233,9 +233,10 @@
   - 이미 사용했거나 예약 연결된 회원권은 비활성화 흐름으로 유도
 
 ### ADM-CUST-DETAIL-07 추천 수업 빠른 예약
-- 사전조건: 예약 가능한 추천 수업 존재
+- 사전조건: 회원권별 신청 가능 수업명 set이 등록된 추천 수업 존재
 - 권장 데이터:
-  - 같은 이름의 예정 수업이 11건 이상 있어 추천 목록이 2페이지 이상으로 나뉘는 고객
+  - `아침요가`, `아침요가 3개월`처럼 신청 가능 수업명 set이 등록된 회원권을 가진 고객
+  - 추천 목록이 2페이지 이상으로 나뉘도록 예정 수업이 11건 이상인 고객
 - 절차:
   1. 회원권 카드에서 `불러오기`
   2. 추천 수업 목록의 `총 N개 수업`, `현재/전체 페이지` 표시 확인
@@ -243,6 +244,7 @@
   4. 페이지 이동 후 추천 수업 항목이 실제로 바뀌는지 확인
   5. 빠른 예약 실행
 - 기대결과:
+  - 추천 수업이 해당 회원권의 신청 가능 수업명 set 기준으로 불러와진다.
   - 추천 수업이 첫 10건에만 잘리지 않고 전체 개수 기준으로 페이지네이션된다.
   - 페이지 번호, `이전`, `다음` 버튼이 현재 페이지 상태에 맞게 동작한다.
   - 이미 예약/출석/결석 처리된 수업은 상태 라벨과 disabled 상태가 유지된다.
@@ -250,7 +252,7 @@
   - 예약 후 고객 수업 기록에 `예약`으로 보인다.
 
 ### ADM-CUST-DETAIL-08 교차 회원권 예약 확인
-- 사전조건: 같은 이름 회원권이 없고 대체 회원권으로 예약 가능한 수업 존재
+- 사전조건: 신청 가능 수업명 set에 없는 대체 회원권으로만 예약 가능한 수업 존재
 - 절차:
   1. 빠른 예약 시도
   2. 교차 회원권 확인 다이얼로그 확인
@@ -290,10 +292,11 @@
   2. 활성/비활성 항목 확인
 - 기대결과:
   - 상태별 목록이 정상 표시된다.
+  - 각 회원권 종류의 신청 가능한 수업명 set이 보인다.
 
 ### ADM-MTYPE-02 회원권 종류 생성
 - 절차:
-  1. 이름, 총 횟수 등 입력
+  1. 이름, 총 횟수, 신청 가능한 수업명 set 입력
   2. 저장
 - 기대결과:
   - 새 회원권 종류가 목록에 추가된다.
@@ -301,7 +304,7 @@
 ### ADM-MTYPE-03 회원권 종류 수정
 - 절차:
   1. 기존 종류 선택
-  2. 이름/횟수 수정 후 저장
+  2. 이름/횟수/신청 가능한 수업명 set 수정 후 저장
   3. 취소도 확인
 - 기대결과:
   - 저장 시 값 반영
@@ -315,6 +318,14 @@
 - 기대결과:
   - 활성 항목은 비활성화 가능
   - 비활성 항목은 삭제 가능
+
+### ADM-MTYPE-05 신청 가능 수업명 set 검증
+- 절차:
+  1. 신청 가능한 수업명 set을 빈 줄만 넣고 저장 시도
+  2. 중복된 수업명을 여러 줄로 넣고 저장
+- 기대결과:
+  - 빈 set은 저장되지 않는다.
+  - 중복된 수업명은 정리되어 하나만 저장된다.
 
 ## 6. 수업 관리
 
@@ -399,6 +410,7 @@
   1. 해당 고객 선택
 - 기대결과:
   - 회원권이 자동 선택된다.
+  - 안내 문구가 신청 가능 수업명 set 기준 자동 선택임을 설명한다.
 
 ### ADM-CLASS-DETAIL-05 회원권 없음/로드 실패 처리
 - 절차:

@@ -73,6 +73,7 @@ describe('MembershipTypeManagement page', () => {
             description: null,
             total_sessions: 10,
             is_active: true,
+            reservable_class_titles: ['아침요가', '아침요가 3개월'],
           },
         ],
       });
@@ -84,15 +85,35 @@ describe('MembershipTypeManagement page', () => {
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '10회권' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText('설명'), { target: { value: '입문자용' } });
+    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), {
+      target: { value: '아침요가\n아침요가 3개월\n아침요가' },
+    });
     fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
 
     await waitFor(() => expect(createTypeMock).toHaveBeenCalledWith({
       name: '10회권',
       description: '입문자용',
       total_sessions: 10,
+      reservable_class_titles: ['아침요가', '아침요가 3개월'],
     }));
 
     expect(screen.getByText('회원권 관리 항목을 추가했습니다.')).toBeTruthy();
+    expect(screen.getByText('아침요가')).toBeTruthy();
+    expect(screen.getByText('아침요가 3개월')).toBeTruthy();
+  });
+
+  it('shows validation error when reservable class titles are empty', async () => {
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '빈 수업명권' } });
+    fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), { target: { value: ' \n  \n' } });
+    fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
+
+    await waitFor(() => expect(screen.getByText('신청 가능한 수업명은 최소 1개 이상 입력해야 합니다.')).toBeTruthy());
+    expect(createTypeMock).not.toHaveBeenCalled();
   });
 
   it('edits existing type and supports cancel/reset', async () => {
@@ -106,6 +127,7 @@ describe('MembershipTypeManagement page', () => {
             description: '기존 설명',
             total_sessions: 12,
             is_active: true,
+            reservable_class_titles: ['기본권', '아침요가'],
           },
         ],
       })
@@ -117,25 +139,29 @@ describe('MembershipTypeManagement page', () => {
             description: null,
             total_sessions: 20,
             is_active: true,
+            reservable_class_titles: ['기본권+', '아침요가 3개월'],
           },
         ],
       });
 
     render(<MembershipTypeManagement />);
 
-    await waitFor(() => expect(screen.getByText('기본권')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('기본권').length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
 
     expect(screen.getByRole('button', { name: '수정 저장' })).toBeTruthy();
+    expect((screen.getByLabelText('신청 가능한 수업명') as HTMLTextAreaElement).value).toBe('기본권\n아침요가');
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '기본권+' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '20' } });
     fireEvent.change(screen.getByLabelText('설명'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), { target: { value: '기본권+\n아침요가 3개월' } });
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
 
     await waitFor(() => expect(updateTypeMock).toHaveBeenCalledWith(7, {
       name: '기본권+',
       description: null,
       total_sessions: 20,
+      reservable_class_titles: ['기본권+', '아침요가 3개월'],
     }));
 
     await waitFor(() => expect(screen.getByText('회원권 관리 정보를 수정했습니다.')).toBeTruthy());
@@ -155,6 +181,7 @@ describe('MembershipTypeManagement page', () => {
     await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '실패 케이스' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), { target: { value: '실패 케이스' } });
     fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
 
     await waitFor(() => expect(screen.getByText('요청 처리 실패')).toBeTruthy());

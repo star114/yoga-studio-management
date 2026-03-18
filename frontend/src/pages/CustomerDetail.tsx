@@ -20,10 +20,12 @@ interface Customer {
 interface MembershipType {
   id: number;
   name: string;
+  reservable_class_titles?: string[];
 }
 
 interface Membership {
   id: number;
+  membership_type_id?: number;
   membership_type_name: string;
   remaining_sessions: number;
   available_sessions?: number;
@@ -109,6 +111,16 @@ const RECOMMENDED_CLASSES_PAGE_SIZE = 10;
 const formatConsumedSummary = (membership: Membership) => {
   const consumedSessions = membership.consumed_sessions ?? 0;
   return `${consumedSessions} / ${membership.total_sessions}회`;
+};
+
+const getMembershipReservableClassTitles = (
+  membership: Membership,
+  membershipTypes: MembershipType[]
+): string[] => {
+  if (!membership.membership_type_id) {
+    return [];
+  }
+  return membershipTypes.find((type) => type.id === membership.membership_type_id)?.reservable_class_titles ?? [];
 };
 
 const buildMembershipUpdatePayload = (form: EditMembershipForm) => {
@@ -402,7 +414,7 @@ const CustomerDetail: React.FC = () => {
 
     try {
       const response = await customerAPI.getRecommendedClasses(customerId, {
-        membership_name: membership.membership_type_name,
+        membership_id: membership.id,
         page,
         page_size: RECOMMENDED_CLASSES_PAGE_SIZE,
       });
@@ -821,7 +833,10 @@ const CustomerDetail: React.FC = () => {
             <p className="text-warm-600 py-6 text-center">등록된 회원권이 없습니다.</p>
           ) : (
             <div className="space-y-3">
-              {paginatedMemberships.map((membership) => (
+              {paginatedMemberships.map((membership) => {
+                const reservableClassTitles = getMembershipReservableClassTitles(membership, membershipTypes);
+
+                return (
                 <div key={membership.id} className="border border-warm-200 rounded-lg p-4 bg-warm-50">
                   {editingMembershipId === membership.id ? (
                     <div className="space-y-3">
@@ -871,9 +886,14 @@ const CustomerDetail: React.FC = () => {
                         예상 종료일: {membership.expected_end_date ? formatKoreanDate(membership.expected_end_date, false) : '-'}
                       </p>
                       {membership.notes && <p className="text-sm text-warm-600">{membership.notes}</p>}
+                      {reservableClassTitles.length > 0 && (
+                        <p className="text-sm text-warm-600">
+                          신청 가능 수업: {reservableClassTitles.join(', ')}
+                        </p>
+                      )}
                       <div className="mt-3 space-y-2 rounded-md border border-warm-200 bg-white p-3">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-medium text-primary-800">예약 가능한 수업</p>
+                      <p className="text-sm font-medium text-primary-800">신청 가능한 수업</p>
                           <button
                             type="button"
                             className="btn-secondary text-xs"
@@ -895,7 +915,7 @@ const CustomerDetail: React.FC = () => {
                             return <p className="text-xs text-red-700">{membershipRecommendationsError[membership.id]}</p>;
                           }
                           if (recommendedClasses.length === 0) {
-                            return <p className="text-xs text-warm-600">예정된 같은 이름 수업이 없습니다.</p>;
+                            return <p className="text-xs text-warm-600">이 회원권으로 신청 가능한 수업이 없습니다.</p>;
                           }
                           const availableSessions = membership.available_sessions ?? membership.remaining_sessions;
                           const hasNoRemainingSessions = typeof availableSessions === 'number' && availableSessions <= 0;
@@ -997,7 +1017,8 @@ const CustomerDetail: React.FC = () => {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {memberships.length > MEMBERSHIPS_PAGE_SIZE && (

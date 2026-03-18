@@ -160,7 +160,7 @@ test('types routes cover success/not-found/validation/error', async () => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createMembershipsHarness();
 
-  h.queryQueue.push({ rows: [{ id: 1, name: '10회' }] });
+  h.queryQueue.push({ rows: [{ id: 1, name: '10회', reservable_class_titles: ['10회'] }] });
   let res = await h.runRoute({
     method: 'get',
     routePath: '/types',
@@ -168,8 +168,11 @@ test('types routes cover success/not-found/validation/error', async () => {
   });
   assert.equal(res.status, 200);
   assert.equal(res.body[0].name, '10회');
+  assert.deepEqual(res.body[0].reservable_class_titles, ['10회']);
 
-  h.queryQueue.push({ rows: [{ id: 2, name: '중지권', is_active: false }] });
+  h.queryQueue.push({
+    rows: [{ id: 2, name: '중지권', is_active: false, reservable_class_titles: ['중지권'] }],
+  });
   res = await h.runRoute({
     method: 'get',
     routePath: '/types',
@@ -178,6 +181,7 @@ test('types routes cover success/not-found/validation/error', async () => {
   });
   assert.equal(res.status, 200);
   assert.equal(res.body[0].is_active, false);
+  assert.deepEqual(res.body[0].reservable_class_titles, ['중지권']);
 
   h.queryQueue.push(new Error('types fail'));
   res = await h.runRoute({
@@ -196,15 +200,30 @@ test('types routes cover success/not-found/validation/error', async () => {
   assert.equal(res.status, 400);
   assert.ok(Array.isArray(res.body.errors));
 
-  h.queryQueue.push({ rows: [{ id: 2, name: '월회원권' }] });
+  h.queryQueue.push({
+    rows: [{ id: 2, name: '월회원권', reservable_class_titles: ['아침요가', '저녁요가'] }],
+  });
   res = await h.runRoute({
     method: 'post',
     routePath: '/types',
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: '월회원권', total_sessions: 30 },
+    body: {
+      name: '월회원권',
+      total_sessions: 30,
+      reservable_class_titles: ['  아침요가 ', '', '저녁요가', '아침요가'],
+    },
   });
   assert.equal(res.status, 201);
   assert.equal(res.body.id, 2);
+  assert.deepEqual(res.body.reservable_class_titles, ['아침요가', '저녁요가']);
+
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { name: '빈 배열', total_sessions: 10, reservable_class_titles: [] },
+  });
+  assert.equal(res.status, 400);
 
   h.queryQueue.push(new Error('create type fail'));
   res = await h.runRoute({
@@ -224,7 +243,13 @@ test('types routes cover success/not-found/validation/error', async () => {
   });
   assert.equal(res.status, 400);
 
-  h.queryQueue.push({ rows: [] });
+  const typeUpdateNotFoundClient = h.createDbClientMock();
+  typeUpdateNotFoundClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(typeUpdateNotFoundClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/types/:id',
@@ -234,29 +259,75 @@ test('types routes cover success/not-found/validation/error', async () => {
   });
   assert.equal(res.status, 404);
 
-  h.queryQueue.push({ rows: [{ id: 3, name: 'updated' }] });
+  const typeUpdateSuccessClient = h.createDbClientMock();
+  typeUpdateSuccessClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 3, name: 'updated', reservable_class_titles: ['빈야사'] }] },
+    { rows: [{ id: 3, name: 'updated', reservable_class_titles: ['빈야사'] }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(typeUpdateSuccessClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/types/:id',
     params: { id: '3' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { name: 'updated', is_active: false },
+    body: {
+      name: 'updated',
+      is_active: false,
+      reservable_class_titles: ['빈야사', '아침요가'],
+    },
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.name, 'updated');
+  assert.deepEqual(res.body.reservable_class_titles, ['빈야사']);
 
-  h.queryQueue.push({ rows: [{ id: 3, name: 'updated', total_sessions: 12 }] });
+  const typeUpdateTitlesClient = h.createDbClientMock();
+  typeUpdateTitlesClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{
+      id: 3,
+      name: 'updated',
+      total_sessions: 12,
+      reservable_class_titles: ['저녁요가'],
+    }] },
+    { rows: [{
+      id: 3,
+      name: 'updated',
+      total_sessions: 12,
+      reservable_class_titles: ['저녁요가'],
+    }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(typeUpdateTitlesClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/types/:id',
     params: { id: '3' },
     headers: { authorization: `Bearer ${adminToken()}` },
-    body: { total_sessions: 12 },
+    body: { total_sessions: 12, reservable_class_titles: ['저녁요가', '저녁요가', ''] },
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.total_sessions, 12);
+  assert.deepEqual(res.body.reservable_class_titles, ['저녁요가']);
 
-  h.queryQueue.push(new Error('update type fail'));
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/types/:id',
+    params: { id: '3' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { reservable_class_titles: [] },
+  });
+  assert.equal(res.status, 400);
+
+  const typeUpdateErrorClient = h.createDbClientMock();
+  typeUpdateErrorClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 3, name: 'x2', reservable_class_titles: ['아침요가'] }] },
+    new Error('update type fail'),
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(typeUpdateErrorClient);
   res = await h.runRoute({
     method: 'put',
     routePath: '/types/:id',
@@ -359,6 +430,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
     rows: [{
       id: 10,
       total_sessions: 10,
+      reservable_class_titles: ['아침요가'],
       consumed_sessions: 5,
       remaining_sessions: 3,
       reserved_count: 2,
@@ -374,6 +446,7 @@ test('memberships routes cover list/create/update/delete branches', async () => 
   assert.equal(res.status, 200);
   assert.equal(res.body.length, 1);
   assert.equal(res.body[0].total_sessions, 10);
+  assert.deepEqual(res.body[0].reservable_class_titles, ['아침요가']);
   assert.equal(res.body[0].consumed_sessions, 5);
   assert.equal(res.body[0].reserved_count, 2);
   assert.equal(res.body[0].available_sessions, 1);
