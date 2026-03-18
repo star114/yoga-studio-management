@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/star114/yoga-studio-management/compare/v2.5.0...v2.5.1) (2026-03-18)
+
+
+### Bug Fixes
+
+* avoid aggregate locking in membership type updates ([#55](https://github.com/star114/yoga-studio-management/issues/55)) ([3a72e46](https://github.com/star114/yoga-studio-management/commit/3a72e4625d656c5328edbf2cedf99429ad18471d))
+
 ## [2.5.0](https://github.com/star114/yoga-studio-management/compare/v2.4.5...v2.5.0) (2026-03-18)
 
 
