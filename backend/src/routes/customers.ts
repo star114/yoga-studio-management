@@ -398,14 +398,14 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
            SELECT mine.attendance_status::text AS status
            FROM yoga_class_registrations mine
            WHERE mine.class_id = c.id
-             AND mine.customer_id = $1
+             AND mine.customer_id = $2
 
            UNION ALL
 
            SELECT 'attended'::text AS status
            FROM yoga_attendances a
            WHERE a.class_id = c.id
-             AND a.customer_id = $1
+             AND a.customer_id = $2
          ) usage
          ORDER BY CASE usage.status
            WHEN 'reserved' THEN 1

@@ -5,6 +5,7 @@ import MembershipTypeManagement from './MembershipTypeManagement';
 
 const {
   getTypesMock,
+  getClassTitlesMock,
   createTypeMock,
   updateTypeMock,
   deactivateTypeMock,
@@ -12,6 +13,7 @@ const {
   parseApiErrorMock,
 } = vi.hoisted(() => ({
   getTypesMock: vi.fn(),
+  getClassTitlesMock: vi.fn(),
   createTypeMock: vi.fn(),
   updateTypeMock: vi.fn(),
   deactivateTypeMock: vi.fn(),
@@ -22,6 +24,7 @@ const {
 vi.mock('../services/api', () => ({
   membershipAPI: {
     getTypes: getTypesMock,
+    getClassTitles: getClassTitlesMock,
     createType: createTypeMock,
     updateType: updateTypeMock,
     deactivateType: deactivateTypeMock,
@@ -37,6 +40,7 @@ describe('MembershipTypeManagement page', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     getTypesMock.mockResolvedValue({ data: [] });
+    getClassTitlesMock.mockResolvedValue({ data: [] });
   });
 
   afterEach(() => {
@@ -77,6 +81,9 @@ describe('MembershipTypeManagement page', () => {
           },
         ],
       });
+    getClassTitlesMock
+      .mockResolvedValueOnce({ data: ['아침요가', '아침요가 3개월', '저녁요가'] })
+      .mockResolvedValueOnce({ data: ['아침요가', '아침요가 3개월', '저녁요가'] });
 
     render(<MembershipTypeManagement />);
 
@@ -85,9 +92,8 @@ describe('MembershipTypeManagement page', () => {
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '10회권' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText('설명'), { target: { value: '입문자용' } });
-    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), {
-      target: { value: '아침요가\n아침요가 3개월\n아침요가' },
-    });
+    fireEvent.click(screen.getByLabelText('아침요가'));
+    fireEvent.click(screen.getByLabelText('아침요가 3개월'));
     fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
 
     await waitFor(() => expect(createTypeMock).toHaveBeenCalledWith({
@@ -98,8 +104,8 @@ describe('MembershipTypeManagement page', () => {
     }));
 
     expect(screen.getByText('회원권 관리 항목을 추가했습니다.')).toBeTruthy();
-    expect(screen.getByText('아침요가')).toBeTruthy();
-    expect(screen.getByText('아침요가 3개월')).toBeTruthy();
+    expect(screen.getAllByText('아침요가').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('아침요가 3개월').length).toBeGreaterThan(0);
   });
 
   it('shows validation error when reservable class titles are empty', async () => {
@@ -109,11 +115,60 @@ describe('MembershipTypeManagement page', () => {
 
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '빈 수업명권' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '3' } });
-    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), { target: { value: ' \n  \n' } });
     fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
 
-    await waitFor(() => expect(screen.getByText('신청 가능한 수업명은 최소 1개 이상 입력해야 합니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('신청 가능한 수업명은 최소 1개 이상 선택해야 합니다.')).toBeTruthy());
     expect(createTypeMock).not.toHaveBeenCalled();
+  });
+
+  it('allows adding a custom class title not present in current classes', async () => {
+    createTypeMock.mockResolvedValueOnce(undefined);
+    getClassTitlesMock
+      .mockResolvedValueOnce({ data: ['아침요가'] })
+      .mockResolvedValueOnce({ data: ['아침요가'] });
+    getTypesMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 31,
+            name: '특수권',
+            description: null,
+            total_sessions: 2,
+            is_active: true,
+            reservable_class_titles: ['신규특강'],
+          },
+        ],
+      });
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('이름'), { target: { value: '특수권' } });
+    fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '2' } });
+    fireEvent.change(screen.getByPlaceholderText('목록에 없는 수업명 추가'), { target: { value: ' 신규특강 ' } });
+    fireEvent.click(screen.getByRole('button', { name: '수업명 추가' }));
+    expect((screen.getByRole('checkbox', { name: /신규특강.*현재 수업 목록에는 없음/ }) as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
+
+    await waitFor(() => expect(createTypeMock).toHaveBeenCalledWith({
+      name: '특수권',
+      description: null,
+      total_sessions: 2,
+      reservable_class_titles: ['신규특강'],
+    }));
+  });
+
+  it('shows validation error when custom class title input is empty', async () => {
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '수업명 추가' }));
+
+    await waitFor(() => expect(screen.getByText('추가할 수업명을 입력해주세요.')).toBeTruthy());
   });
 
   it('edits existing type and supports cancel/reset', async () => {
@@ -143,6 +198,9 @@ describe('MembershipTypeManagement page', () => {
           },
         ],
       });
+    getClassTitlesMock
+      .mockResolvedValueOnce({ data: ['기본권', '아침요가 3개월'] })
+      .mockResolvedValueOnce({ data: ['기본권+', '아침요가 3개월'] });
 
     render(<MembershipTypeManagement />);
 
@@ -150,18 +208,22 @@ describe('MembershipTypeManagement page', () => {
     fireEvent.click(screen.getByRole('button', { name: '수정' }));
 
     expect(screen.getByRole('button', { name: '수정 저장' })).toBeTruthy();
-    expect((screen.getByLabelText('신청 가능한 수업명') as HTMLTextAreaElement).value).toBe('기본권\n아침요가');
+    expect((screen.getByRole('checkbox', { name: '기본권' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: /아침요가.*현재 수업 목록에는 없음/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText('(현재 수업 목록에는 없음)')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '기본권+' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '20' } });
     fireEvent.change(screen.getByLabelText('설명'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), { target: { value: '기본권+\n아침요가 3개월' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: '기본권' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /아침요가.*현재 수업 목록에는 없음/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '아침요가 3개월' }));
     fireEvent.click(screen.getByRole('button', { name: '수정 저장' }));
 
     await waitFor(() => expect(updateTypeMock).toHaveBeenCalledWith(7, {
       name: '기본권+',
       description: null,
       total_sessions: 20,
-      reservable_class_titles: ['기본권+', '아침요가 3개월'],
+      reservable_class_titles: ['아침요가 3개월'],
     }));
 
     await waitFor(() => expect(screen.getByText('회원권 관리 정보를 수정했습니다.')).toBeTruthy());
@@ -175,13 +237,14 @@ describe('MembershipTypeManagement page', () => {
   it('shows parsed error when save fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     createTypeMock.mockRejectedValueOnce(new Error('save failed'));
+    getClassTitlesMock.mockResolvedValueOnce({ data: ['실패 케이스'] });
 
     render(<MembershipTypeManagement />);
 
     await waitFor(() => expect(screen.getByText('등록된 회원권 관리 항목이 없습니다.')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '실패 케이스' } });
     fireEvent.change(screen.getByLabelText('총 횟수'), { target: { value: '5' } });
-    fireEvent.change(screen.getByLabelText('신청 가능한 수업명'), { target: { value: '실패 케이스' } });
+    fireEvent.click(screen.getByLabelText('실패 케이스'));
     fireEvent.click(screen.getByRole('button', { name: '종류 추가' }));
 
     await waitFor(() => expect(screen.getByText('요청 처리 실패')).toBeTruthy());
@@ -397,5 +460,30 @@ describe('MembershipTypeManagement page', () => {
     render(<MembershipTypeManagement />);
 
     await waitFor(() => expect(getTypesMock).toHaveBeenCalledWith({ includeInactive: true }));
+    expect(getClassTitlesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps membership types visible when class title lookup fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getTypesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 41,
+          name: '유지권',
+          description: '보조 조회 실패',
+          total_sessions: 4,
+          is_active: true,
+          reservable_class_titles: ['등록외수업'],
+        },
+      ],
+    });
+    getClassTitlesMock.mockRejectedValueOnce(new Error('class titles failed'));
+
+    render(<MembershipTypeManagement />);
+
+    await waitFor(() => expect(screen.getByText('유지권')).toBeTruthy());
+    expect(screen.getByText('현재 등록된 수업명 목록을 불러오지 못했습니다. 필요하면 직접 수업명을 추가하세요.')).toBeTruthy();
+    expect(screen.queryByText('회원권 관리 목록을 불러오지 못했습니다.')).toBeNull();
+    consoleSpy.mockRestore();
   });
 });

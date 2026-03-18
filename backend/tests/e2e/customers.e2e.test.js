@@ -486,6 +486,8 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   assert.equal(recommendedQueryCall[1][2], 10);
   assert.equal(recommendedQueryCall[1][3], 0);
   assert.match(String(recommendedQueryCall[0]), /yoga_membership_type_class_titles/i);
+  assert.match(String(recommendedQueryCall[0]), /mine\.customer_id = \$2/);
+  assert.match(String(recommendedQueryCall[0]), /a\.customer_id = \$2/);
 
   h.queryQueue.push(new Error('recommended fail'));
   res = await h.runRoute({

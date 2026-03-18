@@ -137,6 +137,7 @@ describe('api service', () => {
 
     membershipAPI.getTypes();
     membershipAPI.getTypes({ includeInactive: true });
+    membershipAPI.getClassTitles();
     membershipAPI.createType(payload);
     membershipAPI.updateType(1, payload);
     membershipAPI.deactivateType(1);
@@ -197,6 +198,7 @@ describe('api service', () => {
 
     expect(getMock).toHaveBeenCalledWith('/memberships/types', { params: undefined });
     expect(getMock).toHaveBeenCalledWith('/memberships/types', { params: { include_inactive: true } });
+    expect(getMock).toHaveBeenCalledWith('/memberships/types/class-titles');
     expect(postMock).toHaveBeenCalledWith('/memberships/types', payload);
     expect(putMock).toHaveBeenCalledWith('/memberships/types/1', payload);
     expect(postMock).toHaveBeenCalledWith('/memberships/types/1/deactivate');

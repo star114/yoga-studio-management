@@ -191,6 +191,23 @@ test('types routes cover success/not-found/validation/error', async () => {
   });
   assert.equal(res.status, 500);
 
+  h.queryQueue.push({ rows: [{ title: '아침 요가' }, { title: '저녁요가' }] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/types/class-titles',
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, ['아침 요가', '저녁요가']);
+
+  h.queryQueue.push(new Error('class titles fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/types/class-titles',
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+
   res = await h.runRoute({
     method: 'post',
     routePath: '/types',

@@ -6,34 +6,28 @@ interface TypeForm {
   name: string;
   description: string;
   total_sessions: string;
-  reservable_class_titles: string;
+  reservable_class_titles: string[];
+  custom_class_title: string;
 }
 
 const INITIAL_TYPE_FORM: TypeForm = {
   name: '',
   description: '',
   total_sessions: '',
-  reservable_class_titles: '',
+  reservable_class_titles: [],
+  custom_class_title: '',
 };
 
-const normalizeReservableClassTitles = (value: string): string[] => {
-  const titles = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  return Array.from(new Set(titles));
-};
-
-const formatReservableClassTitles = (titles: string[] | undefined): string => {
-  return (titles ?? []).join('\n');
-};
+const normalizeReservableClassTitles = (titles: string[] | undefined): string[] =>
+  Array.from(new Set((titles ?? []).map((title) => title.trim()).filter(Boolean)));
 
 const MembershipTypeManagement: React.FC = () => {
   const [types, setTypes] = useState<MembershipTypeRecord[]>([]);
+  const [availableClassTitles, setAvailableClassTitles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [classTitlesError, setClassTitlesError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [form, setForm] = useState<TypeForm>(INITIAL_TYPE_FORM);
   const [editingTypeId, setEditingTypeId] = useState<number | null>(null);
@@ -50,14 +44,25 @@ const MembershipTypeManagement: React.FC = () => {
   const loadTypes = async () => {
     try {
       setError('');
+      setClassTitlesError('');
       setIsLoading(true);
-      const response = await membershipAPI.getTypes({ includeInactive: true });
-      setTypes(response.data);
+      const typesResponse = await membershipAPI.getTypes({ includeInactive: true });
+      setTypes(typesResponse.data);
     } catch (loadError) {
       console.error('Failed to load membership types:', loadError);
       setError('회원권 관리 목록을 불러오지 못했습니다.');
+      setAvailableClassTitles([]);
     } finally {
       setIsLoading(false);
+    }
+
+    try {
+      const classTitlesResponse = await membershipAPI.getClassTitles();
+      setAvailableClassTitles(normalizeReservableClassTitles(classTitlesResponse.data));
+    } catch (loadError) {
+      console.error('Failed to load class titles:', loadError);
+      setAvailableClassTitles([]);
+      setClassTitlesError('현재 등록된 수업명 목록을 불러오지 못했습니다. 필요하면 직접 수업명을 추가하세요.');
     }
   };
 
@@ -72,7 +77,21 @@ const MembershipTypeManagement: React.FC = () => {
       name: type.name,
       description: type.description || '',
       total_sessions: String(type.total_sessions),
-      reservable_class_titles: formatReservableClassTitles(type.reservable_class_titles),
+      reservable_class_titles: normalizeReservableClassTitles(type.reservable_class_titles),
+      custom_class_title: '',
+    });
+  };
+
+  const toggleReservableClassTitle = (title: string) => {
+    setForm((prev) => {
+      const nextTitles = prev.reservable_class_titles.includes(title)
+        ? prev.reservable_class_titles.filter((item) => item !== title)
+        : [...prev.reservable_class_titles, title];
+
+      return {
+        ...prev,
+        reservable_class_titles: normalizeReservableClassTitles(nextTitles),
+      };
     });
   };
 
@@ -84,7 +103,7 @@ const MembershipTypeManagement: React.FC = () => {
     try {
       const reservableClassTitles = normalizeReservableClassTitles(form.reservable_class_titles);
       if (reservableClassTitles.length === 0) {
-        setError('신청 가능한 수업명은 최소 1개 이상 입력해야 합니다.');
+        setError('신청 가능한 수업명은 최소 1개 이상 선택해야 합니다.');
         return;
       }
 
@@ -111,6 +130,24 @@ const MembershipTypeManagement: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleAddCustomClassTitle = () => {
+    const nextTitle = normalizeReservableClassTitles([form.custom_class_title])[0];
+    if (!nextTitle) {
+      setError('추가할 수업명을 입력해주세요.');
+      return;
+    }
+
+    setError('');
+    setForm((prev) => ({
+      ...prev,
+      reservable_class_titles: normalizeReservableClassTitles([
+        ...prev.reservable_class_titles,
+        nextTitle,
+      ]),
+      custom_class_title: '',
+    }));
   };
 
   const handleDeactivate = async (type: MembershipTypeRecord) => {
@@ -146,6 +183,11 @@ const MembershipTypeManagement: React.FC = () => {
       setError(parseApiError(deleteError));
     }
   };
+
+  const selectableClassTitles = normalizeReservableClassTitles([
+    ...availableClassTitles,
+    ...form.reservable_class_titles,
+  ]);
 
   return (
     <div className="space-y-6 fade-in">
@@ -195,17 +237,59 @@ const MembershipTypeManagement: React.FC = () => {
               />
             </div>
             <div>
-              <label className="label" htmlFor="type-reservable-class-titles">신청 가능한 수업명</label>
-              <textarea
-                id="type-reservable-class-titles"
-                className="input-field min-h-[120px]"
-                value={form.reservable_class_titles}
-                onChange={(e) => setForm((prev) => ({ ...prev, reservable_class_titles: e.target.value }))}
-                placeholder={"아침요가\n아침요가 3개월"}
-                required
-              />
+              <p className="label">신청 가능한 수업명</p>
+              <div className="mb-3 flex gap-2">
+                <input
+                  id="type-custom-class-title"
+                  className="input-field"
+                  value={form.custom_class_title}
+                  onChange={(e) => setForm((prev) => ({ ...prev, custom_class_title: e.target.value }))}
+                  placeholder="목록에 없는 수업명 추가"
+                />
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  onClick={handleAddCustomClassTitle}
+                >
+                  수업명 추가
+                </button>
+              </div>
+              {classTitlesError ? (
+                <p className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  {classTitlesError}
+                </p>
+              ) : null}
+              <div className="space-y-2 rounded-lg border border-warm-200 bg-warm-50 p-3">
+                {selectableClassTitles.length === 0 ? (
+                  <p className="text-sm text-warm-600">등록된 수업명이 없습니다. 먼저 수업을 등록해주세요.</p>
+                ) : (
+                  <div className="max-h-56 space-y-2 overflow-y-auto">
+                    {selectableClassTitles.map((title) => {
+                      const checked = form.reservable_class_titles.includes(title);
+                      const isLegacyTitle = !availableClassTitles.includes(title);
+
+                      return (
+                        <label key={title} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                          <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4"
+                            checked={checked}
+                            onChange={() => toggleReservableClassTitle(title)}
+                          />
+                          <span className="text-sm text-primary-800">
+                            {title}
+                            {isLegacyTitle ? (
+                              <span className="ml-2 text-xs text-warm-500">(현재 수업 목록에는 없음)</span>
+                            ) : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               <p className="mt-1 text-xs text-warm-500">
-                한 줄에 하나씩 입력하세요. 빈 줄은 자동으로 제거되고 중복된 값은 정리됩니다.
+                현재 등록된 수업명 중에서 선택할 수 있고, 목록에 없는 수업명은 직접 추가할 수 있습니다.
               </p>
             </div>
             <div className="flex gap-2">

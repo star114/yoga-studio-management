@@ -3,7 +3,7 @@ import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validateRequest';
-import { normalizeMembershipClassTitle } from '../utils/membershipClassTitles';
+import { buildNormalizedTitleSql, normalizeMembershipClassTitle } from '../utils/membershipClassTitles';
 
 const router = express.Router();
 
@@ -62,6 +62,23 @@ router.get('/types', authenticate, async (req: AuthRequest, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Get membership types error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 현재 등록된 수업명 목록 조회 (관리자)
+router.get('/types/class-titles', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT ${buildNormalizedTitleSql('title')} AS title
+       FROM yoga_classes
+       WHERE ${buildNormalizedTitleSql('title')} <> ''
+       ORDER BY title ASC`
+    );
+
+    res.json(result.rows.map((row) => row.title));
+  } catch (error) {
+    console.error('Get membership type class titles error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

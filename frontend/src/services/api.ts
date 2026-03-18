@@ -117,6 +117,9 @@ export const membershipAPI = {
     api.get('/memberships/types', {
       params: options?.includeInactive ? { include_inactive: true } : undefined,
     }),
+
+  getClassTitles: () =>
+    api.get('/memberships/types/class-titles'),
   
   createType: (data: MembershipTypeInput) => 
     api.post('/memberships/types', data),
