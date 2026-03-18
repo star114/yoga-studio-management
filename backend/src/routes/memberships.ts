@@ -178,16 +178,9 @@ router.put('/types/:id',
       await client.query('BEGIN');
 
       const existingResult = await client.query(
-        `SELECT
-           mt.*,
-           COALESCE(titles.reservable_class_titles, ARRAY[]::text[]) AS reservable_class_titles
-         FROM yoga_membership_types mt
-         LEFT JOIN LATERAL (
-           SELECT ARRAY_AGG(t.class_title ORDER BY t.id ASC) AS reservable_class_titles
-           FROM yoga_membership_type_class_titles t
-           WHERE t.membership_type_id = mt.id
-         ) titles ON true
-         WHERE mt.id = $1
+        `SELECT *
+         FROM yoga_membership_types
+         WHERE id = $1
          FOR UPDATE`,
         [id]
       );
@@ -197,9 +190,23 @@ router.put('/types/:id',
         return res.status(404).json({ error: 'Membership type not found' });
       }
 
+      const existingTitlesResult = await client.query(
+        `SELECT ARRAY_AGG(t.class_title ORDER BY t.id ASC) AS reservable_class_titles
+         FROM yoga_membership_type_class_titles t
+         WHERE t.membership_type_id = $1`,
+        [id]
+      );
+
+      const existingMembershipType = {
+        ...(existingResult.rows[0] as Record<string, unknown>),
+        reservable_class_titles:
+          (existingTitlesResult.rows[0] as { reservable_class_titles?: string[] } | undefined)
+            ?.reservable_class_titles ?? [],
+      };
+
       if (!hasName && !hasDescription && !hasTotalSessions && !hasIsActive && !hasReservableClassTitles) {
         await client.query('COMMIT');
-        return res.json(existingResult.rows[0]);
+        return res.json(existingMembershipType);
       }
 
       const updateResult = await client.query(
