@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/star114/yoga-studio-management/compare/v2.4.5...v2.5.0) (2026-03-18)
+
+
+### Features
+
+* add membership type class title sets ([#53](https://github.com/star114/yoga-studio-management/issues/53)) ([12c1398](https://github.com/star114/yoga-studio-management/commit/12c1398d2625a1aef065dd6c8f19a9529db8d767))
+
 ## [2.4.5](https://github.com/star114/yoga-studio-management/compare/v2.4.4...v2.4.5) (2026-03-18)
 
 
