@@ -47,6 +47,16 @@ interface RecommendedClass {
   existing_status?: 'reserved' | 'attended' | 'absent' | null;
 }
 
+interface RecommendedClassesResponse {
+  items: RecommendedClass[];
+  pagination?: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
 type ActivityTypeFilter = 'all' | 'attended' | 'reserved' | 'absent';
 
 interface ClassActivity {
@@ -94,6 +104,7 @@ const INITIAL_NEW_MEMBERSHIP_FORM: NewMembershipForm = {
 };
 const ACTIVITY_PAGE_SIZE = 10;
 const MEMBERSHIPS_PAGE_SIZE = 5;
+const RECOMMENDED_CLASSES_PAGE_SIZE = 10;
 
 const formatConsumedSummary = (membership: Membership) => {
   const consumedSessions = membership.consumed_sessions ?? 0;
@@ -126,7 +137,7 @@ const CustomerDetail: React.FC = () => {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [membershipTypes, setMembershipTypes] = useState<MembershipType[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
-  const [membershipRecommendedClasses, setMembershipRecommendedClasses] = useState<Record<number, RecommendedClass[]>>({});
+  const [membershipRecommendedClasses, setMembershipRecommendedClasses] = useState<Record<number, RecommendedClassesResponse>>({});
   const [membershipRecommendationsLoading, setMembershipRecommendationsLoading] = useState<Record<number, boolean>>({});
   const [membershipRecommendationsError, setMembershipRecommendationsError] = useState<Record<number, string>>({});
   const [classReservationLoading, setClassReservationLoading] = useState<Record<number, boolean>>({});
@@ -384,7 +395,7 @@ const CustomerDetail: React.FC = () => {
     setMemberships(response.data);
   };
 
-  const loadRecommendedClassesForMembership = async (membership: Membership) => {
+  const loadRecommendedClassesForMembership = async (membership: Membership, page = 1) => {
     const membershipId = membership.id;
     setMembershipRecommendationsLoading((prev) => ({ ...prev, [membershipId]: true }));
     setMembershipRecommendationsError((prev) => ({ ...prev, [membershipId]: '' }));
@@ -392,11 +403,32 @@ const CustomerDetail: React.FC = () => {
     try {
       const response = await customerAPI.getRecommendedClasses(customerId, {
         membership_name: membership.membership_type_name,
-        limit: 10,
+        page,
+        page_size: RECOMMENDED_CLASSES_PAGE_SIZE,
       });
+      const data = response.data as RecommendedClassesResponse | RecommendedClass[];
+      const nextResponse = Array.isArray(data)
+        ? {
+          items: data,
+          pagination: {
+            page,
+            page_size: RECOMMENDED_CLASSES_PAGE_SIZE,
+            total: data.length,
+            total_pages: 1,
+          },
+        }
+        : {
+          items: data.items || [],
+          pagination: {
+            page: data.pagination?.page ?? page,
+            page_size: data.pagination?.page_size ?? RECOMMENDED_CLASSES_PAGE_SIZE,
+            total: data.pagination?.total ?? (data.items || []).length,
+            total_pages: data.pagination?.total_pages ?? 1,
+          },
+        };
       setMembershipRecommendedClasses((prev) => ({
         ...prev,
-        [membershipId]: response.data as RecommendedClass[],
+        [membershipId]: nextResponse,
       }));
     } catch (loadError: unknown) {
       console.error('Failed to load recommended classes for membership:', loadError);
@@ -415,19 +447,23 @@ const CustomerDetail: React.FC = () => {
     try {
       await classAPI.register(classId, { customer_id: customerId, membership_id: membershipId });
       setMembershipRecommendedClasses((prev) => {
-        const classes = prev[membershipId] as RecommendedClass[];
+        const recommendation = prev[membershipId] as RecommendedClassesResponse;
+        const classes = recommendation.items;
         return {
           ...prev,
-          [membershipId]: classes.map((item) => {
-            if (item.id !== classId) return item;
-            return {
-              ...item,
-              is_registered: true,
-              existing_status: 'reserved',
-              remaining_seats: Math.max(0, item.remaining_seats - 1),
-              current_enrollment: item.current_enrollment + 1,
-            };
-          }),
+          [membershipId]: {
+            ...recommendation,
+            items: classes.map((item) => {
+              if (item.id !== classId) return item;
+              return {
+                ...item,
+                is_registered: true,
+                existing_status: 'reserved',
+                remaining_seats: Math.max(0, item.remaining_seats - 1),
+                current_enrollment: item.current_enrollment + 1,
+              };
+            }),
+          },
         };
       });
       showNotice('수업을 예약했습니다.');
@@ -443,19 +479,23 @@ const CustomerDetail: React.FC = () => {
               allow_cross_membership_registration: true,
             });
             setMembershipRecommendedClasses((prev) => {
-              const classes = prev[membershipId] as RecommendedClass[];
+              const recommendation = prev[membershipId] as RecommendedClassesResponse;
+              const classes = recommendation.items;
               return {
                 ...prev,
-                [membershipId]: classes.map((item) => {
-                  if (item.id !== classId) return item;
-                  return {
-                    ...item,
-                    is_registered: true,
-                    existing_status: 'reserved',
-                    remaining_seats: Math.max(0, item.remaining_seats - 1),
-                    current_enrollment: item.current_enrollment + 1,
-                  };
-                }),
+                [membershipId]: {
+                  ...recommendation,
+                  items: classes.map((item) => {
+                    if (item.id !== classId) return item;
+                    return {
+                      ...item,
+                      is_registered: true,
+                      existing_status: 'reserved',
+                      remaining_seats: Math.max(0, item.remaining_seats - 1),
+                      current_enrollment: item.current_enrollment + 1,
+                    };
+                  }),
+                },
               };
             });
             showNotice('다른 회원권 차감으로 수업을 예약했습니다.');
@@ -843,7 +883,11 @@ const CustomerDetail: React.FC = () => {
                           </button>
                         </div>
                         {(() => {
-                          const recommendedClasses = membershipRecommendedClasses[membership.id] ?? [];
+                          const recommendation = membershipRecommendedClasses[membership.id];
+                          const recommendedClasses = recommendation?.items ?? [];
+                          const currentPage = recommendation?.pagination?.page ?? 1;
+                          const totalPages = recommendation?.pagination?.total_pages ?? 1;
+                          const totalItems = recommendation?.pagination?.total ?? recommendedClasses.length;
                           if (membershipRecommendationsLoading[membership.id]) {
                             return <p className="text-xs text-warm-600">예정 수업 조회 중...</p>;
                           }
@@ -857,6 +901,10 @@ const CustomerDetail: React.FC = () => {
                           const hasNoRemainingSessions = typeof availableSessions === 'number' && availableSessions <= 0;
                           return (
                             <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2 text-xs text-warm-600">
+                                <span>총 {totalItems}개 수업</span>
+                                <span>{currentPage}/{totalPages} 페이지</span>
+                              </div>
                               {recommendedClasses.map((item) => (
                                 <div key={item.id} className="flex flex-col gap-1 rounded border border-warm-100 p-2 sm:flex-row sm:items-center sm:justify-between">
                                   <div>
@@ -885,6 +933,41 @@ const CustomerDetail: React.FC = () => {
                                   </button>
                                 </div>
                               ))}
+                              {totalPages > 1 && (
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  <button
+                                    type="button"
+                                    className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={currentPage <= 1 || membershipRecommendationsLoading[membership.id]}
+                                    onClick={() => void loadRecommendedClassesForMembership(membership, currentPage - 1)}
+                                  >
+                                    이전
+                                  </button>
+                                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
+                                    <button
+                                      key={pageNumber}
+                                      type="button"
+                                      className={`min-w-[2rem] rounded-md px-2.5 py-1 text-xs ${
+                                        currentPage === pageNumber
+                                          ? 'bg-primary-600 text-white'
+                                          : 'bg-warm-100 text-primary-800 hover:bg-warm-200'
+                                      }`}
+                                      disabled={membershipRecommendationsLoading[membership.id]}
+                                      onClick={() => void loadRecommendedClassesForMembership(membership, pageNumber)}
+                                    >
+                                      {pageNumber}
+                                    </button>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={currentPage >= totalPages || membershipRecommendationsLoading[membership.id]}
+                                    onClick={() => void loadRecommendedClassesForMembership(membership, currentPage + 1)}
+                                  >
+                                    다음
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })()}

@@ -317,11 +317,16 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
   const rawMembershipName = typeof req.query.membership_name === 'string'
     ? req.query.membership_name
     : '';
-  const rawLimit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
+  const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
+  const rawPageSize = typeof req.query.page_size === 'string'
+    ? Number(req.query.page_size)
+    : (typeof req.query.limit === 'string' ? Number(req.query.limit) : 10);
   const membershipName = rawMembershipName.trim();
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0
-    ? Math.min(Math.floor(rawLimit), 100)
-    : 20;
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
+  const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
+    ? Math.min(Math.floor(rawPageSize), 100)
+    : 10;
+  const offset = (page - 1) * pageSize;
 
   if (!/^\d+$/.test(id)) {
     return res.status(400).json({ error: 'Invalid customerId' });
@@ -338,6 +343,26 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
       }
     }
 
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM yoga_classes c
+       WHERE c.is_open = TRUE
+         AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
+         AND regexp_replace(
+               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
+               '[[:space:]]+',
+               ' ',
+               'g'
+             ) = regexp_replace(
+               trim(replace($1::text, chr(160), ' ')),
+               '[[:space:]]+',
+               ' ',
+               'g'
+             )`,
+      [membershipName]
+    );
+
+    const total = Number(countResult.rows[0]?.total ?? 0);
     const result = await pool.query(
       `SELECT
          c.id,
@@ -391,11 +416,20 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
              )
        GROUP BY c.id, existing_usage.existing_status
        ORDER BY c.class_date ASC, c.start_time ASC
-       LIMIT $3`,
-      [id, membershipName, limit]
+       LIMIT $3
+       OFFSET $4`,
+      [id, membershipName, pageSize, offset]
     );
 
-    res.json(result.rows);
+    res.json({
+      items: result.rows,
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    });
   } catch (error) {
     console.error('Get recommended classes error:', error);
     res.status(500).json({ error: 'Server error' });

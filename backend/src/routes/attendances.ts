@@ -233,7 +233,6 @@ router.post('/',
 
       resolvedClassId = classResult.rows[0].id as number;
       const reservedMembershipId = classResult.rows[0].membership_id as number | null | undefined;
-      const currentRegistrationStatus = String(classResult.rows[0].attendance_status ?? 'reserved') as 'reserved' | 'attended' | 'absent';
       const currentRegistrationSessionConsumed = Boolean(classResult.rows[0].session_consumed);
       if (!resolvedClassType) {
         resolvedClassType = String(classResult.rows[0].title ?? '').trim();
