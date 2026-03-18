@@ -24,6 +24,7 @@ test('getMembershipTitleMatchKind distinguishes exact, suffix, and non-matches',
 
 test('isMembershipTitleMatch returns false when letters continue after the class title', () => {
   assert.equal(isMembershipTitleMatch('아침요가심화', '아침요가'), false);
+  assert.equal(isMembershipTitleMatch('아침요가ㄱ', '아침요가'), false);
   assert.equal(isMembershipTitleMatch('MorningYogaPlus', 'MorningYoga'), false);
   assert.equal(isMembershipTitleMatch('저녁아침요가', '아침요가'), false);
 });

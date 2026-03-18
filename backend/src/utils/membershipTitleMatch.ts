@@ -6,6 +6,7 @@ const normalizeMembershipTitle = (value: string | null | undefined): string => {
 };
 
 type MembershipTitleMatchKind = 'exact' | 'suffix' | 'none';
+const CONTINUATION_LETTER_REGEX = /[A-Za-z\u3131-\u314E\u314F-\u3163\uAC00-\uD7A3]/u;
 
 export const getMembershipTitleMatchKind = (
   membershipTypeName: string | null | undefined,
@@ -27,7 +28,7 @@ export const getMembershipTitleMatchKind = (
   }
 
   const nextCharacter = normalizedMembershipTypeName.slice(normalizedClassTitle.length, normalizedClassTitle.length + 1);
-  return /\p{L}/u.test(nextCharacter) ? 'none' : 'suffix';
+  return CONTINUATION_LETTER_REGEX.test(nextCharacter) ? 'none' : 'suffix';
 };
 
 export const isMembershipTitleMatch = (

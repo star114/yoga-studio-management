@@ -8,6 +8,7 @@ import { isMembershipTitleMatch } from '../utils/membershipTitleMatch';
 const router = express.Router();
 
 const NORMALIZE_SQL = "regexp_replace(trim(replace(%s, chr(160), ' ')), '[[:space:]]+', ' ', 'g')";
+const TITLE_CONTINUATION_LETTER_SQL_CLASS = 'A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ';
 
 const normalizePhoneNumber = (value: string): string | null => {
   const digits = String(value).replace(/\D/g, '');
@@ -356,10 +357,10 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
            OR (
              ${NORMALIZE_SQL.replace('%s', '$1::text')} LIKE ${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")} || '%'
              AND substring(
-               ${NORMALIZE_SQL.replace('%s', '$1::text')}
+             ${NORMALIZE_SQL.replace('%s', '$1::text')}
                FROM char_length(${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")}) + 1
                FOR 1
-             ) !~ '[[:alpha:]]'
+             ) !~ '[${TITLE_CONTINUATION_LETTER_SQL_CLASS}]'
            )
          )`,
       [membershipName]
@@ -411,10 +412,10 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
            OR (
              ${NORMALIZE_SQL.replace('%s', '$2::text')} LIKE ${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")} || '%'
              AND substring(
-               ${NORMALIZE_SQL.replace('%s', '$2::text')}
+             ${NORMALIZE_SQL.replace('%s', '$2::text')}
                FROM char_length(${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")}) + 1
                FOR 1
-             ) !~ '[[:alpha:]]'
+             ) !~ '[${TITLE_CONTINUATION_LETTER_SQL_CLASS}]'
            )
          )
        GROUP BY c.id, existing_usage.existing_status
@@ -425,9 +426,7 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
     );
 
     res.json({
-      items: result.rows.filter((row) =>
-        isMembershipTitleMatch(membershipName, String(row.title ?? ''))
-      ),
+      items: result.rows.filter((row) => isMembershipTitleMatch(membershipName, String(row.title ?? ''))),
       pagination: {
         page,
         page_size: pageSize,

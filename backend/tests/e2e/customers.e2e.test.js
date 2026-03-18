@@ -491,6 +491,10 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   });
   assert.equal(res.status, 200);
   assert.deepEqual(res.body.items.map((item) => item.title), ['아침요가']);
+  assert.equal(res.body.pagination.total, 1);
+  const [countQueryText] = h.queryCalls[h.queryCalls.length - 2];
+  assert.match(String(countQueryText), /\[A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ\]/);
+  assert.doesNotMatch(String(countQueryText), /\[\[:alpha:\]\]/);
 
   h.queryQueue.push(new Error('recommended fail'));
   res = await h.runRoute({
