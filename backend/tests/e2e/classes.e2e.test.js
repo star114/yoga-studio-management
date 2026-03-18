@@ -897,6 +897,49 @@ test('class registration and recurring routes cover core branches', async () => 
   assert.equal(res.body.checks.has_alternative_membership, true);
   assert.equal(res.body.checks.requires_confirmation, true);
 
+  const suffixMatchClient = h.createDbClientMock();
+  suffixMatchClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아침요가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    {
+      rows: [
+        {
+          id: 779,
+          membership_type_name: '아침요가 3개월',
+          remaining_sessions: 3,
+          is_active: true,
+          created_at: '2026-03-01T09:00:00Z',
+        },
+      ],
+    },
+    { rows: [] },
+    { rows: [{ count: 0 }] },
+    { rows: [{ id: 200, class_id: 11, customer_id: 1, membership_id: 779 }] },
+    { rows: [{ id: 779 }], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(suffixMatchClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 201);
+
   const crossMembershipAllowedClient = h.createDbClientMock();
   crossMembershipAllowedClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -2025,18 +2068,8 @@ test('class registration diagnostics and recurring creation cover remaining bran
         },
       ],
     },
+    { rows: [{ id: 701, membership_type_name: '아쉬탕가', remaining_sessions: 1, is_active: false }] },
     { rows: [] },
-    {
-      rows: [
-        {
-          total_memberships: 1,
-          active_memberships: 0,
-          remaining_memberships: 1,
-          eligible_memberships: 0,
-          title_matched_memberships: 1,
-        },
-      ],
-    },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(noActiveDiagnosticClient);
@@ -2066,18 +2099,8 @@ test('class registration diagnostics and recurring creation cover remaining bran
         },
       ],
     },
+    { rows: [{ id: 702, membership_type_name: '아쉬탕가', remaining_sessions: 0, is_active: true }] },
     { rows: [] },
-    {
-      rows: [
-        {
-          total_memberships: 1,
-          active_memberships: 1,
-          remaining_memberships: 0,
-          eligible_memberships: 0,
-          title_matched_memberships: 1,
-        },
-      ],
-    },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(noRemainingDiagnosticClient);
@@ -2107,18 +2130,8 @@ test('class registration diagnostics and recurring creation cover remaining bran
         },
       ],
     },
+    { rows: [{ id: 703, membership_type_name: '빈야사 10회권', remaining_sessions: 1, is_active: true }] },
     { rows: [] },
-    {
-      rows: [
-        {
-          total_memberships: 1,
-          active_memberships: 1,
-          remaining_memberships: 1,
-          eligible_memberships: 1,
-          title_matched_memberships: 0,
-        },
-      ],
-    },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(alternativeDiagnosticClient);
@@ -2130,7 +2143,7 @@ test('class registration diagnostics and recurring creation cover remaining bran
     body: { customer_id: 1 },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.reason, 'CLASS_TITLE_MISMATCH');
+  assert.equal(res.body.reason, 'CROSS_MEMBERSHIP_CONFIRM_REQUIRED');
   assert.equal(res.body.checks.has_alternative_membership, true);
 
   const noEligibleDiagnosticClient = h.createDbClientMock();
@@ -2149,18 +2162,13 @@ test('class registration diagnostics and recurring creation cover remaining bran
         },
       ],
     },
-    { rows: [] },
     {
       rows: [
-        {
-          total_memberships: 2,
-          active_memberships: 1,
-          remaining_memberships: 1,
-          eligible_memberships: 0,
-          title_matched_memberships: 1,
-        },
+        { id: 704, membership_type_name: '아쉬탕가', remaining_sessions: 1, is_active: true },
+        { id: 705, membership_type_name: '빈야사 5회권', remaining_sessions: 1, is_active: false },
       ],
     },
+    { rows: [{ membership_id: 704, reserved_count: 1 }] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(noEligibleDiagnosticClient);

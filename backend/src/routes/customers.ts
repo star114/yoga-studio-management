@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { isMembershipTitleMatch } from '../utils/membershipTitleMatch';
 
 const router = express.Router();
 
@@ -343,26 +344,6 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
       }
     }
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*)::int AS total
-       FROM yoga_classes c
-       WHERE c.is_open = TRUE
-         AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
-         AND regexp_replace(
-               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             ) = regexp_replace(
-               trim(replace($1::text, chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             )`,
-      [membershipName]
-    );
-
-    const total = Number(countResult.rows[0]?.total ?? 0);
     const result = await pool.query(
       `SELECT
          c.id,
@@ -403,26 +384,19 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
        ) existing_usage ON true
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
-         AND regexp_replace(
-               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             ) = regexp_replace(
-               trim(replace($2::text, chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             )
        GROUP BY c.id, existing_usage.existing_status
-       ORDER BY c.class_date ASC, c.start_time ASC
-       LIMIT $3
-       OFFSET $4`,
-      [id, membershipName, pageSize, offset]
+       ORDER BY c.class_date ASC, c.start_time ASC`,
+      [id]
     );
 
+    const matchingItems = result.rows.filter((row) =>
+      isMembershipTitleMatch(membershipName, String(row.title ?? ''))
+    );
+    const total = matchingItems.length;
+    const paginatedItems = matchingItems.slice(offset, offset + pageSize);
+
     res.json({
-      items: result.rows,
+      items: paginatedItems,
       pagination: {
         page,
         page_size: pageSize,

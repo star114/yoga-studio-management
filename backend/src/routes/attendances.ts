@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
+import { sortMembershipRowsByTitleMatch } from '../utils/membershipTitleMatch';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -285,21 +286,18 @@ router.post('/',
            LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
            WHERE m.customer_id = $1
              AND m.is_active = true
-           ORDER BY
-             CASE
-               WHEN mt.name = $2 THEN 0
-               ELSE 1
-             END,
-             m.created_at DESC
-           LIMIT 1`,
-          [customer_id, resolvedClassType]
+           ORDER BY m.created_at DESC`,
+          [customer_id]
         );
 
         if (membershipResult.rows.length === 0) {
           await client.query('ROLLBACK');
           return res.status(400).json({ error: 'No active membership found' });
         }
-        activeMembership = membershipResult.rows[0];
+        activeMembership = sortMembershipRowsByTitleMatch(
+          membershipResult.rows as Array<{ membership_type_name?: string | null; created_at?: string | Date | null }>,
+          resolvedClassType
+        )[0];
       }
 
       // 결석 처리에서 이미 차감된 등록은 체크인 시 추가 차감하지 않는다.

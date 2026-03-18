@@ -4,6 +4,7 @@ import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
 import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
+import { isMembershipTitleMatch, sortMembershipRowsByTitleMatch } from '../utils/membershipTitleMatch';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -834,51 +835,31 @@ router.post('/:id/registrations',
       const membershipResult = await client.query(
         `SELECT
            m.id,
+           m.is_active,
+           m.created_at,
            m.remaining_sessions,
-           CASE
-             WHEN regexp_replace(
-                    trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  ) = regexp_replace(
-                    trim(replace($2::text, chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  )
-             THEN TRUE
-             ELSE FALSE
-           END AS is_title_match
+           mt.name AS membership_type_name
          FROM yoga_memberships m
          INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
          WHERE m.customer_id = $1
-           AND m.is_active = TRUE
-         ORDER BY
-           CASE
-             WHEN regexp_replace(
-                    trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  ) = regexp_replace(
-                    trim(replace($2::text, chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  ) THEN 0
-             ELSE 1
-           END,
-           m.created_at DESC
          FOR UPDATE OF m`,
-        [customerId, yogaClass.title]
+        [customerId]
       );
 
-      const lockedMembershipRows = membershipResult.rows as Array<{
+      const lockedMembershipRows = sortMembershipRowsByTitleMatch((membershipResult.rows as Array<{
         id: number;
+        is_active?: boolean;
+        created_at?: string;
         remaining_sessions: number;
-        is_title_match: boolean;
-      }>;
+        membership_type_name?: string | null;
+        is_title_match?: boolean;
+      }>).map((row) => ({
+        ...row,
+        is_active: row.is_active ?? true,
+        is_title_match: typeof row.is_title_match === 'boolean'
+          ? row.is_title_match
+          : isMembershipTitleMatch(row.membership_type_name, String(yogaClass.title ?? '')),
+      })), String(yogaClass.title ?? ''));
       const reservedCountByMembershipId = new Map<number, number>();
 
       if (lockedMembershipRows.length > 0) {
@@ -896,7 +877,8 @@ router.post('/:id/registrations',
         }
       }
 
-      const eligibleMembershipRows = lockedMembershipRows
+      const activeMembershipRows = lockedMembershipRows.filter((row) => row.is_active);
+      const eligibleMembershipRows = activeMembershipRows
         .map((row) => ({
           ...row,
           reserved_count: reservedCountByMembershipId.get(row.id) ?? 0,
@@ -938,53 +920,13 @@ router.post('/:id/registrations',
         }
 
         if (eligibleMembershipRows.length === 0) {
-          const membershipDiagnosticResult = await client.query(
-            `SELECT
-             COUNT(*)::int AS total_memberships,
-             COUNT(*) FILTER (WHERE m.is_active = TRUE)::int AS active_memberships,
-             COUNT(*) FILTER (
-               WHERE (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
-             )::int AS remaining_memberships,
-             COUNT(*) FILTER (
-               WHERE m.is_active = TRUE
-                 AND (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
-             )::int AS eligible_memberships,
-             COUNT(*) FILTER (
-               WHERE regexp_replace(
-                 trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
-                 '[[:space:]]+',
-                 ' ',
-                 'g'
-               ) = regexp_replace(
-                 trim(replace($2::text, chr(160), ' ')),
-                 '[[:space:]]+',
-                 ' ',
-                 'g'
-               )
-             )::int AS title_matched_memberships
-           FROM yoga_memberships m
-           LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
-           LEFT JOIN LATERAL (
-             SELECT COUNT(*)::int AS reserved_count
-             FROM yoga_class_registrations rr
-             WHERE rr.membership_id = m.id
-               AND rr.attendance_status = 'reserved'
-           ) reservations ON true
-           WHERE m.customer_id = $1`,
-            [customerId, yogaClass.title]
-          );
-          const diagnostic = membershipDiagnosticResult.rows[0] as {
-            total_memberships: number;
-            active_memberships: number;
-            remaining_memberships: number;
-            eligible_memberships: number;
-            title_matched_memberships: number;
-          } | undefined;
-          const totalMemberships = Number(diagnostic?.total_memberships ?? 0);
-          const activeMemberships = Number(diagnostic?.active_memberships ?? 0);
-          const remainingMemberships = Number(diagnostic?.remaining_memberships ?? 0);
-          const eligibleMemberships = Number(diagnostic?.eligible_memberships ?? 0);
-          const titleMatchedMemberships = Number(diagnostic?.title_matched_memberships ?? 0);
+          const totalMemberships = lockedMembershipRows.length;
+          const activeMemberships = activeMembershipRows.length;
+          const remainingMemberships = lockedMembershipRows.filter((row) => (
+            row.remaining_sessions - (reservedCountByMembershipId.get(row.id) ?? 0)
+          ) > 0).length;
+          const eligibleMemberships = eligibleMembershipRows.length;
+          const titleMatchedMemberships = lockedMembershipRows.filter((row) => row.is_title_match).length;
           const failedChecks: string[] = [];
           if (totalMemberships <= 0) {
             failedChecks.push('NO_MEMBERSHIP');

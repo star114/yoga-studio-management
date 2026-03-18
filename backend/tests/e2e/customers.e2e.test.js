@@ -433,7 +433,6 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
-    { rows: [{ total: 1 }] },
     { rows: [{ id: 9, title: '아쉬탕가', is_registered: true, existing_status: 'attended' }] }
   );
   res = await h.runRoute({
@@ -454,7 +453,6 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   assert.equal(res.body.pagination.total_pages, 1);
 
   h.queryQueue.push(
-    { rows: [{ total: 1 }] },
     { rows: [{ id: 10, title: '빈야사' }] }
   );
   res = await h.runRoute({
@@ -470,8 +468,26 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     .reverse()
     .find((call) => String(call[0]).includes('FROM yoga_classes c'));
   assert.ok(recommendedQueryCall);
-  assert.equal(recommendedQueryCall[1][2], 10);
-  assert.equal(recommendedQueryCall[1][3], 0);
+  assert.equal(recommendedQueryCall[1][0], '5');
+
+  h.queryQueue.push(
+    { rows: [{ id: 5 }] },
+    {
+      rows: [
+        { id: 11, title: '아침요가', is_registered: false, existing_status: null },
+        { id: 12, title: '아침요가심화', is_registered: false, existing_status: null },
+      ],
+    }
+  );
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아침요가 3개월' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.items.map((item) => item.title), ['아침요가']);
 
   h.queryQueue.push(new Error('recommended fail'));
   res = await h.runRoute({
