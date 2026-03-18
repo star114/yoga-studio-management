@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { buildNormalizedTitleSql } from '../utils/membershipClassTitles';
 
 const router = express.Router();
 
@@ -311,17 +312,22 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
   }
 });
 
-// 특정 고객의 회원권명 기준 예정 수업 추천 조회
+// 특정 고객의 회원권 기준 예정 수업 추천 조회
 router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, res) => {
   const { id } = req.params;
+  const rawMembershipId = typeof req.query.membership_id === 'string'
+    ? Number(req.query.membership_id)
+    : NaN;
   const rawMembershipName = typeof req.query.membership_name === 'string'
-    ? req.query.membership_name
+    ? req.query.membership_name.trim()
     : '';
   const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
   const rawPageSize = typeof req.query.page_size === 'string'
     ? Number(req.query.page_size)
     : (typeof req.query.limit === 'string' ? Number(req.query.limit) : 10);
-  const membershipName = rawMembershipName.trim();
+  const membershipId = Number.isFinite(rawMembershipId) && rawMembershipId > 0
+    ? Math.floor(rawMembershipId)
+    : null;
   const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
   const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
     ? Math.min(Math.floor(rawPageSize), 100)
@@ -331,8 +337,8 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
   if (!/^\d+$/.test(id)) {
     return res.status(400).json({ error: 'Invalid customerId' });
   }
-  if (!membershipName) {
-    return res.status(400).json({ error: 'membership_name is required' });
+  if (!membershipId && !rawMembershipName) {
+    return res.status(400).json({ error: 'membership_id is required' });
   }
 
   try {
@@ -343,23 +349,75 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
       }
     }
 
+    let targetMembershipId = membershipId;
+    let targetMembershipTypeId: number | null = null;
+
+    if (targetMembershipId === null) {
+      const fallbackMembershipResult = await pool.query(
+        `SELECT
+           m.id,
+           m.membership_type_id
+         FROM yoga_memberships m
+         INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
+         WHERE m.customer_id = $1
+           AND (
+             ${buildNormalizedTitleSql('mt.name')} = ${buildNormalizedTitleSql('$2::text')}
+             OR EXISTS (
+               SELECT 1
+               FROM yoga_membership_type_class_titles mtct
+               WHERE mtct.membership_type_id = m.membership_type_id
+                 AND ${buildNormalizedTitleSql('mtct.class_title')} = ${buildNormalizedTitleSql('$2::text')}
+             )
+           )
+         ORDER BY
+           CASE
+             WHEN ${buildNormalizedTitleSql('mt.name')} = ${buildNormalizedTitleSql('$2::text')} THEN 0
+             ELSE 1
+           END,
+           m.created_at DESC,
+           m.id DESC
+         LIMIT 1`,
+        [id, rawMembershipName]
+      );
+
+      if (fallbackMembershipResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Membership not found' });
+      }
+
+      targetMembershipId = Number(fallbackMembershipResult.rows[0].id);
+      targetMembershipTypeId = Number(fallbackMembershipResult.rows[0].membership_type_id);
+    }
+
+    const membershipResult = await pool.query(
+      `SELECT
+         m.id,
+         m.membership_type_id
+       FROM yoga_memberships m
+       WHERE m.id = $1
+         AND m.customer_id = $2`,
+      [targetMembershipId, id]
+    );
+
+    if (membershipResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Membership not found' });
+    }
+
+    targetMembershipTypeId = Number(
+      membershipResult.rows[0].membership_type_id ?? targetMembershipTypeId
+    );
+
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total
        FROM yoga_classes c
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
-         AND regexp_replace(
-               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             ) = regexp_replace(
-               trim(replace($1::text, chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             )`,
-      [membershipName]
+         AND EXISTS (
+           SELECT 1
+           FROM yoga_membership_type_class_titles mtct
+           WHERE mtct.membership_type_id = $1
+             AND ${buildNormalizedTitleSql('mtct.class_title')} = ${buildNormalizedTitleSql('c.title')}
+         )`,
+      [targetMembershipTypeId]
     );
 
     const total = Number(countResult.rows[0]?.total ?? 0);
@@ -403,22 +461,17 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
        ) existing_usage ON true
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
-         AND regexp_replace(
-               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             ) = regexp_replace(
-               trim(replace($2::text, chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             )
+         AND EXISTS (
+           SELECT 1
+           FROM yoga_membership_type_class_titles mtct
+           WHERE mtct.membership_type_id = $1
+             AND ${buildNormalizedTitleSql('mtct.class_title')} = ${buildNormalizedTitleSql('c.title')}
+         )
        GROUP BY c.id, existing_usage.existing_status
        ORDER BY c.class_date ASC, c.start_time ASC
        LIMIT $3
        OFFSET $4`,
-      [id, membershipName, pageSize, offset]
+      [targetMembershipTypeId, id, pageSize, offset]
     );
 
     res.json({

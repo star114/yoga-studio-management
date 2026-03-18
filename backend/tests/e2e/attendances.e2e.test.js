@@ -582,7 +582,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     body: { customer_id: 3, class_id: 5 },
   });
   assert.equal(res.status, 201);
-  assert.match(String(successClient.queryCalls[3][0]), /yoga_membership_types/i);
+  assert.match(String(successClient.queryCalls[3][0]), /yoga_membership_type_class_titles/i);
   assert.equal(successClient.queryCalls[3][1][1], '아쉬탕가');
 
   const successNoRemainClient = h.createDbClientMock();

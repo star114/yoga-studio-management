@@ -73,6 +73,19 @@ test('memberships schema prevents negative remaining sessions', () => {
   );
 });
 
+test('membership type class title set schema exists with required constraints', () => {
+  const schemaPath = path.resolve(__dirname, '../../../database/schema.sql');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS yoga_membership_type_class_titles/i);
+  assert.match(
+    schema,
+    /membership_type_id\s+INTEGER\s+NOT NULL\s+REFERENCES\s+yoga_membership_types\(id\)\s+ON DELETE CASCADE/i
+  );
+  assert.match(schema, /class_title\s+VARCHAR\(100\)\s+NOT NULL/i);
+  assert.match(schema, /CREATE UNIQUE INDEX IF NOT EXISTS idx_membership_type_class_titles_unique/i);
+});
+
 test('membership usage audit schema exists with required constraints', () => {
   const schemaPath = path.resolve(__dirname, '../../../database/schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf8');
