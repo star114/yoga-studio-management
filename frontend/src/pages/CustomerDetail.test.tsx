@@ -212,6 +212,7 @@ describe('CustomerDetail page', () => {
           id: 210,
           membership_type_id: 5,
           membership_type_name: '아침요가 10회권',
+          reservable_class_titles: ['아침요가', '아침요가 3개월'],
           remaining_sessions: 6,
           available_sessions: 6,
           total_sessions: 10,
@@ -223,15 +224,7 @@ describe('CustomerDetail page', () => {
         },
       ],
     });
-    getTypesMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 5,
-          name: '아침요가 10회권',
-          reservable_class_titles: ['아침요가', '아침요가 3개월'],
-        },
-      ],
-    });
+    getTypesMock.mockResolvedValueOnce({ data: [] });
 
     renderPage();
 
@@ -239,7 +232,7 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('신청 가능 수업: 아침요가, 아침요가 3개월')).toBeTruthy();
   });
 
-  it('falls back to no reservable titles when membership type lookup misses', async () => {
+  it('falls back to membership type lookup when payload does not include reservable titles', async () => {
     getByCustomerMock.mockResolvedValueOnce({
       data: [
         {
@@ -258,8 +251,8 @@ describe('CustomerDetail page', () => {
     getTypesMock.mockResolvedValueOnce({
       data: [
         {
-          id: 5,
-          name: '아침요가 10회권',
+          id: 999,
+          name: '매칭 안됨권',
           reservable_class_titles: ['아침요가', '아침요가 3개월'],
         },
       ],
@@ -268,7 +261,31 @@ describe('CustomerDetail page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getAllByText('매칭 안됨권').length).toBeGreaterThan(0));
-    expect(screen.queryByText('신청 가능 수업: 아침요가, 아침요가 3개월')).toBeNull();
+    expect(screen.getByText('신청 가능 수업: 아침요가, 아침요가 3개월')).toBeTruthy();
+  });
+
+  it('shows no reservable titles when payload omits them and membership type lookup misses', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 60,
+          membership_type_name: '미매칭권',
+          membership_type_id: 888,
+          remaining_sessions: 4,
+          available_sessions: 4,
+          is_active: false,
+          notes: null,
+          start_date: null,
+          expected_end_date: null,
+        },
+      ],
+    });
+    getTypesMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('미매칭권').length).toBeGreaterThan(0));
+    expect(screen.queryByText('신청 가능 수업:')).toBeNull();
   });
 
   it('paginates memberships with numbered buttons in customer detail', async () => {

@@ -27,6 +27,7 @@ interface Membership {
   id: number;
   membership_type_id?: number;
   membership_type_name: string;
+  reservable_class_titles?: string[];
   remaining_sessions: number;
   available_sessions?: number;
   total_sessions: number;
@@ -117,9 +118,15 @@ const getMembershipReservableClassTitles = (
   membership: Membership,
   membershipTypes: MembershipType[]
 ): string[] => {
+  const directTitles = membership.reservable_class_titles ?? [];
+  if (directTitles.length > 0) {
+    return directTitles;
+  }
+
   if (!membership.membership_type_id) {
     return [];
   }
+
   return membershipTypes.find((type) => type.id === membership.membership_type_id)?.reservable_class_titles ?? [];
 };
 

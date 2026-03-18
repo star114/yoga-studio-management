@@ -318,9 +318,6 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
   const rawMembershipId = typeof req.query.membership_id === 'string'
     ? Number(req.query.membership_id)
     : NaN;
-  const rawMembershipName = typeof req.query.membership_name === 'string'
-    ? req.query.membership_name.trim()
-    : '';
   const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
   const rawPageSize = typeof req.query.page_size === 'string'
     ? Number(req.query.page_size)
@@ -337,7 +334,7 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
   if (!/^\d+$/.test(id)) {
     return res.status(400).json({ error: 'Invalid customerId' });
   }
-  if (!membershipId && !rawMembershipName) {
+  if (!membershipId) {
     return res.status(400).json({ error: 'membership_id is required' });
   }
 
@@ -349,45 +346,6 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
       }
     }
 
-    let targetMembershipId = membershipId;
-    let targetMembershipTypeId: number | null = null;
-
-    if (targetMembershipId === null) {
-      const fallbackMembershipResult = await pool.query(
-        `SELECT
-           m.id,
-           m.membership_type_id
-         FROM yoga_memberships m
-         INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
-         WHERE m.customer_id = $1
-           AND (
-             ${buildNormalizedTitleSql('mt.name')} = ${buildNormalizedTitleSql('$2::text')}
-             OR EXISTS (
-               SELECT 1
-               FROM yoga_membership_type_class_titles mtct
-               WHERE mtct.membership_type_id = m.membership_type_id
-                 AND ${buildNormalizedTitleSql('mtct.class_title')} = ${buildNormalizedTitleSql('$2::text')}
-             )
-           )
-         ORDER BY
-           CASE
-             WHEN ${buildNormalizedTitleSql('mt.name')} = ${buildNormalizedTitleSql('$2::text')} THEN 0
-             ELSE 1
-           END,
-           m.created_at DESC,
-           m.id DESC
-         LIMIT 1`,
-        [id, rawMembershipName]
-      );
-
-      if (fallbackMembershipResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Membership not found' });
-      }
-
-      targetMembershipId = Number(fallbackMembershipResult.rows[0].id);
-      targetMembershipTypeId = Number(fallbackMembershipResult.rows[0].membership_type_id);
-    }
-
     const membershipResult = await pool.query(
       `SELECT
          m.id,
@@ -395,16 +353,14 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
        FROM yoga_memberships m
        WHERE m.id = $1
          AND m.customer_id = $2`,
-      [targetMembershipId, id]
+      [membershipId, id]
     );
 
     if (membershipResult.rows.length === 0) {
       return res.status(404).json({ error: 'Membership not found' });
     }
 
-    targetMembershipTypeId = Number(
-      membershipResult.rows[0].membership_type_id ?? targetMembershipTypeId
-    );
+    const targetMembershipTypeId = Number(membershipResult.rows[0].membership_type_id);
 
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total

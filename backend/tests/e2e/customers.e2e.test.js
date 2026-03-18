@@ -400,6 +400,17 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'membership_id is required');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'membership_id is required');
 
   res = await h.runRoute({
     method: 'get',
