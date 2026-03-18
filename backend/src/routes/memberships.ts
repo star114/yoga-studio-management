@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validateRequest';
+import { normalizeMembershipClassTitle } from '../utils/membershipClassTitles';
 
 const router = express.Router();
 
@@ -12,12 +13,6 @@ const hasCustomerAccess = async (customerId: string, userId: number) => {
     [customerId, userId]
   );
   return checkResult.rows.length > 0;
-};
-
-const normalizeClassTitle = (value: string): string => {
-  return String(value ?? '')
-    .replace(/\u00A0/g, ' ')
-    .trim();
 };
 
 const normalizeReservableClassTitles = (value: unknown): string[] => {
@@ -33,7 +28,7 @@ const normalizeReservableClassTitles = (value: unknown): string[] => {
       continue;
     }
 
-    const title = normalizeClassTitle(rawTitle);
+    const title = normalizeMembershipClassTitle(rawTitle);
     if (!title || seen.has(title)) {
       continue;
     }

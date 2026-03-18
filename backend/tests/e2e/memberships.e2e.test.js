@@ -201,7 +201,7 @@ test('types routes cover success/not-found/validation/error', async () => {
   assert.ok(Array.isArray(res.body.errors));
 
   h.queryQueue.push({
-    rows: [{ id: 2, name: '월회원권', reservable_class_titles: ['아침요가', '저녁요가'] }],
+    rows: [{ id: 2, name: '월회원권', reservable_class_titles: ['아침 요가', '저녁요가'] }],
   });
   res = await h.runRoute({
     method: 'post',
@@ -210,12 +210,43 @@ test('types routes cover success/not-found/validation/error', async () => {
     body: {
       name: '월회원권',
       total_sessions: 30,
-      reservable_class_titles: ['  아침요가 ', '', '저녁요가', '아침요가'],
+      reservable_class_titles: ['  아침  요가 ', '', '저녁요가', '아침 요가'],
     },
   });
   assert.equal(res.status, 201);
   assert.equal(res.body.id, 2);
-  assert.deepEqual(res.body.reservable_class_titles, ['아침요가', '저녁요가']);
+  assert.deepEqual(res.body.reservable_class_titles, ['아침 요가', '저녁요가']);
+  const createTypeQueryCall = h.queryCalls.find(([sql]) => String(sql).includes('INSERT INTO yoga_membership_types'));
+  assert.ok(createTypeQueryCall);
+  assert.deepEqual(createTypeQueryCall[1][3], ['아침 요가', '저녁요가']);
+  const createTypeNormalizedQueryCall = h.queryCalls
+    .slice()
+    .reverse()
+    .find((call) => String(call[0]).includes('INSERT INTO yoga_membership_types'));
+  assert.ok(createTypeNormalizedQueryCall);
+  assert.deepEqual(createTypeNormalizedQueryCall[1][3], ['아침 요가', '저녁요가']);
+
+  h.queryQueue.push({
+    rows: [{ id: 3, name: '아침 요가', reservable_class_titles: ['아침 요가'] }],
+  });
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/types',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: {
+      name: '  아침   요가  ',
+      total_sessions: 20,
+    },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.id, 3);
+  assert.deepEqual(res.body.reservable_class_titles, ['아침 요가']);
+  const fallbackCreateQueryCall = h.queryCalls
+    .slice()
+    .reverse()
+    .find((call) => String(call[0]).includes('INSERT INTO yoga_membership_types'));
+  assert.ok(fallbackCreateQueryCall);
+  assert.deepEqual(fallbackCreateQueryCall[1][3], ['아침 요가']);
 
   res = await h.runRoute({
     method: 'post',
