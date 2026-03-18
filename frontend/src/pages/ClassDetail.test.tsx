@@ -452,7 +452,7 @@ describe('ClassDetail page', () => {
     fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
 
     await waitFor(() => expect(membershipGetByCustomerMock).toHaveBeenCalledWith(102));
-    await waitFor(() => expect(screen.getByText('회원권을 지정하지 않으면 기존 규칙대로 자동 선택합니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('회원권을 지정하지 않으면 서버가 신청 가능 수업명 set 기준으로 자동 선택합니다.')).toBeTruthy());
     expect(screen.queryByRole('option', { name: /소진된 5회권/ })).toBeNull();
     expect(screen.queryByRole('option', { name: /비활성 10회권/ })).toBeNull();
     fireEvent.change(screen.getByLabelText('사용할 회원권'), { target: { value: '32' } });
@@ -491,7 +491,7 @@ describe('ClassDetail page', () => {
     await waitFor(() => expect(screen.getByLabelText('신청할 고객')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('신청할 고객'), { target: { value: '102' } });
 
-    await waitFor(() => expect(screen.getByText('예약 가능한 활성 회원권이 없습니다. 선택 없이 진행하면 서버 기준으로 등록 가능 여부를 다시 확인합니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('예약 가능한 활성 회원권이 없습니다. 선택 없이 진행하면 서버가 신청 가능 수업명 set 기준으로 다시 확인합니다.')).toBeTruthy());
   });
 
   it('auto-selects membership when exactly one reservable active membership exists', async () => {

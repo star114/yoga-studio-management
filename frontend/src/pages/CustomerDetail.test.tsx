@@ -205,6 +205,89 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('수업 기록이 없습니다.')).toBeTruthy();
   });
 
+  it('shows reservable class titles for memberships when available', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 210,
+          membership_type_id: 5,
+          membership_type_name: '아침요가 10회권',
+          reservable_class_titles: ['아침요가', '아침요가 3개월'],
+          remaining_sessions: 6,
+          available_sessions: 6,
+          total_sessions: 10,
+          consumed_sessions: 4,
+          is_active: true,
+          notes: null,
+          start_date: null,
+          expected_end_date: null,
+        },
+      ],
+    });
+    getTypesMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('아침요가 10회권').length).toBeGreaterThan(0));
+    expect(screen.getByText('신청 가능 수업: 아침요가, 아침요가 3개월')).toBeTruthy();
+  });
+
+  it('falls back to membership type lookup when payload does not include reservable titles', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 50,
+          membership_type_name: '매칭 안됨권',
+          membership_type_id: 999,
+          remaining_sessions: 6,
+          available_sessions: 6,
+          is_active: true,
+          notes: null,
+          start_date: null,
+          expected_end_date: null,
+        },
+      ],
+    });
+    getTypesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 999,
+          name: '매칭 안됨권',
+          reservable_class_titles: ['아침요가', '아침요가 3개월'],
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('매칭 안됨권').length).toBeGreaterThan(0));
+    expect(screen.getByText('신청 가능 수업: 아침요가, 아침요가 3개월')).toBeTruthy();
+  });
+
+  it('shows no reservable titles when payload omits them and membership type lookup misses', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 60,
+          membership_type_name: '미매칭권',
+          membership_type_id: 888,
+          remaining_sessions: 4,
+          available_sessions: 4,
+          is_active: false,
+          notes: null,
+          start_date: null,
+          expected_end_date: null,
+        },
+      ],
+    });
+    getTypesMock.mockResolvedValueOnce({ data: [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('미매칭권').length).toBeGreaterThan(0));
+    expect(screen.queryByText('신청 가능 수업:')).toBeNull();
+  });
+
   it('paginates memberships with numbered buttons in customer detail', async () => {
     getByCustomerMock.mockResolvedValueOnce({
       data: [
@@ -1307,7 +1390,7 @@ describe('CustomerDetail page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
     await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenCalledWith(1, {
-      membership_name: '아쉬탕가',
+      membership_id: 31,
       page: 1,
       page_size: 10,
     }));
@@ -1419,7 +1502,7 @@ describe('CustomerDetail page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
 
-    await waitFor(() => expect(screen.getByText('예정된 같은 이름 수업이 없습니다.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('이 회원권으로 신청 가능한 수업이 없습니다.')).toBeTruthy());
   });
 
   it('shows attended classes as already processed in recommended classes', async () => {
@@ -1616,7 +1699,7 @@ describe('CustomerDetail page', () => {
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
 
     await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenNthCalledWith(2, 1, {
-      membership_name: '아쉬탕가',
+      membership_id: 37,
       page: 2,
       page_size: 10,
     }));
@@ -1697,7 +1780,7 @@ describe('CustomerDetail page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '2' }));
     await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenNthCalledWith(2, 1, {
-      membership_name: '아쉬탕가',
+      membership_id: 43,
       page: 2,
       page_size: 10,
     }));
@@ -1705,7 +1788,7 @@ describe('CustomerDetail page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '이전' }));
     await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenNthCalledWith(3, 1, {
-      membership_name: '아쉬탕가',
+      membership_id: 43,
       page: 1,
       page_size: 10,
     }));

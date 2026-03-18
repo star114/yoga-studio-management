@@ -8,6 +8,21 @@ type ClassRegistrationPayload = {
   allow_cross_membership_registration?: boolean;
   mark_attended_after_register?: boolean;
 };
+export type MembershipTypeRecord = {
+  id: number;
+  name: string;
+  description?: string | null;
+  total_sessions: number;
+  is_active: boolean;
+  reservable_class_titles?: string[];
+};
+
+export type MembershipTypeInput = {
+  name: string;
+  description?: string | null;
+  total_sessions: number;
+  reservable_class_titles: string[];
+};
 
 const api = axios.create({
   baseURL: API_URL,
@@ -102,11 +117,14 @@ export const membershipAPI = {
     api.get('/memberships/types', {
       params: options?.includeInactive ? { include_inactive: true } : undefined,
     }),
+
+  getClassTitles: () =>
+    api.get('/memberships/types/class-titles'),
   
-  createType: (data: unknown) => 
+  createType: (data: MembershipTypeInput) => 
     api.post('/memberships/types', data),
 
-  updateType: (id: number, data: unknown) =>
+  updateType: (id: number, data: MembershipTypeInput) =>
     api.put(`/memberships/types/${id}`, data),
 
   deactivateType: (id: number) =>

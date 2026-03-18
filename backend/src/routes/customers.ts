@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { buildNormalizedTitleSql } from '../utils/membershipClassTitles';
 
 const router = express.Router();
 
@@ -311,17 +312,19 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
   }
 });
 
-// 특정 고객의 회원권명 기준 예정 수업 추천 조회
+// 특정 고객의 회원권 기준 예정 수업 추천 조회
 router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const rawMembershipName = typeof req.query.membership_name === 'string'
-    ? req.query.membership_name
-    : '';
+  const rawMembershipId = typeof req.query.membership_id === 'string'
+    ? Number(req.query.membership_id)
+    : NaN;
   const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
   const rawPageSize = typeof req.query.page_size === 'string'
     ? Number(req.query.page_size)
     : (typeof req.query.limit === 'string' ? Number(req.query.limit) : 10);
-  const membershipName = rawMembershipName.trim();
+  const membershipId = Number.isFinite(rawMembershipId) && rawMembershipId > 0
+    ? Math.floor(rawMembershipId)
+    : null;
   const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
   const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
     ? Math.min(Math.floor(rawPageSize), 100)
@@ -331,8 +334,8 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
   if (!/^\d+$/.test(id)) {
     return res.status(400).json({ error: 'Invalid customerId' });
   }
-  if (!membershipName) {
-    return res.status(400).json({ error: 'membership_name is required' });
+  if (!membershipId) {
+    return res.status(400).json({ error: 'membership_id is required' });
   }
 
   try {
@@ -343,23 +346,34 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
       }
     }
 
+    const membershipResult = await pool.query(
+      `SELECT
+         m.id,
+         m.membership_type_id
+       FROM yoga_memberships m
+       WHERE m.id = $1
+         AND m.customer_id = $2`,
+      [membershipId, id]
+    );
+
+    if (membershipResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Membership not found' });
+    }
+
+    const targetMembershipTypeId = Number(membershipResult.rows[0].membership_type_id);
+
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total
        FROM yoga_classes c
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
-         AND regexp_replace(
-               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             ) = regexp_replace(
-               trim(replace($1::text, chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             )`,
-      [membershipName]
+         AND EXISTS (
+           SELECT 1
+           FROM yoga_membership_type_class_titles mtct
+           WHERE mtct.membership_type_id = $1
+             AND ${buildNormalizedTitleSql('mtct.class_title')} = ${buildNormalizedTitleSql('c.title')}
+         )`,
+      [targetMembershipTypeId]
     );
 
     const total = Number(countResult.rows[0]?.total ?? 0);
@@ -384,14 +398,14 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
            SELECT mine.attendance_status::text AS status
            FROM yoga_class_registrations mine
            WHERE mine.class_id = c.id
-             AND mine.customer_id = $1
+             AND mine.customer_id = $2
 
            UNION ALL
 
            SELECT 'attended'::text AS status
            FROM yoga_attendances a
            WHERE a.class_id = c.id
-             AND a.customer_id = $1
+             AND a.customer_id = $2
          ) usage
          ORDER BY CASE usage.status
            WHEN 'reserved' THEN 1
@@ -403,22 +417,17 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
        ) existing_usage ON true
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
-         AND regexp_replace(
-               trim(replace(COALESCE(c.title, ''), chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             ) = regexp_replace(
-               trim(replace($2::text, chr(160), ' ')),
-               '[[:space:]]+',
-               ' ',
-               'g'
-             )
+         AND EXISTS (
+           SELECT 1
+           FROM yoga_membership_type_class_titles mtct
+           WHERE mtct.membership_type_id = $1
+             AND ${buildNormalizedTitleSql('mtct.class_title')} = ${buildNormalizedTitleSql('c.title')}
+         )
        GROUP BY c.id, existing_usage.existing_status
        ORDER BY c.class_date ASC, c.start_time ASC
        LIMIT $3
        OFFSET $4`,
-      [id, membershipName, pageSize, offset]
+      [targetMembershipTypeId, id, pageSize, offset]
     );
 
     res.json({

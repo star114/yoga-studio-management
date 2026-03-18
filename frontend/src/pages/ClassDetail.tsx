@@ -824,11 +824,11 @@ const ClassDetail: React.FC = () => {
                 <p className="text-xs text-red-700">{membershipLoadError}</p>
               ) : selectedCustomerId && !isMembershipLoading && availableMemberships.length === 0 ? (
                 <p className="text-xs text-warm-600">
-                  예약 가능한 활성 회원권이 없습니다. 선택 없이 진행하면 서버 기준으로 등록 가능 여부를 다시 확인합니다.
+                  예약 가능한 활성 회원권이 없습니다. 선택 없이 진행하면 서버가 신청 가능 수업명 set 기준으로 다시 확인합니다.
                 </p>
               ) : selectedCustomerId && !isMembershipLoading ? (
                 <p className="text-xs text-warm-600">
-                  회원권을 지정하지 않으면 기존 규칙대로 자동 선택합니다.
+                  회원권을 지정하지 않으면 서버가 신청 가능 수업명 set 기준으로 자동 선택합니다.
                 </p>
               ) : null}
             </div>

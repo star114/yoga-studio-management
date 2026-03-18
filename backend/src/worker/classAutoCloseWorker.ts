@@ -1,4 +1,5 @@
 import pool from '../config/database';
+import { buildMembershipClassTitleMatchExistsSql } from '../utils/membershipClassTitles';
 
 const toBool = (value: string | undefined, defaultValue: boolean): boolean => {
   if (!value) return defaultValue;
@@ -64,11 +65,11 @@ export const startClassAutoCloseWorker = () => {
              m.remaining_sessions,
              ROW_NUMBER() OVER (
                PARTITION BY wa.registration_id
-               ORDER BY
+                 ORDER BY
                  CASE
                    WHEN wa.reserved_membership_id IS NOT NULL
                      AND m.id = wa.reserved_membership_id THEN -1
-                   WHEN mt.name = wa.class_title THEN 0
+                   WHEN ${buildMembershipClassTitleMatchExistsSql('m', 'wa.class_title')} THEN 0
                    ELSE 1
                  END,
                  m.created_at DESC,
@@ -84,7 +85,6 @@ export const startClassAutoCloseWorker = () => {
                AND m.remaining_sessions > 0
              )
            )
-           LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
          ),
          selected_memberships AS (
            SELECT

@@ -4,6 +4,7 @@ import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
 import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
+import { buildMembershipClassTitleMatchExistsSql, buildNormalizedTitleSql } from '../utils/membershipClassTitles';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -832,45 +833,23 @@ router.post('/:id/registrations',
 
       const requestedMembershipId = req.body.membership_id ? Number(req.body.membership_id) : null;
       const membershipResult = await client.query(
-        `SELECT
-           m.id,
-           m.remaining_sessions,
-           CASE
-             WHEN regexp_replace(
-                    trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  ) = regexp_replace(
-                    trim(replace($2::text, chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  )
-             THEN TRUE
-             ELSE FALSE
-           END AS is_title_match
-         FROM yoga_memberships m
-         INNER JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
-         WHERE m.customer_id = $1
-           AND m.is_active = TRUE
-         ORDER BY
-           CASE
-             WHEN regexp_replace(
-                    trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  ) = regexp_replace(
-                    trim(replace($2::text, chr(160), ' ')),
-                    '[[:space:]]+',
-                    ' ',
-                    'g'
-                  ) THEN 0
-             ELSE 1
-           END,
-           m.created_at DESC
-         FOR UPDATE OF m`,
+        `WITH membership_candidates AS (
+           SELECT
+             m.id,
+             m.remaining_sessions,
+             m.created_at,
+             CASE
+               WHEN ${buildMembershipClassTitleMatchExistsSql('m', '$2::text')} THEN TRUE
+               ELSE FALSE
+             END AS is_title_match
+           FROM yoga_memberships m
+           WHERE m.customer_id = $1
+             AND m.is_active = TRUE
+           FOR UPDATE OF m
+         )
+         SELECT *
+         FROM membership_candidates
+         ORDER BY is_title_match DESC, created_at DESC, id DESC`,
         [customerId, yogaClass.title]
       );
 
@@ -926,7 +905,7 @@ router.post('/:id/registrations',
             checks: {
               class_title: yogaClass.title,
               has_membership: true,
-              has_matching_membership_type: false,
+              has_matching_membership_type: matchingMembershipRows.length > 0,
               has_active_membership: true,
               has_remaining_sessions: true,
               has_alternative_membership: true,
@@ -950,20 +929,14 @@ router.post('/:id/registrations',
                  AND (m.remaining_sessions - COALESCE(reservations.reserved_count, 0)) > 0
              )::int AS eligible_memberships,
              COUNT(*) FILTER (
-               WHERE regexp_replace(
-                 trim(replace(COALESCE(mt.name, ''), chr(160), ' ')),
-                 '[[:space:]]+',
-                 ' ',
-                 'g'
-               ) = regexp_replace(
-                 trim(replace($2::text, chr(160), ' ')),
-                 '[[:space:]]+',
-                 ' ',
-                 'g'
+               WHERE EXISTS (
+                 SELECT 1
+                 FROM yoga_membership_type_class_titles mtct
+                 WHERE mtct.membership_type_id = m.membership_type_id
+                   AND ${buildNormalizedTitleSql('mtct.class_title')} = ${buildNormalizedTitleSql('$2::text')}
                )
              )::int AS title_matched_memberships
            FROM yoga_memberships m
-           LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
            LEFT JOIN LATERAL (
              SELECT COUNT(*)::int AS reserved_count
              FROM yoga_class_registrations rr

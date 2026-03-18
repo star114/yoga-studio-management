@@ -1,32 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { membershipAPI } from '../services/api';
+import { membershipAPI, type MembershipTypeRecord } from '../services/api';
 import { parseApiError } from '../utils/apiError';
-
-interface MembershipType {
-  id: number;
-  name: string;
-  description?: string | null;
-  total_sessions: number;
-  is_active: boolean;
-}
 
 interface TypeForm {
   name: string;
   description: string;
   total_sessions: string;
+  reservable_class_titles: string[];
+  custom_class_title: string;
 }
 
 const INITIAL_TYPE_FORM: TypeForm = {
   name: '',
   description: '',
   total_sessions: '',
+  reservable_class_titles: [],
+  custom_class_title: '',
 };
 
+const normalizeReservableClassTitles = (titles: string[] | undefined): string[] =>
+  Array.from(new Set((titles ?? []).map((title) => title.trim()).filter(Boolean)));
+
 const MembershipTypeManagement: React.FC = () => {
-  const [types, setTypes] = useState<MembershipType[]>([]);
+  const [types, setTypes] = useState<MembershipTypeRecord[]>([]);
+  const [availableClassTitles, setAvailableClassTitles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [classTitlesError, setClassTitlesError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [form, setForm] = useState<TypeForm>(INITIAL_TYPE_FORM);
   const [editingTypeId, setEditingTypeId] = useState<number | null>(null);
@@ -43,14 +44,25 @@ const MembershipTypeManagement: React.FC = () => {
   const loadTypes = async () => {
     try {
       setError('');
+      setClassTitlesError('');
       setIsLoading(true);
-      const response = await membershipAPI.getTypes({ includeInactive: true });
-      setTypes(response.data);
+      const typesResponse = await membershipAPI.getTypes({ includeInactive: true });
+      setTypes(typesResponse.data);
     } catch (loadError) {
       console.error('Failed to load membership types:', loadError);
       setError('회원권 관리 목록을 불러오지 못했습니다.');
+      setAvailableClassTitles([]);
     } finally {
       setIsLoading(false);
+    }
+
+    try {
+      const classTitlesResponse = await membershipAPI.getClassTitles();
+      setAvailableClassTitles(normalizeReservableClassTitles(classTitlesResponse.data));
+    } catch (loadError) {
+      console.error('Failed to load class titles:', loadError);
+      setAvailableClassTitles([]);
+      setClassTitlesError('현재 등록된 수업명 목록을 불러오지 못했습니다. 필요하면 직접 수업명을 추가하세요.');
     }
   };
 
@@ -59,12 +71,27 @@ const MembershipTypeManagement: React.FC = () => {
     setEditingTypeId(null);
   };
 
-  const startEdit = (type: MembershipType) => {
+  const startEdit = (type: MembershipTypeRecord) => {
     setEditingTypeId(type.id);
     setForm({
       name: type.name,
       description: type.description || '',
       total_sessions: String(type.total_sessions),
+      reservable_class_titles: normalizeReservableClassTitles(type.reservable_class_titles),
+      custom_class_title: '',
+    });
+  };
+
+  const toggleReservableClassTitle = (title: string) => {
+    setForm((prev) => {
+      const nextTitles = prev.reservable_class_titles.includes(title)
+        ? prev.reservable_class_titles.filter((item) => item !== title)
+        : [...prev.reservable_class_titles, title];
+
+      return {
+        ...prev,
+        reservable_class_titles: normalizeReservableClassTitles(nextTitles),
+      };
     });
   };
 
@@ -74,10 +101,17 @@ const MembershipTypeManagement: React.FC = () => {
     setError('');
 
     try {
+      const reservableClassTitles = normalizeReservableClassTitles(form.reservable_class_titles);
+      if (reservableClassTitles.length === 0) {
+        setError('신청 가능한 수업명은 최소 1개 이상 선택해야 합니다.');
+        return;
+      }
+
       const payload = {
         name: form.name,
         description: form.description || null,
         total_sessions: Number(form.total_sessions),
+        reservable_class_titles: reservableClassTitles,
       };
 
       if (editingTypeId) {
@@ -98,7 +132,25 @@ const MembershipTypeManagement: React.FC = () => {
     }
   };
 
-  const handleDeactivate = async (type: MembershipType) => {
+  const handleAddCustomClassTitle = () => {
+    const nextTitle = normalizeReservableClassTitles([form.custom_class_title])[0];
+    if (!nextTitle) {
+      setError('추가할 수업명을 입력해주세요.');
+      return;
+    }
+
+    setError('');
+    setForm((prev) => ({
+      ...prev,
+      reservable_class_titles: normalizeReservableClassTitles([
+        ...prev.reservable_class_titles,
+        nextTitle,
+      ]),
+      custom_class_title: '',
+    }));
+  };
+
+  const handleDeactivate = async (type: MembershipTypeRecord) => {
     const ok = window.confirm(`"${type.name}" 회원권 관리 항목을 비활성화할까요?`);
     if (!ok) return;
 
@@ -115,7 +167,7 @@ const MembershipTypeManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (type: MembershipType) => {
+  const handleDelete = async (type: MembershipTypeRecord) => {
     const ok = window.confirm(`"${type.name}" 회원권 관리 항목을 완전히 삭제할까요?`);
     if (!ok) return;
 
@@ -131,6 +183,11 @@ const MembershipTypeManagement: React.FC = () => {
       setError(parseApiError(deleteError));
     }
   };
+
+  const selectableClassTitles = normalizeReservableClassTitles([
+    ...availableClassTitles,
+    ...form.reservable_class_titles,
+  ]);
 
   return (
     <div className="space-y-6 fade-in">
@@ -179,6 +236,62 @@ const MembershipTypeManagement: React.FC = () => {
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               />
             </div>
+            <div>
+              <p className="label">신청 가능한 수업명</p>
+              <div className="mb-3 flex gap-2">
+                <input
+                  id="type-custom-class-title"
+                  className="input-field"
+                  value={form.custom_class_title}
+                  onChange={(e) => setForm((prev) => ({ ...prev, custom_class_title: e.target.value }))}
+                  placeholder="목록에 없는 수업명 추가"
+                />
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  onClick={handleAddCustomClassTitle}
+                >
+                  수업명 추가
+                </button>
+              </div>
+              {classTitlesError ? (
+                <p className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  {classTitlesError}
+                </p>
+              ) : null}
+              <div className="space-y-2 rounded-lg border border-warm-200 bg-warm-50 p-3">
+                {selectableClassTitles.length === 0 ? (
+                  <p className="text-sm text-warm-600">등록된 수업명이 없습니다. 먼저 수업을 등록해주세요.</p>
+                ) : (
+                  <div className="max-h-56 space-y-2 overflow-y-auto">
+                    {selectableClassTitles.map((title) => {
+                      const checked = form.reservable_class_titles.includes(title);
+                      const isLegacyTitle = !availableClassTitles.includes(title);
+
+                      return (
+                        <label key={title} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                          <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4"
+                            checked={checked}
+                            onChange={() => toggleReservableClassTitle(title)}
+                          />
+                          <span className="text-sm text-primary-800">
+                            {title}
+                            {isLegacyTitle ? (
+                              <span className="ml-2 text-xs text-warm-500">(현재 수업 목록에는 없음)</span>
+                            ) : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-warm-500">
+                현재 등록된 수업명 중에서 선택할 수 있고, 목록에 없는 수업명은 직접 추가할 수 있습니다.
+              </p>
+            </div>
             <div className="flex gap-2">
               <button type="submit" disabled={isSubmitting} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSubmitting ? '저장 중...' : editingTypeId ? '수정 저장' : '종류 추가'}
@@ -200,35 +313,50 @@ const MembershipTypeManagement: React.FC = () => {
             <p className="text-warm-600 py-8 text-center">등록된 회원권 관리 항목이 없습니다.</p>
           ) : (
             <div className="space-y-3">
-              {types.map((type) => (
-                <div key={type.id} className="border border-warm-200 rounded-lg p-4 bg-warm-50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-primary-800">{type.name}</p>
-                      <p className="text-sm text-warm-600">
-                        횟수: {type.total_sessions}회
-                      </p>
-                      {type.description && <p className="text-sm text-warm-700 mt-1">{type.description}</p>}
+              {types.map((type) => {
+                const reservableClassTitles = type.reservable_class_titles ?? [];
+
+                return (
+                  <div key={type.id} className="border border-warm-200 rounded-lg p-4 bg-warm-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-primary-800">{type.name}</p>
+                        <p className="text-sm text-warm-600">
+                          횟수: {type.total_sessions}회
+                        </p>
+                        {type.description && <p className="text-sm text-warm-700 mt-1">{type.description}</p>}
+                        {reservableClassTitles.length ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {reservableClassTitles.map((title) => (
+                              <span key={`${type.id}-${title}`} className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-700">
+                                {title}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-warm-500">신청 가능한 수업명이 없습니다.</p>
+                        )}
+                      </div>
+                      <span className={`px-2.5 py-1 text-xs rounded-full ${type.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                        {type.is_active ? '활성' : '비활성'}
+                      </span>
                     </div>
-                    <span className={`px-2.5 py-1 text-xs rounded-full ${type.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
-                      {type.is_active ? '활성' : '비활성'}
-                    </span>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEdit(type)}>
-                      수정
-                    </button>
-                    {type.is_active ? (
-                      <button type="button" className="px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200" onClick={() => void handleDeactivate(type)}>
-                        비활성화
+                    <div className="flex gap-2 mt-3">
+                      <button type="button" className="px-3 py-1.5 rounded-md bg-warm-100 text-primary-800 hover:bg-warm-200" onClick={() => startEdit(type)}>
+                        수정
                       </button>
-                    ) : null}
-                    <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDelete(type)}>
-                      삭제
-                    </button>
+                      {type.is_active ? (
+                        <button type="button" className="px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200" onClick={() => void handleDeactivate(type)}>
+                          비활성화
+                        </button>
+                      ) : null}
+                      <button type="button" className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200" onClick={() => void handleDelete(type)}>
+                        삭제
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

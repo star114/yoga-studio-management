@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
+import { buildMembershipClassTitleMatchExistsSql } from '../utils/membershipClassTitles';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -280,17 +281,19 @@ router.post('/',
       } else {
         // 회원권 지정이 없으면 수업명과 회원권명 일치 항목을 우선 선택
         const membershipResult = await client.query(
-          `SELECT m.*, mt.name AS membership_type_name
+          `SELECT
+             m.*,
+             CASE
+               WHEN ${buildMembershipClassTitleMatchExistsSql('m', '$2::text')} THEN TRUE
+               ELSE FALSE
+             END AS is_title_match
            FROM yoga_memberships m
-           LEFT JOIN yoga_membership_types mt ON mt.id = m.membership_type_id
            WHERE m.customer_id = $1
              AND m.is_active = true
            ORDER BY
-             CASE
-               WHEN mt.name = $2 THEN 0
-               ELSE 1
-             END,
-             m.created_at DESC
+             is_title_match DESC,
+             m.created_at DESC,
+             m.id DESC
            LIMIT 1`,
           [customer_id, resolvedClassType]
         );

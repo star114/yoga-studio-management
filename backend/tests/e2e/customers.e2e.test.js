@@ -400,12 +400,23 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'membership_id is required');
+
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/:id/recommended-classes',
+    params: { id: '5' },
+    query: { membership_name: '아쉬탕가' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'membership_id is required');
 
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: 'abc' },
-    query: { membership_name: '아쉬탕가' },
+    query: { membership_id: '11' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 400);
@@ -416,7 +427,7 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
-    query: { membership_name: '아쉬탕가' },
+    query: { membership_id: '11' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 403);
@@ -426,13 +437,14 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
-    query: { membership_name: '아쉬탕가' },
+    query: { membership_id: '11' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 500);
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
+    { rows: [{ id: 11, membership_type_id: 88 }] },
     { rows: [{ total: 1 }] },
     { rows: [{ id: 9, title: '아쉬탕가', is_registered: true, existing_status: 'attended' }] }
   );
@@ -440,7 +452,7 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
-    query: { membership_name: '아쉬탕가', page: '1', page_size: '10' },
+    query: { membership_id: '11', page: '1', page_size: '10' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 200);
@@ -454,6 +466,7 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   assert.equal(res.body.pagination.total_pages, 1);
 
   h.queryQueue.push(
+    { rows: [{ id: 12, membership_type_id: 99 }] },
     { rows: [{ total: 1 }] },
     { rows: [{ id: 10, title: '빈야사' }] }
   );
@@ -461,7 +474,7 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
-    query: { membership_name: '빈야사', page_size: '0' },
+    query: { membership_id: '12', page_size: '0' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
@@ -472,13 +485,16 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
   assert.ok(recommendedQueryCall);
   assert.equal(recommendedQueryCall[1][2], 10);
   assert.equal(recommendedQueryCall[1][3], 0);
+  assert.match(String(recommendedQueryCall[0]), /yoga_membership_type_class_titles/i);
+  assert.match(String(recommendedQueryCall[0]), /mine\.customer_id = \$2/);
+  assert.match(String(recommendedQueryCall[0]), /a\.customer_id = \$2/);
 
   h.queryQueue.push(new Error('recommended fail'));
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
-    query: { membership_name: '아쉬탕가' },
+    query: { membership_id: '11' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);

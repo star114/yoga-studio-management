@@ -31,6 +31,14 @@ CREATE TABLE IF NOT EXISTS yoga_membership_types (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 회원권 종류별 신청 가능 수업명 테이블
+CREATE TABLE IF NOT EXISTS yoga_membership_type_class_titles (
+    id SERIAL PRIMARY KEY,
+    membership_type_id INTEGER NOT NULL REFERENCES yoga_membership_types(id) ON DELETE CASCADE,
+    class_title VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 회원권 테이블
 CREATE TABLE IF NOT EXISTS yoga_memberships (
     id SERIAL PRIMARY KEY,
@@ -115,6 +123,8 @@ CREATE INDEX IF NOT EXISTS idx_customers_user_id ON yoga_customers(user_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON yoga_customers(phone);
 CREATE INDEX IF NOT EXISTS idx_memberships_customer_id ON yoga_memberships(customer_id);
 CREATE INDEX IF NOT EXISTS idx_memberships_active ON yoga_memberships(is_active);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_membership_type_class_titles_unique
+    ON yoga_membership_type_class_titles(membership_type_id, class_title);
 CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_membership_created
     ON yoga_membership_usage_audit_logs(membership_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_membership_usage_audit_customer_created
