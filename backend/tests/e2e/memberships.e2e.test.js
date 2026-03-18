@@ -310,7 +310,8 @@ test('types routes cover success/not-found/validation/error', async () => {
   const typeUpdateSuccessClient = h.createDbClientMock();
   typeUpdateSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 3, name: 'updated', reservable_class_titles: ['빈야사'] }] },
+    { rows: [{ id: 3, name: 'updated' }] },
+    { rows: [{ reservable_class_titles: ['빈야사'] }] },
     { rows: [{ id: 3, name: 'updated', reservable_class_titles: ['빈야사'] }] },
     { rows: [], rowCount: 0 }
   );
@@ -337,8 +338,8 @@ test('types routes cover success/not-found/validation/error', async () => {
       id: 3,
       name: 'updated',
       total_sessions: 12,
-      reservable_class_titles: ['저녁요가'],
     }] },
+    { rows: [{ reservable_class_titles: ['저녁요가'] }] },
     { rows: [{
       id: 3,
       name: 'updated',
@@ -371,7 +372,8 @@ test('types routes cover success/not-found/validation/error', async () => {
   const typeUpdateErrorClient = h.createDbClientMock();
   typeUpdateErrorClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 3, name: 'x2', reservable_class_titles: ['아침요가'] }] },
+    { rows: [{ id: 3, name: 'x2' }] },
+    { rows: [{ reservable_class_titles: ['아침요가'] }] },
     new Error('update type fail'),
     { rows: [], rowCount: 0 }
   );
