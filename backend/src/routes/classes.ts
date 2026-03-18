@@ -4,7 +4,11 @@ import pool from '../config/database';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
 import { getRecurringClassDates, isValidTime, timeToMinutes } from '../utils/classSchedule';
 import { deductMembershipSessions, refundMembershipSessions } from '../utils/membershipUsageAudit';
-import { isMembershipTitleMatch, sortMembershipRowsByTitleMatch } from '../utils/membershipTitleMatch';
+import {
+  getMembershipTitleMatchKind,
+  isMembershipTitleMatch,
+  sortMembershipRowsByTitleMatch,
+} from '../utils/membershipTitleMatch';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
@@ -853,9 +857,12 @@ router.post('/:id/registrations',
         remaining_sessions: number;
         membership_type_name?: string | null;
         is_title_match?: boolean;
+        title_match_kind?: 'exact' | 'suffix' | 'none';
       }>).map((row) => ({
         ...row,
         is_active: row.is_active ?? true,
+        title_match_kind: row.title_match_kind
+          ?? getMembershipTitleMatchKind(row.membership_type_name, String(yogaClass.title ?? '')),
         is_title_match: typeof row.is_title_match === 'boolean'
           ? row.is_title_match
           : isMembershipTitleMatch(row.membership_type_name, String(yogaClass.title ?? '')),

@@ -798,6 +798,60 @@ test('class registration and recurring routes cover core branches', async () => 
   );
   assert.equal(explicitMembershipInsertCall?.[1]?.[2], 777);
 
+  const exactPreferredMembershipClient = h.createDbClientMock();
+  exactPreferredMembershipClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 11,
+          title: '아쉬탕가',
+          is_open: true,
+          max_capacity: 10,
+          is_excluded: false,
+          class_date: '2999-01-01',
+          end_time: '12:00:00',
+        },
+      ],
+    },
+    {
+      rows: [
+        {
+          id: 501,
+          remaining_sessions: 5,
+          is_active: true,
+          created_at: '2026-03-01T09:00:00Z',
+          membership_type_name: '아쉬탕가',
+        },
+        {
+          id: 777,
+          remaining_sessions: 2,
+          is_active: true,
+          created_at: '2026-03-12T09:00:00Z',
+          membership_type_name: '아쉬탕가 1회권',
+        },
+      ],
+    },
+    { rows: [] },
+    { rows: [{ count: 0 }] },
+    { rows: [{ id: 289, class_id: 11, customer_id: 1, membership_id: 501 }] },
+    { rows: [{ id: 501 }], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(exactPreferredMembershipClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/:id/registrations',
+    params: { id: '11' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 1 },
+  });
+  assert.equal(res.status, 201);
+  const exactPreferredInsertCall = exactPreferredMembershipClient.queryCalls.find(
+    ([queryText]) => typeof queryText === 'string' && queryText.includes('INSERT INTO yoga_class_registrations')
+  );
+  assert.equal(exactPreferredInsertCall?.[1]?.[2], 501);
+
   const invalidMembershipClient = h.createDbClientMock();
   invalidMembershipClient.queryQueue.push(
     { rows: [], rowCount: 0 },

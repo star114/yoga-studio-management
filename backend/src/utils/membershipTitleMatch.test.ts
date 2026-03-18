@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isMembershipTitleMatch, sortMembershipRowsByTitleMatch } from './membershipTitleMatch';
+import { getMembershipTitleMatchKind, isMembershipTitleMatch, sortMembershipRowsByTitleMatch } from './membershipTitleMatch';
 
 test('isMembershipTitleMatch returns true for exact matches after whitespace normalization', () => {
   assert.equal(isMembershipTitleMatch('아침요가', '아침요가'), true);
@@ -16,6 +16,12 @@ test('isMembershipTitleMatch returns true when non-letter suffixes follow the cl
   assert.equal(isMembershipTitleMatch('아침요가3개월', '아침요가'), true);
 });
 
+test('getMembershipTitleMatchKind distinguishes exact, suffix, and non-matches', () => {
+  assert.equal(getMembershipTitleMatchKind('아침요가', '아침요가'), 'exact');
+  assert.equal(getMembershipTitleMatchKind('아침요가 3개월', '아침요가'), 'suffix');
+  assert.equal(getMembershipTitleMatchKind('아침요가심화', '아침요가'), 'none');
+});
+
 test('isMembershipTitleMatch returns false when letters continue after the class title', () => {
   assert.equal(isMembershipTitleMatch('아침요가심화', '아침요가'), false);
   assert.equal(isMembershipTitleMatch('MorningYogaPlus', 'MorningYoga'), false);
@@ -28,14 +34,14 @@ test('isMembershipTitleMatch returns false when either side is empty', () => {
   assert.equal(isMembershipTitleMatch(null, '아침요가'), false);
 });
 
-test('sortMembershipRowsByTitleMatch prioritizes matching rows and newer rows within the same group', () => {
+test('sortMembershipRowsByTitleMatch prioritizes exact matches over suffix matches', () => {
   const sorted = sortMembershipRowsByTitleMatch([
     { id: 1, membership_type_name: '저녁요가', created_at: '2026-03-10T09:00:00Z' },
     { id: 2, membership_type_name: '아침요가 1회권', created_at: '2026-03-12T09:00:00Z' },
     { id: 3, membership_type_name: '아침요가', created_at: '2026-03-11T09:00:00Z' },
   ], '아침요가');
 
-  assert.deepEqual(sorted.map((item) => item.id), [2, 3, 1]);
+  assert.deepEqual(sorted.map((item) => item.id), [3, 2, 1]);
 });
 
 test('sortMembershipRowsByTitleMatch honors precomputed title-match flags and missing timestamps', () => {
@@ -60,6 +66,24 @@ test('sortMembershipRowsByTitleMatch handles newer right-hand timestamps when sc
   const sorted = sortMembershipRowsByTitleMatch([
     { id: 1, membership_type_name: null, is_title_match: false, created_at: null },
     { id: 2, membership_type_name: null, is_title_match: false, created_at: '2026-03-09T09:00:00Z' },
+  ], '아침요가');
+
+  assert.deepEqual(sorted.map((item) => item.id), [2, 1]);
+});
+
+test('sortMembershipRowsByTitleMatch honors explicit title_match_kind overrides on both sides', () => {
+  const sorted = sortMembershipRowsByTitleMatch([
+    { id: 1, membership_type_name: '아침요가 1회권', title_match_kind: 'suffix', created_at: '2026-03-10T09:00:00Z' },
+    { id: 2, membership_type_name: '저녁요가', title_match_kind: 'exact', created_at: '2026-03-01T09:00:00Z' },
+  ], '아침요가');
+
+  assert.deepEqual(sorted.map((item) => item.id), [2, 1]);
+});
+
+test('sortMembershipRowsByTitleMatch handles boolean match overrides on the right-hand row', () => {
+  const sorted = sortMembershipRowsByTitleMatch([
+    { id: 1, membership_type_name: '저녁요가', created_at: '2026-03-10T09:00:00Z' },
+    { id: 2, membership_type_name: null, is_title_match: true, created_at: '2026-03-01T09:00:00Z' },
   ], '아침요가');
 
   assert.deepEqual(sorted.map((item) => item.id), [2, 1]);

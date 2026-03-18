@@ -5,27 +5,57 @@ const normalizeMembershipTitle = (value: string | null | undefined): string => {
     .replace(/\s+/g, ' ');
 };
 
-export const isMembershipTitleMatch = (
+type MembershipTitleMatchKind = 'exact' | 'suffix' | 'none';
+
+export const getMembershipTitleMatchKind = (
   membershipTypeName: string | null | undefined,
   classTitle: string | null | undefined
-): boolean => {
+): MembershipTitleMatchKind => {
   const normalizedMembershipTypeName = normalizeMembershipTitle(membershipTypeName);
   const normalizedClassTitle = normalizeMembershipTitle(classTitle);
 
   if (!normalizedMembershipTypeName || !normalizedClassTitle) {
-    return false;
+    return 'none';
   }
 
   if (normalizedMembershipTypeName === normalizedClassTitle) {
-    return true;
+    return 'exact';
   }
 
   if (!normalizedMembershipTypeName.startsWith(normalizedClassTitle)) {
-    return false;
+    return 'none';
   }
 
   const nextCharacter = normalizedMembershipTypeName.slice(normalizedClassTitle.length, normalizedClassTitle.length + 1);
-  return !/\p{L}/u.test(nextCharacter);
+  return /\p{L}/u.test(nextCharacter) ? 'none' : 'suffix';
+};
+
+export const isMembershipTitleMatch = (
+  membershipTypeName: string | null | undefined,
+  classTitle: string | null | undefined
+): boolean => {
+  return getMembershipTitleMatchKind(membershipTypeName, classTitle) !== 'none';
+};
+
+const getMembershipRowMatchKind = <
+  T extends {
+    membership_type_name?: string | null;
+    is_title_match?: boolean | null;
+    title_match_kind?: MembershipTitleMatchKind | null;
+  }
+>(
+  membership: T,
+  classTitle: string | null | undefined
+): MembershipTitleMatchKind => {
+  if (membership.title_match_kind) {
+    return membership.title_match_kind;
+  }
+
+  if (typeof membership.is_title_match === 'boolean') {
+    return membership.is_title_match ? 'suffix' : 'none';
+  }
+
+  return getMembershipTitleMatchKind(membership.membership_type_name, classTitle);
 };
 
 export const sortMembershipRowsByTitleMatch = <
@@ -33,18 +63,22 @@ export const sortMembershipRowsByTitleMatch = <
     membership_type_name?: string | null;
     created_at?: string | Date | null;
     is_title_match?: boolean | null;
+    title_match_kind?: MembershipTitleMatchKind | null;
   }
 >(
   memberships: T[],
   classTitle: string | null | undefined
 ): T[] => {
   return [...memberships].sort((left, right) => {
-    const leftScore = (typeof left.is_title_match === 'boolean'
-      ? left.is_title_match
-      : isMembershipTitleMatch(left.membership_type_name, classTitle)) ? 0 : 1;
-    const rightScore = (typeof right.is_title_match === 'boolean'
-      ? right.is_title_match
-      : isMembershipTitleMatch(right.membership_type_name, classTitle)) ? 0 : 1;
+    const leftMatchKind = getMembershipRowMatchKind(left, classTitle);
+    const rightMatchKind = getMembershipRowMatchKind(right, classTitle);
+    const scoreByKind: Record<MembershipTitleMatchKind, number> = {
+      exact: 0,
+      suffix: 1,
+      none: 2,
+    };
+    const leftScore = scoreByKind[leftMatchKind];
+    const rightScore = scoreByKind[rightMatchKind];
 
     if (leftScore !== rightScore) {
       return leftScore - rightScore;

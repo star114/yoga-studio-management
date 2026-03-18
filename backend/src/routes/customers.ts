@@ -7,6 +7,8 @@ import { isMembershipTitleMatch } from '../utils/membershipTitleMatch';
 
 const router = express.Router();
 
+const NORMALIZE_SQL = "regexp_replace(trim(replace(%s, chr(160), ' ')), '[[:space:]]+', ' ', 'g')";
+
 const normalizePhoneNumber = (value: string): string | null => {
   const digits = String(value).replace(/\D/g, '');
   if (!/^\d{11}$/.test(digits)) {
@@ -344,6 +346,26 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
       }
     }
 
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM yoga_classes c
+       WHERE c.is_open = TRUE
+         AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
+         AND (
+           ${NORMALIZE_SQL.replace('%s', '$1::text')} = ${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")}
+           OR (
+             ${NORMALIZE_SQL.replace('%s', '$1::text')} LIKE ${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")} || '%'
+             AND substring(
+               ${NORMALIZE_SQL.replace('%s', '$1::text')}
+               FROM char_length(${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")}) + 1
+               FOR 1
+             ) !~ '[[:alpha:]]'
+           )
+         )`,
+      [membershipName]
+    );
+    const total = Number(countResult.rows[0]?.total ?? 0);
+
     const result = await pool.query(
       `SELECT
          c.id,
@@ -384,19 +406,28 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
        ) existing_usage ON true
        WHERE c.is_open = TRUE
          AND (c.class_date::timestamp + c.end_time) > CURRENT_TIMESTAMP
+         AND (
+           ${NORMALIZE_SQL.replace('%s', '$2::text')} = ${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")}
+           OR (
+             ${NORMALIZE_SQL.replace('%s', '$2::text')} LIKE ${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")} || '%'
+             AND substring(
+               ${NORMALIZE_SQL.replace('%s', '$2::text')}
+               FROM char_length(${NORMALIZE_SQL.replace('%s', "COALESCE(c.title, '')")}) + 1
+               FOR 1
+             ) !~ '[[:alpha:]]'
+           )
+         )
        GROUP BY c.id, existing_usage.existing_status
-       ORDER BY c.class_date ASC, c.start_time ASC`,
-      [id]
+       ORDER BY c.class_date ASC, c.start_time ASC
+       LIMIT $3
+       OFFSET $4`,
+      [id, membershipName, pageSize, offset]
     );
-
-    const matchingItems = result.rows.filter((row) =>
-      isMembershipTitleMatch(membershipName, String(row.title ?? ''))
-    );
-    const total = matchingItems.length;
-    const paginatedItems = matchingItems.slice(offset, offset + pageSize);
 
     res.json({
-      items: paginatedItems,
+      items: result.rows.filter((row) =>
+        isMembershipTitleMatch(membershipName, String(row.title ?? ''))
+      ),
       pagination: {
         page,
         page_size: pageSize,
