@@ -433,27 +433,35 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
 
   h.queryQueue.push(
     { rows: [{ id: 5 }] },
+    { rows: [{ total: 1 }] },
     { rows: [{ id: 9, title: '아쉬탕가', is_registered: true, existing_status: 'attended' }] }
   );
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
-    query: { membership_name: '아쉬탕가', limit: '10' },
+    query: { membership_name: '아쉬탕가', page: '1', page_size: '10' },
     headers: { authorization: `Bearer ${customerToken()}` },
   });
   assert.equal(res.status, 200);
-  assert.equal(res.body.length, 1);
-  assert.equal(res.body[0].title, '아쉬탕가');
-  assert.equal(res.body[0].is_registered, true);
-  assert.equal(res.body[0].existing_status, 'attended');
+  assert.equal(res.body.items.length, 1);
+  assert.equal(res.body.items[0].title, '아쉬탕가');
+  assert.equal(res.body.items[0].is_registered, true);
+  assert.equal(res.body.items[0].existing_status, 'attended');
+  assert.equal(res.body.pagination.page, 1);
+  assert.equal(res.body.pagination.page_size, 10);
+  assert.equal(res.body.pagination.total, 1);
+  assert.equal(res.body.pagination.total_pages, 1);
 
-  h.queryQueue.push({ rows: [{ id: 10, title: '빈야사' }] });
+  h.queryQueue.push(
+    { rows: [{ total: 1 }] },
+    { rows: [{ id: 10, title: '빈야사' }] }
+  );
   res = await h.runRoute({
     method: 'get',
     routePath: '/:id/recommended-classes',
     params: { id: '5' },
-    query: { membership_name: '빈야사', limit: '0' },
+    query: { membership_name: '빈야사', page_size: '0' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 200);
@@ -462,7 +470,8 @@ test('GET /:id/recommended-classes covers validation, forbidden, success, and er
     .reverse()
     .find((call) => String(call[0]).includes('FROM yoga_classes c'));
   assert.ok(recommendedQueryCall);
-  assert.equal(recommendedQueryCall[1][2], 20);
+  assert.equal(recommendedQueryCall[1][2], 10);
+  assert.equal(recommendedQueryCall[1][3], 0);
 
   h.queryQueue.push(new Error('recommended fail'));
   res = await h.runRoute({

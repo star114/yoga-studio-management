@@ -1284,18 +1284,21 @@ describe('CustomerDetail page', () => {
       ],
     });
     getRecommendedClassesMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 500,
-          title: '아쉬탕가',
-          class_date: '2026-03-10',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          remaining_seats: 3,
-          current_enrollment: 2,
-          is_registered: false,
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: 500,
+            title: '아쉬탕가',
+            class_date: '2026-03-10',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 3,
+            current_enrollment: 2,
+            is_registered: false,
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
     });
     classRegisterMock.mockResolvedValueOnce(undefined);
 
@@ -1305,7 +1308,8 @@ describe('CustomerDetail page', () => {
     fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
     await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenCalledWith(1, {
       membership_name: '아쉬탕가',
-      limit: 10,
+      page: 1,
+      page_size: 10,
     }));
 
     const quickReserveButton = await screen.findByRole('button', { name: '바로 예약' });
@@ -1315,6 +1319,107 @@ describe('CustomerDetail page', () => {
       membership_id: 31,
     }));
     await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
+  });
+
+  it('supports legacy array response when loading recommended classes', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 38,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 503,
+          title: '아쉬탕가',
+          class_date: '2026-03-12',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          remaining_seats: 4,
+          current_enrollment: 1,
+          is_registered: false,
+        },
+      ],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    await waitFor(() => expect(screen.getByText('총 1개 수업')).toBeTruthy());
+    expect(screen.getByText('1/1 페이지')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '바로 예약' })).toBeTruthy();
+  });
+
+  it('falls back to request pagination defaults when recommended classes pagination is omitted', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 39,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 504,
+            title: '아쉬탕가',
+            class_date: '2026-03-13',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 2,
+            current_enrollment: 3,
+            is_registered: false,
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    await waitFor(() => expect(screen.getByText('총 1개 수업')).toBeTruthy());
+    expect(screen.getByText('1/1 페이지')).toBeTruthy();
+  });
+
+  it('treats object response without items as an empty recommended class list', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 40,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: {
+        pagination: {},
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    await waitFor(() => expect(screen.getByText('예정된 같은 이름 수업이 없습니다.')).toBeTruthy());
   });
 
   it('shows attended classes as already processed in recommended classes', async () => {
@@ -1331,19 +1436,22 @@ describe('CustomerDetail page', () => {
       ],
     });
     getRecommendedClassesMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 900,
-          title: '아쉬탕가',
-          class_date: '2026-03-10',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          remaining_seats: 3,
-          current_enrollment: 2,
-          is_registered: true,
-          existing_status: 'attended',
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: 900,
+            title: '아쉬탕가',
+            class_date: '2026-03-10',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 3,
+            current_enrollment: 2,
+            is_registered: true,
+            existing_status: 'attended',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
     });
 
     renderPage();
@@ -1368,19 +1476,22 @@ describe('CustomerDetail page', () => {
       ],
     });
     getRecommendedClassesMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 901,
-          title: '아쉬탕가',
-          class_date: '2026-03-11',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          remaining_seats: 2,
-          current_enrollment: 3,
-          is_registered: true,
-          existing_status: 'absent',
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: 901,
+            title: '아쉬탕가',
+            class_date: '2026-03-11',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 2,
+            current_enrollment: 3,
+            is_registered: true,
+            existing_status: 'absent',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
     });
 
     renderPage();
@@ -1404,28 +1515,31 @@ describe('CustomerDetail page', () => {
       ],
     });
     getRecommendedClassesMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 701,
-          title: '아쉬탕가 A',
-          class_date: '2026-03-20',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          remaining_seats: 3,
-          current_enrollment: 2,
-          is_registered: false,
-        },
-        {
-          id: 702,
-          title: '아쉬탕가 B',
-          class_date: '2026-03-21',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          remaining_seats: 2,
-          current_enrollment: 4,
-          is_registered: false,
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: 701,
+            title: '아쉬탕가 A',
+            class_date: '2026-03-20',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 3,
+            current_enrollment: 2,
+            is_registered: false,
+          },
+          {
+            id: 702,
+            title: '아쉬탕가 B',
+            class_date: '2026-03-21',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 2,
+            current_enrollment: 4,
+            is_registered: false,
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 2, total_pages: 1 },
+      },
     });
     classRegisterMock.mockResolvedValueOnce(undefined);
 
@@ -1442,6 +1556,160 @@ describe('CustomerDetail page', () => {
       membership_id: 36,
     }));
     await waitFor(() => expect(screen.getByText('예약됨')).toBeTruthy());
+  });
+
+  it('loads the next page of recommended classes for a membership', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 37,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 12,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              id: 801,
+              title: '아쉬탕가 1',
+              class_date: '2026-03-20',
+              start_time: '09:00:00',
+              end_time: '10:00:00',
+              remaining_seats: 3,
+              current_enrollment: 2,
+              is_registered: false,
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 11, total_pages: 2 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              id: 802,
+              title: '아쉬탕가 11',
+              class_date: '2026-03-30',
+              start_time: '09:00:00',
+              end_time: '10:00:00',
+              remaining_seats: 4,
+              current_enrollment: 1,
+              is_registered: false,
+            },
+          ],
+          pagination: { page: 2, page_size: 10, total: 11, total_pages: 2 },
+        },
+      });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+    await waitFor(() => expect(screen.getByText('총 11개 수업')).toBeTruthy());
+    expect(screen.getByText('1/2 페이지')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+
+    await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenNthCalledWith(2, 1, {
+      membership_name: '아쉬탕가',
+      page: 2,
+      page_size: 10,
+    }));
+    await waitFor(() => expect(screen.getByText('아쉬탕가 11')).toBeTruthy());
+    expect(screen.getByText('2/2 페이지')).toBeTruthy();
+  });
+
+  it('supports numbered and previous pagination controls for recommended classes', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 43,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 20,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              id: 811,
+              title: '아쉬탕가 1',
+              class_date: '2026-03-20',
+              start_time: '09:00:00',
+              end_time: '10:00:00',
+              remaining_seats: 3,
+              current_enrollment: 2,
+              is_registered: false,
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 21, total_pages: 3 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              id: 812,
+              title: '아쉬탕가 11',
+              class_date: '2026-03-30',
+              start_time: '09:00:00',
+              end_time: '10:00:00',
+              remaining_seats: 4,
+              current_enrollment: 1,
+              is_registered: false,
+            },
+          ],
+          pagination: { page: 2, page_size: 10, total: 21, total_pages: 3 },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              id: 811,
+              title: '아쉬탕가 1',
+              class_date: '2026-03-20',
+              start_time: '09:00:00',
+              end_time: '10:00:00',
+              remaining_seats: 3,
+              current_enrollment: 2,
+              is_registered: false,
+            },
+          ],
+          pagination: { page: 1, page_size: 10, total: 21, total_pages: 3 },
+        },
+      });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+    await waitFor(() => expect(screen.getByText('1/3 페이지')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenNthCalledWith(2, 1, {
+      membership_name: '아쉬탕가',
+      page: 2,
+      page_size: 10,
+    }));
+    await waitFor(() => expect(screen.getByText('2/3 페이지')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
+    await waitFor(() => expect(getRecommendedClassesMock).toHaveBeenNthCalledWith(3, 1, {
+      membership_name: '아쉬탕가',
+      page: 1,
+      page_size: 10,
+    }));
+    await waitFor(() => expect(screen.getByText('1/3 페이지')).toBeTruthy());
   });
 
   it('shows error when loading recommended classes fails', async () => {
@@ -1482,18 +1750,21 @@ describe('CustomerDetail page', () => {
       ],
     });
     getRecommendedClassesMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: 501,
-          title: '아쉬탕가',
-          class_date: '2026-03-11',
-          start_time: '09:00:00',
-          end_time: '10:00:00',
-          remaining_seats: 2,
-          current_enrollment: 3,
-          is_registered: false,
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: 501,
+            title: '아쉬탕가',
+            class_date: '2026-03-11',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 2,
+            current_enrollment: 3,
+            is_registered: false,
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
     });
     classRegisterMock.mockRejectedValueOnce(new Error('reserve fail'));
 

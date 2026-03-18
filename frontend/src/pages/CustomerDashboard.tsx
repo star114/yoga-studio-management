@@ -334,11 +334,12 @@ const CustomerDashboard: React.FC = () => {
     };
 
     void loadVisibleThreads();
+    const loadingThreadClassIds = loadingThreadClassIdsRef.current;
 
     return () => {
       cancelled = true;
       classIdsToFetch.forEach((classId) => {
-        loadingThreadClassIdsRef.current.delete(classId);
+        loadingThreadClassIds.delete(classId);
       });
     };
   }, [recentAttendances, visibleAttendanceClassIds]);
