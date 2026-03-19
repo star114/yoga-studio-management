@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/star114/yoga-studio-management/compare/v2.5.2...v2.6.0) (2026-03-19)
+
+
+### Features
+
+* add admin class overview dashboard ([#60](https://github.com/star114/yoga-studio-management/issues/60)) ([72c3d66](https://github.com/star114/yoga-studio-management/commit/72c3d6681ffe672868e0bc35a408ec83c7cd1b8f))
+
 ## [2.5.2](https://github.com/star114/yoga-studio-management/compare/v2.5.1...v2.5.2) (2026-03-19)
 
 
