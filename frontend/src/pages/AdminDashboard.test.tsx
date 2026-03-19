@@ -401,4 +401,34 @@ describe('AdminDashboard page', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('logs the first failing core dashboard request reason from allSettled', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    attendanceGetTodayMock.mockRejectedValueOnce(new Error('today failed'));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('대시보드')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to load dashboard data:', expect.objectContaining({
+      message: 'today failed',
+    }));
+
+    consoleSpy.mockRestore();
+  });
+
+  it('logs class request failure reason when customers and attendance succeed', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    classGetAllMock.mockRejectedValueOnce(new Error('classes failed'));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('대시보드')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to load dashboard data:', expect.objectContaining({
+      message: 'classes failed',
+    }));
+
+    consoleSpy.mockRestore();
+  });
 });

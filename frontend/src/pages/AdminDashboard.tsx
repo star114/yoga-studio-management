@@ -231,33 +231,42 @@ const AdminDashboard: React.FC = () => {
   };
 
   const loadDashboardData = async () => {
-    try {
-      const [customersRes, todayRes, classesRes] = await Promise.all([
-        customerAPI.getAll(),
-        attendanceAPI.getToday(),
-        classAPI.getAll(),
-      ]);
+    const [customersResult, todayResult, classesResult, snapshotResult] = await Promise.allSettled([
+      customerAPI.getAll(),
+      attendanceAPI.getToday(),
+      classAPI.getAll(),
+      classAPI.getAdminDashboardSnapshot(),
+    ]);
 
+    if (
+      customersResult.status === 'fulfilled'
+      && todayResult.status === 'fulfilled'
+      && classesResult.status === 'fulfilled'
+    ) {
       setStats({
-        totalCustomers: customersRes.data.length,
-        todayAttendance: todayRes.data.length,
+        totalCustomers: customersResult.value.data.length,
+        todayAttendance: todayResult.value.data.length,
       });
 
-      setRecentCustomers(customersRes.data.slice(0, 5));
-      setTodayAttendances(todayRes.data);
-      setClasses(classesRes.data);
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error);
+      setRecentCustomers(customersResult.value.data.slice(0, 5));
+      setTodayAttendances(todayResult.value.data);
+      setClasses(classesResult.value.data);
+    } else {
+      const dashboardError = customersResult.status === 'rejected'
+        ? customersResult.reason
+        : todayResult.status === 'rejected'
+          ? todayResult.reason
+          : classesResult.reason;
+      console.error('Failed to load dashboard data:', dashboardError);
     }
 
-    try {
-      const classSnapshotRes = await classAPI.getAdminDashboardSnapshot();
-      setClassSnapshot(classSnapshotRes.data);
-    } catch (snapshotError) {
-      console.error('Failed to load admin dashboard snapshot:', snapshotError);
-    } finally {
-      setIsLoading(false);
+    if (snapshotResult.status === 'fulfilled') {
+      setClassSnapshot(snapshotResult.value.data);
+    } else {
+      console.error('Failed to load admin dashboard snapshot:', snapshotResult.reason);
     }
+
+    setIsLoading(false);
   };
 
   const classSnapshotHeading = classSnapshot.basis === 'today'
