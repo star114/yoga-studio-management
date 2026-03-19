@@ -154,6 +154,7 @@ describe('api service', () => {
     attendanceAPI.delete(1);
 
     classAPI.getAll({ limit: 10 });
+    classAPI.getAdminDashboardSnapshot();
     classAPI.getById(2);
     classAPI.getMyClassDetail(2);
     classAPI.getRegistrations(2);
@@ -215,6 +216,7 @@ describe('api service', () => {
     expect(deleteMock).toHaveBeenCalledWith('/attendances/1');
 
     expect(getMock).toHaveBeenCalledWith('/classes', { params: { limit: 10 } });
+    expect(getMock).toHaveBeenCalledWith('/classes/dashboard/admin-snapshot');
     expect(getMock).toHaveBeenCalledWith('/classes/2');
     expect(getMock).toHaveBeenCalledWith('/classes/2/me');
     expect(getMock).toHaveBeenCalledWith('/classes/2/registrations');

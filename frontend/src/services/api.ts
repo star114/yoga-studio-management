@@ -169,6 +169,9 @@ export const classAPI = {
   getAll: (params?: QueryParams) =>
     api.get('/classes', { params }),
 
+  getAdminDashboardSnapshot: () =>
+    api.get('/classes/dashboard/admin-snapshot'),
+
   getById: (classId: number) =>
     api.get(`/classes/${classId}`),
 

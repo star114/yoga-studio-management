@@ -66,7 +66,8 @@ const clearStoredClassFilters = () => {
 
 describe('ClassManagement page', () => {
   beforeEach(() => {
-    vi.useRealTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-03-19T09:00:00'));
     vi.resetAllMocks();
     Object.defineProperty(window, 'localStorage', {
       value: createMemoryStorage(),
@@ -83,6 +84,7 @@ describe('ClassManagement page', () => {
   afterEach(() => {
     cleanup();
     clearStoredClassFilters();
+    vi.useRealTimers();
   });
 
   it('shows load error when fetching classes fails', async () => {
@@ -595,11 +597,11 @@ describe('ClassManagement page', () => {
     fireEvent.click(screen.getByRole('button', { name: '적용' }));
 
     await waitFor(() => expect(getAllMock).toHaveBeenCalledTimes(4));
-    expect(getAllMock.mock.calls[3][0]).toBeUndefined();
+    expect(getAllMock.mock.calls[3][0]).toEqual({ date_from: '2026-03-12' });
     await waitFor(() => expect(screen.getByText('완료수업')).toBeTruthy());
     expect(localStorage.getItem('class-management-filters:1')).toBe(JSON.stringify({
       showOpenOnly: false,
-      dateFromFilter: '',
+      dateFromFilter: '2026-03-12',
       dateToFilter: '',
     }));
   });
@@ -612,10 +614,10 @@ describe('ClassManagement page', () => {
 
     await waitFor(() => expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy());
     expect(getAllMock).toHaveBeenCalledTimes(1);
-    expect(getAllMock.mock.calls[0][0]).toBeUndefined();
+    expect(getAllMock.mock.calls[0][0]).toEqual({ date_from: '2026-03-12' });
   });
 
-  it('falls back to empty date filters when stored values are not strings', async () => {
+  it('falls back to default date filters when stored values are not strings', async () => {
     localStorage.setItem('class-management-filters:1', JSON.stringify({
       showOpenOnly: true,
       dateFromFilter: 20260201,
@@ -630,7 +632,7 @@ describe('ClassManagement page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '필터' }));
     expect((screen.getByLabelText('오픈 수업만 보기') as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByLabelText('시작일') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('시작일') as HTMLInputElement).value).toBe('2026-03-12');
     expect((screen.getByLabelText('종료일') as HTMLInputElement).value).toBe('');
   });
 

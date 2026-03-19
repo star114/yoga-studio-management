@@ -48,6 +48,27 @@ interface DashboardClass {
   class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
 }
 
+interface DashboardSnapshotRegistration {
+  id: number;
+  class_id: number;
+  customer_id: number;
+  customer_name: string;
+  customer_phone: string;
+  attendance_status: 'reserved' | 'attended' | 'absent';
+  registration_comment: string | null;
+  registered_at: string;
+}
+
+interface DashboardSnapshotClass extends DashboardClass {
+  registrations: DashboardSnapshotRegistration[];
+}
+
+interface DashboardClassSnapshot {
+  basis: 'today' | 'upcoming';
+  target_date: string | null;
+  classes: DashboardSnapshotClass[];
+}
+
 type CalendarView = 'month' | 'week' | 'day';
 type AdminClassStatus = 'open' | 'in_progress' | 'completed' | 'closed';
 
@@ -55,6 +76,31 @@ const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 const normalizeTime = (value: string) => value.slice(0, 5);
 const normalizeDate = (value: string) => value.slice(0, 10);
+const splitRegistrationComment = (value: string | null | undefined) =>
+  (value ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+const getRegistrationStatusMeta = (status: DashboardSnapshotRegistration['attendance_status']) => {
+  switch (status) {
+    case 'attended':
+      return {
+        label: '출석',
+        className: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      };
+    case 'absent':
+      return {
+        label: '결석',
+        className: 'bg-rose-100 text-rose-800 border-rose-200',
+      };
+    default:
+      return {
+        label: '예약',
+        className: 'bg-amber-100 text-amber-800 border-amber-200',
+      };
+  }
+};
 
 const getAdminClassStatusMeta = (item: DashboardClass) => {
   const status = (item.class_status || 'open') as AdminClassStatus;
@@ -100,6 +146,11 @@ const AdminDashboard: React.FC = () => {
   const [todayAttendances, setTodayAttendances] = useState<DashboardAttendance[]>([]);
   const [recentCustomers, setRecentCustomers] = useState<DashboardCustomer[]>([]);
   const [classes, setClasses] = useState<DashboardClass[]>([]);
+  const [classSnapshot, setClassSnapshot] = useState<DashboardClassSnapshot>({
+    basis: 'upcoming',
+    target_date: null,
+    classes: [],
+  });
   const [calendarView, setCalendarView] = useState<CalendarView>('month');
   const [focusDate, setFocusDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
@@ -181,10 +232,11 @@ const AdminDashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      const [customersRes, todayRes, classesRes] = await Promise.all([
+      const [customersRes, todayRes, classesRes, classSnapshotRes] = await Promise.all([
         customerAPI.getAll(),
         attendanceAPI.getToday(),
         classAPI.getAll(),
+        classAPI.getAdminDashboardSnapshot(),
       ]);
 
       setStats({
@@ -195,12 +247,17 @@ const AdminDashboard: React.FC = () => {
       setRecentCustomers(customersRes.data.slice(0, 5));
       setTodayAttendances(todayRes.data);
       setClasses(classesRes.data);
+      setClassSnapshot(classSnapshotRes.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const classSnapshotHeading = classSnapshot.basis === 'today'
+    ? '오늘 수업 전체'
+    : '다가오는 수업';
 
   const renderClassChip = (item: DashboardClass) => {
     const meta = getAdminClassStatusMeta(item);
@@ -245,35 +302,100 @@ const AdminDashboard: React.FC = () => {
         <p className="text-warm-600">오늘도 평온한 하루 되세요</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-warm-600 mb-1">전체 회원</p>
-              <p className="text-3xl font-bold text-primary-800">{stats.totalCustomers}</p>
-            </div>
-            <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
+      <section className="card space-y-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-display font-semibold text-primary-800">{classSnapshotHeading}</h2>
+            <p className="text-sm text-warm-600">
+              {classSnapshot.target_date
+                ? formatKoreanDate(classSnapshot.target_date)
+                : '오늘이나 예정된 수업이 없습니다.'}
+            </p>
           </div>
+          {classSnapshot.target_date && (
+            <span className="inline-flex w-fit rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700">
+              {classSnapshot.basis === 'today' ? '오늘 일정' : '가장 가까운 예정일'}
+            </span>
+          )}
         </div>
 
-        <div className="card hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-warm-600 mb-1">오늘 출석</p>
-              <p className="text-3xl font-bold text-primary-800">{stats.todayAttendance}</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+        {classSnapshot.classes.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-warm-300 bg-warm-50 px-4 py-8 text-center text-warm-500">
+            표시할 수업이 없습니다.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {classSnapshot.classes.map((item) => {
+              const classMeta = getAdminClassStatusMeta(item);
+              const commentedRegistrations = item.registrations.filter((registration) =>
+                splitRegistrationComment(registration.registration_comment).length > 0
+              );
+              return (
+                <article key={item.id} className="overflow-hidden rounded-2xl border border-warm-200 bg-white/80 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/classes/${item.id}`)}
+                    className="flex w-full flex-col gap-3 border-b border-warm-100 px-4 py-4 text-left transition-colors hover:bg-warm-50 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-semibold text-primary-800">{item.title}</h3>
+                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${classMeta.badgeClassName}`}>
+                          {classMeta.label}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-warm-600">
+                        {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
+                        {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number'
+                          ? ` · 신청 ${item.current_enrollment}/${item.max_capacity}`
+                          : ''}
+                      </p>
+                    </div>
+                    <span className="text-sm font-medium text-primary-700">상세 보기</span>
+                  </button>
+
+                  <div className="divide-y divide-warm-100">
+                    {commentedRegistrations.length === 0 ? (
+                      <p className="px-4 py-5 text-sm text-warm-500">남긴 코멘트가 없습니다.</p>
+                    ) : (
+                      commentedRegistrations.map((registration) => {
+                        const statusMeta = getRegistrationStatusMeta(registration.attendance_status);
+                        const commentLines = splitRegistrationComment(registration.registration_comment);
+                        return (
+                          <div key={registration.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-medium text-primary-800">{registration.customer_name}</p>
+                                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusMeta.className}`}>
+                                  {statusMeta.label}
+                                </span>
+                              </div>
+                              <p className="text-sm text-warm-600">{registration.customer_phone}</p>
+                            </div>
+                            <div className="rounded-xl bg-warm-50 px-3 py-3">
+                              <div className="flex flex-wrap gap-2">
+                                {commentLines.map((commentLine) => (
+                                  <span
+                                    key={`${registration.id}-${commentLine}`}
+                                    className="max-w-full rounded-full border border-primary-200 bg-white px-3 py-1.5 text-sm text-primary-800"
+                                    title={commentLine}
+                                  >
+                                    {commentLine}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
-        </div>
-      </div>
+        )}
+      </section>
 
       <section className="card space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -454,6 +576,36 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
       </section>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="card hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-warm-600 mb-1">전체 회원</p>
+              <p className="text-3xl font-bold text-primary-800">{stats.totalCustomers}</p>
+            </div>
+            <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="card hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-warm-600 mb-1">오늘 출석</p>
+              <p className="text-3xl font-bold text-primary-800">{stats.todayAttendance}</p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
