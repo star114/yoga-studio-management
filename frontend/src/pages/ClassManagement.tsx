@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { classAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { parseApiError } from '../utils/apiError';
@@ -51,12 +51,20 @@ const WEEKDAY_OPTIONS = [
 ];
 const PAGE_SIZE = 10;
 const CLASS_FILTER_STORAGE_KEY = 'class-management-filters';
+const CLASS_FILTER_STORAGE_VERSION = 2;
 
 interface StoredClassFilters {
+  version: number;
   showOpenOnly: boolean;
   dateFromFilter: string;
   dateToFilter: string;
 }
+
+const getDefaultClassFilters = (): StoredClassFilters => ({
+  showOpenOnly: false,
+  dateFromFilter: format(subDays(new Date(), 7), 'yyyy-MM-dd'),
+  dateToFilter: '',
+});
 
 const getClassFilterStorageKey = (userId: number) => `${CLASS_FILTER_STORAGE_KEY}:${userId}`;
 
@@ -68,10 +76,19 @@ const readStoredClassFilters = (userId: number): StoredClassFilters | null => {
     }
 
     const parsed = JSON.parse(raw) as Partial<StoredClassFilters>;
+    const defaults = getDefaultClassFilters();
+    const isLegacyStorage = parsed.version !== CLASS_FILTER_STORAGE_VERSION;
+    const storedDateFromFilter = typeof parsed.dateFromFilter === 'string'
+      ? parsed.dateFromFilter
+      : defaults.dateFromFilter;
+
     return {
+      version: CLASS_FILTER_STORAGE_VERSION,
       showOpenOnly: Boolean(parsed.showOpenOnly),
-      dateFromFilter: typeof parsed.dateFromFilter === 'string' ? parsed.dateFromFilter : '',
-      dateToFilter: typeof parsed.dateToFilter === 'string' ? parsed.dateToFilter : '',
+      dateFromFilter: isLegacyStorage && storedDateFromFilter === ''
+        ? defaults.dateFromFilter
+        : storedDateFromFilter,
+      dateToFilter: typeof parsed.dateToFilter === 'string' ? parsed.dateToFilter : defaults.dateToFilter,
     };
   } catch {
     return null;
@@ -228,6 +245,7 @@ const ClassManagement: React.FC = () => {
     }
 
     const storedFilters = readStoredClassFilters(user.id);
+    const defaultFilters = getDefaultClassFilters();
     if (storedFilters) {
       setShowOpenOnly(storedFilters.showOpenOnly);
       setDateFromFilter(storedFilters.dateFromFilter);
@@ -236,12 +254,12 @@ const ClassManagement: React.FC = () => {
       setDraftDateFromFilter(storedFilters.dateFromFilter);
       setDraftDateToFilter(storedFilters.dateToFilter);
     } else {
-      setShowOpenOnly(false);
-      setDateFromFilter('');
-      setDateToFilter('');
-      setDraftShowOpenOnly(false);
-      setDraftDateFromFilter('');
-      setDraftDateToFilter('');
+      setShowOpenOnly(defaultFilters.showOpenOnly);
+      setDateFromFilter(defaultFilters.dateFromFilter);
+      setDateToFilter(defaultFilters.dateToFilter);
+      setDraftShowOpenOnly(defaultFilters.showOpenOnly);
+      setDraftDateFromFilter(defaultFilters.dateFromFilter);
+      setDraftDateToFilter(defaultFilters.dateToFilter);
     }
     setHasHydratedFilters(true);
   }, [user?.id, user?.role]);
@@ -261,6 +279,7 @@ const ClassManagement: React.FC = () => {
     localStorage.setItem(
       getClassFilterStorageKey(user.id),
       JSON.stringify({
+        version: CLASS_FILTER_STORAGE_VERSION,
         showOpenOnly,
         dateFromFilter,
         dateToFilter,
@@ -664,9 +683,10 @@ const ClassManagement: React.FC = () => {
                     type="button"
                     className="btn-secondary whitespace-nowrap"
                     onClick={() => {
-                      setDraftShowOpenOnly(false);
-                      setDraftDateFromFilter('');
-                      setDraftDateToFilter('');
+                      const defaultFilters = getDefaultClassFilters();
+                      setDraftShowOpenOnly(defaultFilters.showOpenOnly);
+                      setDraftDateFromFilter(defaultFilters.dateFromFilter);
+                      setDraftDateToFilter(defaultFilters.dateToFilter);
                     }}
                   >
                     초기화

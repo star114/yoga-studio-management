@@ -158,6 +158,83 @@ const adminToken = () =>
 const customerToken = () =>
   jwt.sign({ id: 10, login_id: 'c@example.com', role: 'customer' }, process.env.JWT_SECRET);
 
+test('admin dashboard snapshot returns today classes first, falls back to upcoming, and handles errors', async () => {
+  process.env.JWT_SECRET = 'test-secret';
+  const h = createClassesHarness();
+
+  h.queryQueue.push(
+    { rows: [{ target_date: '2026-03-19', basis: 'today' }] },
+    {
+      rows: [
+        {
+          id: 1,
+          title: '아침 요가',
+          class_date: '2026-03-19',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          max_capacity: 10,
+          is_open: true,
+          class_status: 'open',
+          current_enrollment: 1,
+        },
+      ],
+    },
+    {
+      rows: [
+        {
+          id: 11,
+          class_id: 1,
+          customer_id: 3,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+          attendance_status: 'reserved',
+          registration_comment: '허리 주의',
+          registered_at: '2026-03-18T09:00:00.000Z',
+        },
+      ],
+    }
+  );
+  let res = await h.runRoute({
+    method: 'get',
+    routePath: '/dashboard/admin-snapshot',
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.basis, 'today');
+  assert.equal(res.body.target_date, '2026-03-19');
+  assert.equal(res.body.classes.length, 1);
+  assert.equal(res.body.classes[0].registrations[0].registration_comment, '허리 주의');
+
+  h.queryQueue.push({ rows: [{ target_date: '2026-03-20', basis: 'upcoming' }] }, { rows: [] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/dashboard/admin-snapshot',
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.basis, 'upcoming');
+  assert.equal(res.body.target_date, '2026-03-20');
+  assert.deepEqual(res.body.classes, []);
+
+  h.queryQueue.push({ rows: [{ target_date: null, basis: 'upcoming' }] });
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/dashboard/admin-snapshot',
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.target_date, null);
+  assert.deepEqual(res.body.classes, []);
+
+  h.queryQueue.push(new Error('snapshot fail'));
+  res = await h.runRoute({
+    method: 'get',
+    routePath: '/dashboard/admin-snapshot',
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+});
+
 test('classes list/detail/registrations/comment/update/delete cover main branches', async () => {
   process.env.JWT_SECRET = 'test-secret';
   const h = createClassesHarness();

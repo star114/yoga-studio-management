@@ -98,6 +98,155 @@ const cancelRegistrationAndRelatedAttendance = async (
   );
 };
 
+// 관리자 대시보드용 수업 스냅샷 조회
+router.get('/dashboard/admin-snapshot',
+  authenticate,
+  requireAdmin,
+  async (_req: AuthRequest, res) => {
+    try {
+      const targetDateResult = await pool.query(
+        `WITH date_choice AS (
+           SELECT
+             CASE
+               WHEN EXISTS (
+                 SELECT 1
+                 FROM yoga_classes
+                 WHERE class_date = CURRENT_DATE
+               ) THEN CURRENT_DATE
+               ELSE (
+                 SELECT MIN(class_date)
+                 FROM yoga_classes
+                 WHERE class_date > CURRENT_DATE
+               )
+             END AS target_date,
+             CASE
+               WHEN EXISTS (
+                 SELECT 1
+                 FROM yoga_classes
+                 WHERE class_date = CURRENT_DATE
+               ) THEN 'today'
+               ELSE 'upcoming'
+             END AS basis
+         )
+         SELECT target_date::date, basis
+         FROM date_choice`
+      );
+
+      const targetDateRow = targetDateResult.rows[0] as {
+        target_date: string | null;
+        basis: 'today' | 'upcoming';
+      } | undefined;
+
+      if (!targetDateRow?.target_date) {
+        return res.json({
+          basis: 'upcoming',
+          target_date: null,
+          classes: [],
+        });
+      }
+
+      const classResult = await pool.query(
+        `SELECT
+           c.id,
+           c.title,
+           c.class_date,
+           c.start_time,
+           c.end_time,
+           c.max_capacity,
+           c.is_open,
+           CASE
+             WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
+             WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
+             WHEN c.is_open THEN 'open'
+             ELSE 'closed'
+           END AS class_status,
+           COUNT(r.id)::int AS current_enrollment
+         FROM yoga_classes c
+         LEFT JOIN yoga_class_registrations r ON r.class_id = c.id
+         WHERE c.class_date = $1
+         GROUP BY c.id
+         ORDER BY c.start_time ASC, c.id ASC`,
+        [targetDateRow.target_date]
+      );
+
+      const classes = classResult.rows as Array<{
+        id: number;
+        title: string;
+        class_date: string;
+        start_time: string;
+        end_time: string;
+        max_capacity: number;
+        is_open: boolean;
+        class_status: 'open' | 'in_progress' | 'completed' | 'closed';
+        current_enrollment: number;
+      }>;
+
+      if (classes.length === 0) {
+        return res.json({
+          basis: targetDateRow.basis,
+          target_date: targetDateRow.target_date,
+          classes: [],
+        });
+      }
+
+      const registrationResult = await pool.query(
+        `SELECT
+           r.id,
+           r.class_id,
+           r.customer_id,
+           r.attendance_status,
+           r.registered_at,
+           r.registration_comment,
+           c.name AS customer_name,
+           c.phone AS customer_phone
+         FROM yoga_class_registrations r
+         INNER JOIN yoga_customers c ON c.id = r.customer_id
+         WHERE r.class_id = ANY($1::int[])
+         ORDER BY r.class_id ASC, r.registered_at ASC, r.id ASC`,
+        [classes.map((item) => item.id)]
+      );
+
+      const registrationsByClassId = new Map<number, Array<{
+        id: number;
+        class_id: number;
+        customer_id: number;
+        attendance_status: 'reserved' | 'attended' | 'absent';
+        registered_at: string;
+        registration_comment: string | null;
+        customer_name: string;
+        customer_phone: string;
+      }>>();
+
+      for (const row of registrationResult.rows as Array<{
+        id: number;
+        class_id: number;
+        customer_id: number;
+        attendance_status: 'reserved' | 'attended' | 'absent';
+        registered_at: string;
+        registration_comment: string | null;
+        customer_name: string;
+        customer_phone: string;
+      }>) {
+        const list = registrationsByClassId.get(row.class_id) ?? [];
+        list.push(row);
+        registrationsByClassId.set(row.class_id, list);
+      }
+
+      res.json({
+        basis: targetDateRow.basis,
+        target_date: targetDateRow.target_date,
+        classes: classes.map((item) => ({
+          ...item,
+          registrations: registrationsByClassId.get(item.id) ?? [],
+        })),
+      });
+    } catch (error) {
+      console.error('Get admin dashboard class snapshot error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 // 수업 목록 조회
 router.get('/',
   authenticate,
