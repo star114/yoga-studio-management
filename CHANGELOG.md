@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.2](https://github.com/star114/yoga-studio-management/compare/v2.5.1...v2.5.2) (2026-03-19)
+
+
+### Bug Fixes
+
+* preserve multiline attendance comments in customer dashboard ([#57](https://github.com/star114/yoga-studio-management/issues/57)) ([51d6721](https://github.com/star114/yoga-studio-management/commit/51d672192d43541cac87ad8d32599cff0e6b1cf2))
+
 ## [2.5.1](https://github.com/star114/yoga-studio-management/compare/v2.5.0...v2.5.1) (2026-03-18)
 
 
