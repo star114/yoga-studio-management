@@ -51,8 +51,10 @@ const WEEKDAY_OPTIONS = [
 ];
 const PAGE_SIZE = 10;
 const CLASS_FILTER_STORAGE_KEY = 'class-management-filters';
+const CLASS_FILTER_STORAGE_VERSION = 2;
 
 interface StoredClassFilters {
+  version: number;
   showOpenOnly: boolean;
   dateFromFilter: string;
   dateToFilter: string;
@@ -75,9 +77,17 @@ const readStoredClassFilters = (userId: number): StoredClassFilters | null => {
 
     const parsed = JSON.parse(raw) as Partial<StoredClassFilters>;
     const defaults = getDefaultClassFilters();
+    const isLegacyStorage = parsed.version !== CLASS_FILTER_STORAGE_VERSION;
+    const storedDateFromFilter = typeof parsed.dateFromFilter === 'string'
+      ? parsed.dateFromFilter
+      : defaults.dateFromFilter;
+
     return {
+      version: CLASS_FILTER_STORAGE_VERSION,
       showOpenOnly: Boolean(parsed.showOpenOnly),
-      dateFromFilter: typeof parsed.dateFromFilter === 'string' ? parsed.dateFromFilter : defaults.dateFromFilter,
+      dateFromFilter: isLegacyStorage && storedDateFromFilter === ''
+        ? defaults.dateFromFilter
+        : storedDateFromFilter,
       dateToFilter: typeof parsed.dateToFilter === 'string' ? parsed.dateToFilter : defaults.dateToFilter,
     };
   } catch {
@@ -269,6 +279,7 @@ const ClassManagement: React.FC = () => {
     localStorage.setItem(
       getClassFilterStorageKey(user.id),
       JSON.stringify({
+        version: CLASS_FILTER_STORAGE_VERSION,
         showOpenOnly,
         dateFromFilter,
         dateToFilter,

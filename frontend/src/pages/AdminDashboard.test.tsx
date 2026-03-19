@@ -373,6 +373,22 @@ describe('AdminDashboard page', () => {
     expect(screen.getByText('가장 가까운 예정일')).toBeTruthy();
   });
 
+  it('keeps existing dashboard sections visible when snapshot loading fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classGetAdminDashboardSnapshotMock.mockRejectedValueOnce(new Error('snapshot failed'));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('대시보드')).toBeTruthy());
+    expect(screen.getByText('전체 회원')).toBeTruthy();
+    expect(screen.getAllByText('홍길동').length).toBeGreaterThan(0);
+    expect(screen.getByText('수업 캘린더')).toBeTruthy();
+    expect(screen.getByText('표시할 수업이 없습니다.')).toBeTruthy();
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to load admin dashboard snapshot:', expect.any(Error));
+
+    consoleSpy.mockRestore();
+  });
+
   it('handles API load failure and exits loading state', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     customerGetAllMock.mockRejectedValueOnce(new Error('failed'));

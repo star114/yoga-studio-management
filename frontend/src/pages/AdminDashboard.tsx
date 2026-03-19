@@ -232,11 +232,10 @@ const AdminDashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      const [customersRes, todayRes, classesRes, classSnapshotRes] = await Promise.all([
+      const [customersRes, todayRes, classesRes] = await Promise.all([
         customerAPI.getAll(),
         attendanceAPI.getToday(),
         classAPI.getAll(),
-        classAPI.getAdminDashboardSnapshot(),
       ]);
 
       setStats({
@@ -247,9 +246,15 @@ const AdminDashboard: React.FC = () => {
       setRecentCustomers(customersRes.data.slice(0, 5));
       setTodayAttendances(todayRes.data);
       setClasses(classesRes.data);
-      setClassSnapshot(classSnapshotRes.data);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+    }
+
+    try {
+      const classSnapshotRes = await classAPI.getAdminDashboardSnapshot();
+      setClassSnapshot(classSnapshotRes.data);
+    } catch (snapshotError) {
+      console.error('Failed to load admin dashboard snapshot:', snapshotError);
     } finally {
       setIsLoading(false);
     }
