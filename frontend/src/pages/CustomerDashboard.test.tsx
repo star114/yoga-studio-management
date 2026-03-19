@@ -706,7 +706,7 @@ describe('CustomerDashboard page', () => {
       .mockResolvedValueOnce({
         data: {
           messages: [
-            { id: 11, author_role: 'admin', message: '먼저 답변', created_at: '2026-03-03T09:00:00.000Z' },
+            { id: 11, author_role: 'admin', message: '먼저 답변\n둘째 줄', created_at: '2026-03-03T09:00:00.000Z' },
           ],
         },
       })
@@ -726,7 +726,11 @@ describe('CustomerDashboard page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByText('최근 출석 수업')).toBeTruthy());
-    expect(await screen.findByText('먼저 답변')).toBeTruthy();
+    const messageCandidates = await screen.findAllByText((_, element) => element?.textContent === '먼저 답변\n둘째 줄');
+    const firstMessage = messageCandidates.find((element) => element.className.includes('whitespace-pre-wrap'));
+    expect(firstMessage).toBeTruthy();
+    expect(firstMessage.className).toContain('whitespace-pre-wrap');
+    expect(firstMessage.className).toContain('break-words');
     expect(screen.getByText('나중 답변')).toBeTruthy();
   });
 

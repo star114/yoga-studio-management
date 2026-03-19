@@ -540,7 +540,7 @@ const CustomerDashboard: React.FC = () => {
                         {pendingConversation.messages.map((message) => (
                           <div
                             key={message.id}
-                            className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                            className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
                               message.author_role === 'customer'
                                 ? 'self-end bg-[#0B84FF] text-white rounded-br-md'
                                 : 'self-start bg-white text-primary-900 border border-warm-200 rounded-bl-md'
