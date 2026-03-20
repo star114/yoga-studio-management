@@ -170,8 +170,12 @@ describe('api service', () => {
     classAPI.updateMyRegistrationComment(2, 'self note');
     classAPI.getMyCommentThread(2);
     classAPI.postMyCommentThread(2, 'my thread msg');
+    classAPI.updateMyCommentThreadMessage(2, 11, 'my edited thread msg');
+    classAPI.deleteMyCommentThreadMessage(2, 11);
     classAPI.getRegistrationCommentThread(2, 7);
     classAPI.postRegistrationCommentThread(2, 7, 'admin thread msg');
+    classAPI.updateRegistrationCommentThreadMessage(2, 7, 13, 'admin edited thread msg');
+    classAPI.deleteRegistrationCommentThreadMessage(2, 7, 13);
     classAPI.updateRegistrationStatus(2, 7, 'absent');
     classAPI.cancelRegistration(2, 7);
     classAPI.cancelMyRegistration(2);
@@ -232,8 +236,12 @@ describe('api service', () => {
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/me/comment', { registration_comment: 'self note' });
     expect(getMock).toHaveBeenCalledWith('/classes/2/me/comment-thread');
     expect(postMock).toHaveBeenCalledWith('/classes/2/me/comment-thread', { message: 'my thread msg' });
+    expect(putMock).toHaveBeenCalledWith('/classes/2/me/comment-thread/11', { message: 'my edited thread msg' });
+    expect(deleteMock).toHaveBeenCalledWith('/classes/2/me/comment-thread/11');
     expect(getMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment-thread');
     expect(postMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment-thread', { message: 'admin thread msg' });
+    expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment-thread/13', { message: 'admin edited thread msg' });
+    expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/7/comment-thread/13');
     expect(putMock).toHaveBeenCalledWith('/classes/2/registrations/7/status', { attendance_status: 'absent' });
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/7');
     expect(deleteMock).toHaveBeenCalledWith('/classes/2/registrations/me');

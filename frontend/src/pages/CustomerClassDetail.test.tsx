@@ -8,6 +8,8 @@ const {
   classGetMyClassDetailMock,
   classGetMyCommentThreadMock,
   classPostMyCommentThreadMock,
+  classUpdateMyCommentThreadMessageMock,
+  classDeleteMyCommentThreadMessageMock,
   classUpdateMyRegistrationCommentMock,
   parseApiErrorMock,
   navigateMock,
@@ -15,6 +17,8 @@ const {
   classGetMyClassDetailMock: vi.fn(),
   classGetMyCommentThreadMock: vi.fn(),
   classPostMyCommentThreadMock: vi.fn(),
+  classUpdateMyCommentThreadMessageMock: vi.fn(),
+  classDeleteMyCommentThreadMessageMock: vi.fn(),
   classUpdateMyRegistrationCommentMock: vi.fn(),
   parseApiErrorMock: vi.fn(() => '요청 실패'),
   navigateMock: vi.fn(),
@@ -53,6 +57,8 @@ vi.mock('../services/api', () => ({
     getMyClassDetail: classGetMyClassDetailMock,
     getMyCommentThread: classGetMyCommentThreadMock,
     postMyCommentThread: classPostMyCommentThreadMock,
+    updateMyCommentThreadMessage: classUpdateMyCommentThreadMessageMock,
+    deleteMyCommentThreadMessage: classDeleteMyCommentThreadMessageMock,
     updateMyRegistrationComment: classUpdateMyRegistrationCommentMock,
   },
 }));
@@ -100,6 +106,17 @@ describe('CustomerClassDetail page', () => {
         created_at: '2026-03-01T03:00:00.000Z',
       },
     });
+    classUpdateMyCommentThreadMessageMock.mockResolvedValue({
+      data: {
+        id: 6011,
+        attendance_id: 9001,
+        author_role: 'customer',
+        author_user_id: 1,
+        message: '수정된 메시지',
+        created_at: '2026-03-01T03:00:00.000Z',
+      },
+    });
+    classDeleteMyCommentThreadMessageMock.mockResolvedValue({});
     classUpdateMyRegistrationCommentMock.mockResolvedValue({});
   });
 
@@ -316,6 +333,140 @@ describe('CustomerClassDetail page', () => {
 
     await waitFor(() => expect(classPostMyCommentThreadMock).toHaveBeenCalledWith(1, '수련생 답장'));
     expect(screen.getByText('수련생 답장')).toBeTruthy();
+  });
+
+  it('edits and deletes only my attendance comment thread message', async () => {
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6010,
+            attendance_id: 9001,
+            author_role: 'admin',
+            author_user_id: 10,
+            message: '강사 안내 메시지',
+            created_at: '2026-03-01T01:00:00.000Z',
+          },
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+    expect(screen.getByText('수정')).toBeTruthy();
+    expect(screen.getByText('삭제')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 메시지'), { target: { value: '수정할 메시지' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(classUpdateMyCommentThreadMessageMock).toHaveBeenCalledWith(1, 6011, '수정할 메시지'));
+    expect(screen.getByText('수정된 메시지')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('삭제'));
+    await waitFor(() => expect(classDeleteMyCommentThreadMessageMock).toHaveBeenCalledWith(1, 6011));
+    expect(screen.queryByText('수정된 메시지')).toBeNull();
+  });
+
+  it('shows thread edit/delete error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+    classUpdateMyCommentThreadMessageMock.mockRejectedValueOnce(new Error('thread edit failed'));
+    classDeleteMyCommentThreadMessageMock.mockRejectedValueOnce(new Error('thread delete failed'));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 메시지'), { target: { value: '수정 실패 메시지' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    fireEvent.click(screen.getByText('삭제'));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('does not save empty edited attendance comment thread message', async () => {
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 메시지'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(classUpdateMyCommentThreadMessageMock).not.toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: '취소' })).toBeTruthy();
+  });
+
+  it('clears edit state when deleting the message currently being edited', async () => {
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    expect(screen.getByRole('button', { name: '취소' })).toBeTruthy();
+
+    fireEvent.click(screen.getByText('삭제'));
+    await waitFor(() => expect(classDeleteMyCommentThreadMessageMock).toHaveBeenCalledWith(1, 6011));
+    expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
+    expect(screen.queryByText('내 메시지')).toBeNull();
   });
 
   it('falls back to empty thread when thread response has no messages field', async () => {
@@ -643,6 +794,228 @@ describe('CustomerClassDetail page', () => {
 
     rejectPost(new Error('old thread send failed'));
     await waitFor(() => expect(screen.queryByText('요청 실패')).toBeNull());
+  });
+
+  it('ignores late thread delete error after route changed', async () => {
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+
+    let rejectDelete: (reason?: unknown) => void = () => {};
+    classDeleteMyCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectDelete = reject;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+    fireEvent.click(screen.getByText('삭제'));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'attended',
+        registration_comment: '두번째 수업',
+      },
+    });
+    classGetMyCommentThreadMock.mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    rejectDelete(new Error('old thread delete failed'));
+    await waitFor(() => expect(screen.queryByText('요청 실패')).toBeNull());
+  });
+
+  it('ignores late thread edit error after route changed', async () => {
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+
+    let rejectEdit: (reason?: unknown) => void = () => {};
+    classUpdateMyCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectEdit = reject;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 메시지'), { target: { value: '수정 예정' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'attended',
+        registration_comment: '두번째 수업',
+      },
+    });
+    classGetMyCommentThreadMock.mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    rejectEdit(new Error('old thread edit failed'));
+    await waitFor(() => expect(screen.queryByText('요청 실패')).toBeNull());
+  });
+
+  it('ignores late thread edit response after route changed', async () => {
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+
+    let resolveEdit: (value: { data: { id: number; attendance_id: number; author_role: string; author_user_id: number; message: string; created_at: string } }) => void = () => {};
+    classUpdateMyCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveEdit = resolve as (value: { data: { id: number; attendance_id: number; author_role: string; author_user_id: number; message: string; created_at: string } }) => void;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 메시지'), { target: { value: '수정 예정' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'attended',
+        registration_comment: '두번째 수업',
+      },
+    });
+    classGetMyCommentThreadMock.mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    resolveEdit({
+      data: {
+        id: 6011,
+        attendance_id: 9001,
+        author_role: 'customer',
+        author_user_id: 1,
+        message: '늦게 온 수정 응답',
+        created_at: '2026-03-01T01:05:00.000Z',
+      },
+    });
+    await waitFor(() => expect(screen.queryByText('늦게 온 수정 응답')).toBeNull());
+  });
+
+  it('ignores late thread delete response after route changed', async () => {
+    classGetMyCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 6011,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 1,
+            message: '내 메시지',
+            created_at: '2026-03-01T01:05:00.000Z',
+          },
+        ],
+      },
+    });
+
+    let resolveDelete: (value: unknown) => void = () => {};
+    classDeleteMyCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveDelete = resolve;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 메시지')).toBeTruthy());
+    fireEvent.click(screen.getByText('삭제'));
+
+    routeId = '2';
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        attendance_status: 'attended',
+        registration_comment: '두번째 수업',
+      },
+    });
+    classGetMyCommentThreadMock.mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+    rerender(
+      <MemoryRouter>
+        <CustomerClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    resolveDelete({});
+    await waitFor(() => expect(screen.queryByText('내 메시지')).toBeNull());
+    expect(screen.queryByText('요청 실패')).toBeNull();
   });
 
   it('ignores late thread send response/error after route changed', async () => {

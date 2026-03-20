@@ -208,11 +208,23 @@ export const classAPI = {
   postMyCommentThread: (classId: number, message: string) =>
     api.post(`/classes/${classId}/me/comment-thread`, { message }),
 
+  updateMyCommentThreadMessage: (classId: number, messageId: number, message: string) =>
+    api.put(`/classes/${classId}/me/comment-thread/${messageId}`, { message }),
+
+  deleteMyCommentThreadMessage: (classId: number, messageId: number) =>
+    api.delete(`/classes/${classId}/me/comment-thread/${messageId}`),
+
   getRegistrationCommentThread: (classId: number, customerId: number) =>
     api.get(`/classes/${classId}/registrations/${customerId}/comment-thread`),
 
   postRegistrationCommentThread: (classId: number, customerId: number, message: string) =>
     api.post(`/classes/${classId}/registrations/${customerId}/comment-thread`, { message }),
+
+  updateRegistrationCommentThreadMessage: (classId: number, customerId: number, messageId: number, message: string) =>
+    api.put(`/classes/${classId}/registrations/${customerId}/comment-thread/${messageId}`, { message }),
+
+  deleteRegistrationCommentThreadMessage: (classId: number, customerId: number, messageId: number) =>
+    api.delete(`/classes/${classId}/registrations/${customerId}/comment-thread/${messageId}`),
 
   updateRegistrationStatus: (classId: number, customerId: number, attendance_status: 'reserved' | 'attended' | 'absent') =>
     api.put(`/classes/${classId}/registrations/${customerId}/status`, { attendance_status }),

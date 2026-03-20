@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { attendanceAPI, classAPI, customerAPI, membershipAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import {
   getCrossMembershipConfirmationMessage,
   parseApiError,
@@ -74,6 +75,7 @@ const BACKGROUND_THREAD_DELAY_MS = 150;
 const ClassDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const classId = Number(id);
 
   const [classDetail, setClassDetail] = useState<YogaClassDetail | null>(null);
@@ -88,8 +90,15 @@ const ClassDetail: React.FC = () => {
   const [savingAttendanceStatusCustomerId, setSavingAttendanceStatusCustomerId] = useState<number | null>(null);
   const [loadingThreadCustomerIds, setLoadingThreadCustomerIds] = useState<Record<number, boolean>>({});
   const [savingThreadCustomerId, setSavingThreadCustomerId] = useState<number | null>(null);
+  const [editingThreadMessageByCustomer, setEditingThreadMessageByCustomer] = useState<Record<number, number | null>>({});
+  const [editingThreadDraftsByMessageId, setEditingThreadDraftsByMessageId] = useState<Record<number, string>>({});
+  const [savingEditedThreadMessageId, setSavingEditedThreadMessageId] = useState<number | null>(null);
+  const [deletingThreadMessageId, setDeletingThreadMessageId] = useState<number | null>(null);
   const [threadMessagesByCustomer, setThreadMessagesByCustomer] = useState<Record<number, AttendanceCommentMessage[] | undefined>>({});
   const [threadDraftsByCustomer, setThreadDraftsByCustomer] = useState<Record<number, string>>({});
+  const editingTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const activeClassIdRef = useRef<number | null>(null);
+  const threadMutationVersionRef = useRef(0);
   const loadingThreadCustomerIdsRef = useRef<Set<number>>(new Set());
   const preloadedThreadCustomerIdsRef = useRef<Set<number>>(new Set());
   const [checkingInCustomerId, setCheckingInCustomerId] = useState<number | null>(null);
@@ -190,6 +199,9 @@ const ClassDetail: React.FC = () => {
   }, [selectedCustomerId]);
 
   useEffect(() => {
+    activeClassIdRef.current = classId;
+    threadMutationVersionRef.current += 1;
+
     if (!Number.isInteger(classId) || classId < 1) {
       setError('유효하지 않은 수업 경로입니다.');
       setIsLoading(false);
@@ -236,6 +248,7 @@ const ClassDetail: React.FC = () => {
   }, [classId]);
 
   const refreshClassAndRegistrations = async () => {
+    threadMutationVersionRef.current += 1;
     const [classRes, registrationsRes] = await Promise.all([
       classAPI.getById(classId),
       classAPI.getRegistrations(classId),
@@ -258,7 +271,11 @@ const ClassDetail: React.FC = () => {
     setRegistrations(registrationsRes.data);
     setThreadMessagesByCustomer({});
     setThreadDraftsByCustomer({});
+    setEditingThreadMessageByCustomer({});
+    setEditingThreadDraftsByMessageId({});
     setLoadingThreadCustomerIds({});
+    setSavingEditedThreadMessageId(null);
+    setDeletingThreadMessageId(null);
     preloadedThreadCustomerIdsRef.current.clear();
   };
 
@@ -373,6 +390,140 @@ const ClassDetail: React.FC = () => {
       setSavingThreadCustomerId(null);
     }
   };
+
+  const handleStartEditCommentThreadMessage = (registration: ClassRegistration, message: AttendanceCommentMessage) => {
+    setEditingThreadMessageByCustomer((prev) => ({
+      ...prev,
+      [registration.customer_id]: message.id,
+    }));
+    setEditingThreadDraftsByMessageId((prev) => ({
+      ...prev,
+      [message.id]: message.message,
+    }));
+  };
+
+  const handleCancelEditCommentThreadMessage = (customerId: number, messageId: number) => {
+    setEditingThreadMessageByCustomer((prev) => ({
+      ...prev,
+      [customerId]: null,
+    }));
+    setEditingThreadDraftsByMessageId((prev) => {
+      const next = { ...prev };
+      delete next[messageId];
+      return next;
+    });
+  };
+
+  const handleSaveEditedCommentThreadMessage = async (
+    registration: ClassRegistration,
+    messageId: number,
+  ) => {
+    const requestClassId = classId;
+    const requestVersion = threadMutationVersionRef.current;
+    const nextMessage = editingThreadDraftsByMessageId[messageId]!.trim();
+    if (!nextMessage) {
+      return;
+    }
+
+    try {
+      setError('');
+      setNotice('');
+      setSavingEditedThreadMessageId(messageId);
+      const response = await classAPI.updateRegistrationCommentThreadMessage(
+        requestClassId,
+        registration.customer_id,
+        messageId,
+        nextMessage,
+      );
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
+      setThreadMessagesByCustomer((prev) => ({
+        ...prev,
+        [registration.customer_id]: prev[registration.customer_id]!.map((item) => (
+          item.id === messageId ? response.data : item
+        )),
+      }));
+      setEditingThreadMessageByCustomer((prev) => ({
+        ...prev,
+        [registration.customer_id]: null,
+      }));
+      setEditingThreadDraftsByMessageId((prev) => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+      setNotice('수업 후 코멘트 대화를 수정했습니다.');
+    } catch (threadEditError: unknown) {
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
+      console.error('Failed to edit registration comment thread message:', threadEditError);
+      setError(parseApiError(threadEditError, '수업 후 코멘트 대화를 수정하지 못했습니다.'));
+    } finally {
+      if (activeClassIdRef.current === requestClassId && threadMutationVersionRef.current === requestVersion) {
+        setSavingEditedThreadMessageId(null);
+      }
+    }
+  };
+
+  const handleDeleteCommentThreadMessage = async (
+    registration: ClassRegistration,
+    messageId: number,
+  ) => {
+    const requestClassId = classId;
+    const requestVersion = threadMutationVersionRef.current;
+    try {
+      setError('');
+      setNotice('');
+      setDeletingThreadMessageId(messageId);
+      await classAPI.deleteRegistrationCommentThreadMessage(requestClassId, registration.customer_id, messageId);
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
+      setThreadMessagesByCustomer((prev) => ({
+        ...prev,
+        [registration.customer_id]: prev[registration.customer_id]!.filter((item) => item.id !== messageId),
+      }));
+      if (editingThreadMessageByCustomer[registration.customer_id] === messageId) {
+        setEditingThreadMessageByCustomer((prev) => ({
+          ...prev,
+          [registration.customer_id]: null,
+        }));
+        setEditingThreadDraftsByMessageId((prev) => {
+          const next = { ...prev };
+          delete next[messageId];
+          return next;
+        });
+      }
+      setNotice('수업 후 코멘트 대화를 삭제했습니다.');
+    } catch (threadDeleteError: unknown) {
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
+      console.error('Failed to delete registration comment thread message:', threadDeleteError);
+      setError(parseApiError(threadDeleteError, '수업 후 코멘트 대화를 삭제하지 못했습니다.'));
+    } finally {
+      if (activeClassIdRef.current === requestClassId && threadMutationVersionRef.current === requestVersion) {
+        setDeletingThreadMessageId(null);
+      }
+    }
+  };
+
+  useEffect(() => {
+    registrations.forEach((registration) => {
+      const messageId = editingThreadMessageByCustomer[registration.customer_id];
+      if (!messageId) {
+        return;
+      }
+
+      const textarea = editingTextareaRefs.current[messageId];
+      if (textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight}px`;
+      }
+    });
+  }, [editingThreadMessageByCustomer, editingThreadDraftsByMessageId, registrations]);
 
   const handleManualRegister = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -963,19 +1114,92 @@ const ClassDetail: React.FC = () => {
                             key={message.id}
                             className={`flex ${message.author_role === 'admin' ? 'justify-end' : 'justify-start'}`}
                           >
-                            <div className="max-w-[85%] space-y-1">
+                            <div
+                              className={`space-y-1 max-w-[85%] ${
+                                editingThreadMessageByCustomer[registration.customer_id] === message.id ? 'w-[85%]' : ''
+                              }`}
+                            >
                               <div
                                 className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${
                                   message.author_role === 'admin'
                                     ? 'rounded-br-md bg-primary-500 text-white'
                                     : 'rounded-bl-md bg-white text-warm-800 border border-warm-200'
-                                }`}
+                                } ${editingThreadMessageByCustomer[registration.customer_id] === message.id ? 'w-full' : ''}`}
                               >
-                                <p className="whitespace-pre-wrap break-words">{message.message}</p>
+                                {editingThreadMessageByCustomer[registration.customer_id] === message.id ? (
+                                  <div className="space-y-2">
+                                    <textarea
+                                      ref={(node) => {
+                                        if (node) {
+                                          editingTextareaRefs.current[message.id] = node;
+                                        } else {
+                                          delete editingTextareaRefs.current[message.id];
+                                        }
+                                      }}
+                                      className="input-field w-full max-w-none min-h-[72px] text-warm-900 resize-y"
+                                      maxLength={1000}
+                                      value={editingThreadDraftsByMessageId[message.id]!}
+                                      onChange={(event) => {
+                                        const value = event.target.value;
+                                        setEditingThreadDraftsByMessageId((prev) => ({ ...prev, [message.id]: value }));
+                                      }}
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        className="px-3 py-1 text-xs rounded-md bg-white/20"
+                                        onClick={() => handleCancelEditCommentThreadMessage(registration.customer_id, message.id)}
+                                        disabled={savingEditedThreadMessageId === message.id || deletingThreadMessageId === message.id}
+                                      >
+                                        취소
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="px-3 py-1 text-xs rounded-md bg-red-50 text-red-600 disabled:opacity-50"
+                                        onClick={() => void handleDeleteCommentThreadMessage(registration, message.id)}
+                                        disabled={savingEditedThreadMessageId === message.id || deletingThreadMessageId === message.id}
+                                      >
+                                        {deletingThreadMessageId === message.id ? '삭제 중...' : '삭제'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="px-3 py-1 text-xs rounded-md bg-white text-primary-700 disabled:opacity-50"
+                                        onClick={() => void handleSaveEditedCommentThreadMessage(registration, message.id)}
+                                        disabled={savingEditedThreadMessageId === message.id || deletingThreadMessageId === message.id}
+                                      >
+                                        {savingEditedThreadMessageId === message.id ? '저장 중...' : '저장'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="whitespace-pre-wrap break-words">{message.message}</p>
+                                )}
                               </div>
-                              <p className={`text-[11px] text-warm-500 ${message.author_role === 'admin' ? 'text-right' : 'text-left'}`}>
-                                {new Date(message.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                              </p>
+                              <div className={`space-y-1 ${message.author_role === 'admin' ? 'text-right' : 'text-left'}`}>
+                                <p className="text-[11px] text-warm-500">
+                                  {new Date(message.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                                {message.author_role === 'admin' && message.author_user_id === user?.id && editingThreadMessageByCustomer[registration.customer_id] !== message.id && (
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      className="text-[11px] text-primary-700 hover:underline"
+                                      onClick={() => handleStartEditCommentThreadMessage(registration, message)}
+                                      disabled={deletingThreadMessageId === message.id}
+                                    >
+                                      수정
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="text-[11px] text-red-600 hover:underline disabled:opacity-50"
+                                      onClick={() => void handleDeleteCommentThreadMessage(registration, message.id)}
+                                      disabled={deletingThreadMessageId === message.id}
+                                    >
+                                      {deletingThreadMessageId === message.id ? '삭제 중...' : '삭제'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}
