@@ -2619,8 +2619,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
-    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '수정', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ message_exists: true, updated: true, message: { id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '수정', created_at: '2026-03-01T00:00:00.000Z' } }] },
   );
   res = await h.runRoute({
     method: 'put',
@@ -2632,7 +2631,11 @@ test('attendance comment-thread routes cover customer/admin success and failures
   assert.equal(res.status, 200);
   assert.equal(res.body.message, '수정');
 
-  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [{ id: 501 }] }, { rows: [] });
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 501 }] },
+    { rows: [{ message_exists: false, updated: false, message: null }] },
+  );
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id/me/comment-thread/:messageId',
@@ -2645,7 +2648,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 55, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ message_exists: true, updated: false, message: null }] },
   );
   res = await h.runRoute({
     method: 'put',
@@ -2659,7 +2662,6 @@ test('attendance comment-thread routes cover customer/admin success and failures
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
     new Error('customer thread edit fail'),
   );
   res = await h.runRoute({
@@ -2674,8 +2676,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
-    { rows: [], rowCount: 1 },
+    { rows: [{ message_exists: true, deleted: true }] },
   );
   res = await h.runRoute({
     method: 'delete',
@@ -2688,7 +2689,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 55, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ message_exists: true, deleted: false }] },
   );
   res = await h.runRoute({
     method: 'delete',
@@ -2701,7 +2702,6 @@ test('attendance comment-thread routes cover customer/admin success and failures
   h.queryQueue.push(
     { rows: [{ id: 7 }] },
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
     new Error('customer thread delete fail'),
   );
   res = await h.runRoute({
@@ -2772,8 +2772,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
 
   h.queryQueue.push(
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
-    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 수정', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ message_exists: true, updated: true, message: { id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 수정', created_at: '2026-03-01T00:00:00.000Z' } }] },
   );
   res = await h.runRoute({
     method: 'put',
@@ -2785,7 +2784,10 @@ test('attendance comment-thread routes cover customer/admin success and failures
   assert.equal(res.status, 200);
   assert.equal(res.body.message, 'admin 수정');
 
-  h.queryQueue.push({ rows: [{ id: 501 }] }, { rows: [] });
+  h.queryQueue.push(
+    { rows: [{ id: 501 }] },
+    { rows: [{ message_exists: false, updated: false, message: null }] },
+  );
   res = await h.runRoute({
     method: 'put',
     routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
@@ -2797,7 +2799,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
 
   h.queryQueue.push(
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 61, attendance_id: 501, author_role: 'customer', author_user_id: 2, message: 'customer 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ message_exists: true, updated: false, message: null }] },
   );
   res = await h.runRoute({
     method: 'put',
@@ -2810,7 +2812,6 @@ test('attendance comment-thread routes cover customer/admin success and failures
 
   h.queryQueue.push(
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
     new Error('admin thread edit fail'),
   );
   res = await h.runRoute({
@@ -2824,8 +2825,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
 
   h.queryQueue.push(
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
-    { rows: [], rowCount: 1 },
+    { rows: [{ message_exists: true, deleted: true }] },
   );
   res = await h.runRoute({
     method: 'delete',
@@ -2837,7 +2837,7 @@ test('attendance comment-thread routes cover customer/admin success and failures
 
   h.queryQueue.push(
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 61, attendance_id: 501, author_role: 'customer', author_user_id: 2, message: 'customer 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ message_exists: true, deleted: false }] },
   );
   res = await h.runRoute({
     method: 'delete',
@@ -2849,7 +2849,6 @@ test('attendance comment-thread routes cover customer/admin success and failures
 
   h.queryQueue.push(
     { rows: [{ id: 501 }] },
-    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
     new Error('admin thread delete fail'),
   );
   res = await h.runRoute({

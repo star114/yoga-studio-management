@@ -61,29 +61,91 @@ const getAttendanceThreadMessages = async (attendanceId: number) => {
   return result.rows;
 };
 
-const getAttendanceThreadMessageById = async (attendanceId: number, messageId: number) => {
+const updateAttendanceThreadMessage = async (
+  attendanceId: number,
+  messageId: number,
+  nextMessage: string,
+  actorUserId: number,
+  actorRole: 'admin' | 'customer',
+) => {
   const result = await pool.query(
-    `SELECT
-       m.id,
-       m.attendance_id,
-       m.author_role,
-       m.author_user_id,
-       m.message,
-       m.created_at
-     FROM yoga_attendance_messages m
-     WHERE m.attendance_id = $1
-       AND m.id = $2`,
-    [attendanceId, messageId]
+    `WITH target AS (
+       SELECT
+         id,
+         attendance_id,
+         author_role,
+         author_user_id
+       FROM yoga_attendance_messages
+       WHERE attendance_id = $1
+         AND id = $2
+     ),
+     updated AS (
+       UPDATE yoga_attendance_messages AS m
+       SET message = $3
+       FROM target
+       WHERE m.attendance_id = target.attendance_id
+         AND m.id = target.id
+         AND target.author_user_id = $4
+         AND target.author_role = $5
+       RETURNING m.id, m.attendance_id, m.author_role, m.author_user_id, m.message, m.created_at
+     )
+     SELECT
+       EXISTS(SELECT 1 FROM target) AS message_exists,
+       EXISTS(SELECT 1 FROM updated) AS updated,
+       (SELECT row_to_json(updated) FROM updated) AS message`,
+    [attendanceId, messageId, nextMessage, actorUserId, actorRole]
   );
 
   return result.rows[0] as {
-    id: number;
-    attendance_id: number;
-    author_role: 'admin' | 'customer';
-    author_user_id: number;
-    message: string;
-    created_at: string;
-  } | undefined;
+    message_exists: boolean;
+    updated: boolean;
+    message: {
+      id: number;
+      attendance_id: number;
+      author_role: 'admin' | 'customer';
+      author_user_id: number;
+      message: string;
+      created_at: string;
+    } | null;
+  };
+};
+
+const deleteAttendanceThreadMessage = async (
+  attendanceId: number,
+  messageId: number,
+  actorUserId: number,
+  actorRole: 'admin' | 'customer',
+) => {
+  const result = await pool.query(
+    `WITH target AS (
+       SELECT
+         id,
+         attendance_id,
+         author_role,
+         author_user_id
+       FROM yoga_attendance_messages
+       WHERE attendance_id = $1
+         AND id = $2
+     ),
+     deleted AS (
+       DELETE FROM yoga_attendance_messages AS m
+       USING target
+       WHERE m.attendance_id = target.attendance_id
+         AND m.id = target.id
+         AND target.author_user_id = $3
+         AND target.author_role = $4
+       RETURNING m.id
+     )
+     SELECT
+       EXISTS(SELECT 1 FROM target) AS message_exists,
+       EXISTS(SELECT 1 FROM deleted) AS deleted`,
+    [attendanceId, messageId, actorUserId, actorRole]
+  );
+
+  return result.rows[0] as {
+    message_exists: boolean;
+    deleted: boolean;
+  };
 };
 
 const cancelRegistrationAndRelatedAttendance = async (
@@ -693,25 +755,23 @@ router.put('/:id/me/comment-thread/:messageId',
         return res.status(404).json({ error: 'Attendance not found' });
       }
 
-      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
-      if (!existingMessage) {
+      const updateResult = await updateAttendanceThreadMessage(
+        attendanceId,
+        messageId,
+        message,
+        req.user!.id,
+        'customer'
+      );
+
+      if (!updateResult.message_exists) {
         return res.status(404).json({ error: 'Comment message not found' });
       }
 
-      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'customer') {
+      if (!updateResult.updated || !updateResult.message) {
         return res.status(403).json({ error: 'Cannot modify another user\'s comment message' });
       }
 
-      const result = await pool.query(
-        `UPDATE yoga_attendance_messages
-         SET message = $3
-         WHERE attendance_id = $1
-           AND id = $2
-         RETURNING id, attendance_id, author_role, author_user_id, message, created_at`,
-        [attendanceId, messageId, message]
-      );
-
-      res.json(result.rows[0]);
+      res.json(updateResult.message);
     } catch (error) {
       console.error('Update my attendance comment thread message error:', error);
       res.status(500).json({ error: 'Server error' });
@@ -744,21 +804,20 @@ router.delete('/:id/me/comment-thread/:messageId',
         return res.status(404).json({ error: 'Attendance not found' });
       }
 
-      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
-      if (!existingMessage) {
+      const deleteResult = await deleteAttendanceThreadMessage(
+        attendanceId,
+        messageId,
+        req.user!.id,
+        'customer'
+      );
+
+      if (!deleteResult.message_exists) {
         return res.status(404).json({ error: 'Comment message not found' });
       }
 
-      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'customer') {
+      if (!deleteResult.deleted) {
         return res.status(403).json({ error: 'Cannot delete another user\'s comment message' });
       }
-
-      await pool.query(
-        `DELETE FROM yoga_attendance_messages
-         WHERE attendance_id = $1
-           AND id = $2`,
-        [attendanceId, messageId]
-      );
 
       res.status(204).send();
     } catch (error) {
@@ -824,25 +883,23 @@ router.put('/:id/registrations/:customerId/comment-thread/:messageId',
         return res.status(404).json({ error: 'Attendance not found' });
       }
 
-      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
-      if (!existingMessage) {
+      const updateResult = await updateAttendanceThreadMessage(
+        attendanceId,
+        messageId,
+        message,
+        req.user!.id,
+        'admin'
+      );
+
+      if (!updateResult.message_exists) {
         return res.status(404).json({ error: 'Comment message not found' });
       }
 
-      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'admin') {
+      if (!updateResult.updated || !updateResult.message) {
         return res.status(403).json({ error: 'Cannot modify another user\'s comment message' });
       }
 
-      const result = await pool.query(
-        `UPDATE yoga_attendance_messages
-         SET message = $3
-         WHERE attendance_id = $1
-           AND id = $2
-         RETURNING id, attendance_id, author_role, author_user_id, message, created_at`,
-        [attendanceId, messageId, message]
-      );
-
-      res.json(result.rows[0]);
+      res.json(updateResult.message);
     } catch (error) {
       console.error('Update attendance comment thread message (admin) error:', error);
       res.status(500).json({ error: 'Server error' });
@@ -869,21 +926,20 @@ router.delete('/:id/registrations/:customerId/comment-thread/:messageId',
         return res.status(404).json({ error: 'Attendance not found' });
       }
 
-      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
-      if (!existingMessage) {
+      const deleteResult = await deleteAttendanceThreadMessage(
+        attendanceId,
+        messageId,
+        req.user!.id,
+        'admin'
+      );
+
+      if (!deleteResult.message_exists) {
         return res.status(404).json({ error: 'Comment message not found' });
       }
 
-      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'admin') {
+      if (!deleteResult.deleted) {
         return res.status(403).json({ error: 'Cannot delete another user\'s comment message' });
       }
-
-      await pool.query(
-        `DELETE FROM yoga_attendance_messages
-         WHERE attendance_id = $1
-           AND id = $2`,
-        [attendanceId, messageId]
-      );
 
       res.status(204).send();
     } catch (error) {

@@ -97,6 +97,8 @@ const ClassDetail: React.FC = () => {
   const [threadMessagesByCustomer, setThreadMessagesByCustomer] = useState<Record<number, AttendanceCommentMessage[] | undefined>>({});
   const [threadDraftsByCustomer, setThreadDraftsByCustomer] = useState<Record<number, string>>({});
   const editingTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const activeClassIdRef = useRef<number | null>(null);
+  const threadMutationVersionRef = useRef(0);
   const loadingThreadCustomerIdsRef = useRef<Set<number>>(new Set());
   const preloadedThreadCustomerIdsRef = useRef<Set<number>>(new Set());
   const [checkingInCustomerId, setCheckingInCustomerId] = useState<number | null>(null);
@@ -197,6 +199,9 @@ const ClassDetail: React.FC = () => {
   }, [selectedCustomerId]);
 
   useEffect(() => {
+    activeClassIdRef.current = classId;
+    threadMutationVersionRef.current += 1;
+
     if (!Number.isInteger(classId) || classId < 1) {
       setError('유효하지 않은 수업 경로입니다.');
       setIsLoading(false);
@@ -243,6 +248,7 @@ const ClassDetail: React.FC = () => {
   }, [classId]);
 
   const refreshClassAndRegistrations = async () => {
+    threadMutationVersionRef.current += 1;
     const [classRes, registrationsRes] = await Promise.all([
       classAPI.getById(classId),
       classAPI.getRegistrations(classId),
@@ -412,6 +418,8 @@ const ClassDetail: React.FC = () => {
     registration: ClassRegistration,
     messageId: number,
   ) => {
+    const requestClassId = classId;
+    const requestVersion = threadMutationVersionRef.current;
     const nextMessage = editingThreadDraftsByMessageId[messageId]!.trim();
     if (!nextMessage) {
       return;
@@ -422,11 +430,14 @@ const ClassDetail: React.FC = () => {
       setNotice('');
       setSavingEditedThreadMessageId(messageId);
       const response = await classAPI.updateRegistrationCommentThreadMessage(
-        classId,
+        requestClassId,
         registration.customer_id,
         messageId,
         nextMessage,
       );
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
       setThreadMessagesByCustomer((prev) => ({
         ...prev,
         [registration.customer_id]: prev[registration.customer_id]!.map((item) => (
@@ -444,10 +455,15 @@ const ClassDetail: React.FC = () => {
       });
       setNotice('수업 후 코멘트 대화를 수정했습니다.');
     } catch (threadEditError: unknown) {
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
       console.error('Failed to edit registration comment thread message:', threadEditError);
       setError(parseApiError(threadEditError, '수업 후 코멘트 대화를 수정하지 못했습니다.'));
     } finally {
-      setSavingEditedThreadMessageId(null);
+      if (activeClassIdRef.current === requestClassId && threadMutationVersionRef.current === requestVersion) {
+        setSavingEditedThreadMessageId(null);
+      }
     }
   };
 
@@ -455,11 +471,16 @@ const ClassDetail: React.FC = () => {
     registration: ClassRegistration,
     messageId: number,
   ) => {
+    const requestClassId = classId;
+    const requestVersion = threadMutationVersionRef.current;
     try {
       setError('');
       setNotice('');
       setDeletingThreadMessageId(messageId);
-      await classAPI.deleteRegistrationCommentThreadMessage(classId, registration.customer_id, messageId);
+      await classAPI.deleteRegistrationCommentThreadMessage(requestClassId, registration.customer_id, messageId);
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
       setThreadMessagesByCustomer((prev) => ({
         ...prev,
         [registration.customer_id]: prev[registration.customer_id]!.filter((item) => item.id !== messageId),
@@ -477,10 +498,15 @@ const ClassDetail: React.FC = () => {
       }
       setNotice('수업 후 코멘트 대화를 삭제했습니다.');
     } catch (threadDeleteError: unknown) {
+      if (activeClassIdRef.current !== requestClassId || threadMutationVersionRef.current !== requestVersion) {
+        return;
+      }
       console.error('Failed to delete registration comment thread message:', threadDeleteError);
       setError(parseApiError(threadDeleteError, '수업 후 코멘트 대화를 삭제하지 못했습니다.'));
     } finally {
-      setDeletingThreadMessageId(null);
+      if (activeClassIdRef.current === requestClassId && threadMutationVersionRef.current === requestVersion) {
+        setDeletingThreadMessageId(null);
+      }
     }
   };
 

@@ -969,6 +969,433 @@ describe('ClassDetail page', () => {
     expect(screen.getByRole('button', { name: '취소' })).toBeTruthy();
   });
 
+  it('ignores late admin thread edit response after route changed', async () => {
+    classGetRegistrationCommentThreadMock
+      .mockResolvedValueOnce({
+        data: {
+          attendance_id: 9001,
+          messages: [
+            {
+              id: 7102,
+              attendance_id: 9001,
+              author_role: 'admin',
+              author_user_id: 1,
+              message: '내 안내 메시지',
+              created_at: '2026-03-01T01:35:00.000Z',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+
+    let resolveEdit: (value: {
+      data: {
+        id: number;
+        attendance_id: number;
+        author_role: 'admin' | 'customer';
+        author_user_id: number;
+        message: string;
+        created_at: string;
+      };
+    }) => void = () => {};
+    classUpdateRegistrationCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveEdit = resolve as (value: {
+          data: {
+            id: number;
+            attendance_id: number;
+            author_role: 'admin' | 'customer';
+            author_user_id: number;
+            message: string;
+            created_at: string;
+          };
+        }) => void;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 안내 메시지'), { target: { value: '수정 예정' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    routeId = '2';
+    classGetByIdMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        max_capacity: 12,
+        is_open: true,
+        class_status: 'open',
+        current_enrollment: 1,
+        remaining_seats: 11,
+      },
+    });
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          class_id: 2,
+          customer_id: 101,
+          attendance_status: 'reserved',
+          registered_at: '2026-03-02T01:00:00.000Z',
+          registration_comment: '',
+          attendance_id: 9002,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+    rerender(
+      <MemoryRouter>
+        <ClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    resolveEdit({
+      data: {
+        id: 7102,
+        attendance_id: 9001,
+        author_role: 'admin',
+        author_user_id: 1,
+        message: '늦게 온 수정 응답',
+        created_at: '2026-03-01T01:35:00.000Z',
+      },
+    });
+    await waitFor(() => expect(screen.queryByText('늦게 온 수정 응답')).toBeNull());
+    expect(screen.queryByText('수업 후 코멘트 대화를 수정했습니다.')).toBeNull();
+  });
+
+  it('ignores late admin thread edit error after route changed', async () => {
+    classGetRegistrationCommentThreadMock
+      .mockResolvedValueOnce({
+        data: {
+          attendance_id: 9001,
+          messages: [
+            {
+              id: 7102,
+              attendance_id: 9001,
+              author_role: 'admin',
+              author_user_id: 1,
+              message: '내 안내 메시지',
+              created_at: '2026-03-01T01:35:00.000Z',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+
+    let rejectEdit: (reason?: unknown) => void = () => {};
+    classUpdateRegistrationCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectEdit = reject;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 안내 메시지'), { target: { value: '수정 예정' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    routeId = '2';
+    classGetByIdMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        max_capacity: 12,
+        is_open: true,
+        class_status: 'open',
+        current_enrollment: 1,
+        remaining_seats: 11,
+      },
+    });
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          class_id: 2,
+          customer_id: 101,
+          attendance_status: 'reserved',
+          registered_at: '2026-03-02T01:00:00.000Z',
+          registration_comment: '',
+          attendance_id: 9002,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+    rerender(
+      <MemoryRouter>
+        <ClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    rejectEdit(new Error('old admin thread edit failed'));
+    await waitFor(() => expect(screen.queryByText('요청 실패')).toBeNull());
+  });
+
+  it('ignores late admin thread edit success after registrations refresh clears thread cache', async () => {
+    classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 7102,
+            attendance_id: 9001,
+            author_role: 'admin',
+            author_user_id: 1,
+            message: '내 안내 메시지',
+            created_at: '2026-03-01T01:35:00.000Z',
+          },
+        ],
+      },
+    });
+
+    let resolveEdit: (value: {
+      data: {
+        id: number;
+        attendance_id: number;
+        author_role: 'admin' | 'customer';
+        author_user_id: number;
+        message: string;
+        created_at: string;
+      };
+    }) => void = () => {};
+    classUpdateRegistrationCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveEdit = resolve as (value: {
+          data: {
+            id: number;
+            attendance_id: number;
+            author_role: 'admin' | 'customer';
+            author_user_id: number;
+            message: string;
+            created_at: string;
+          };
+        }) => void;
+      })
+    );
+    classUpdateRegistrationStatusMock.mockResolvedValueOnce({});
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 안내 메시지'), { target: { value: '수정 예정' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    fireEvent.change(screen.getByDisplayValue('예약'), { target: { value: 'absent' } });
+    await waitFor(() => expect(classUpdateRegistrationStatusMock).toHaveBeenCalledWith(1, 101, 'absent'));
+    await waitFor(() => expect(screen.getByText('출석 상태를 변경했습니다.')).toBeTruthy());
+
+    resolveEdit({
+      data: {
+        id: 7102,
+        attendance_id: 9001,
+        author_role: 'admin',
+        author_user_id: 1,
+        message: '늦게 온 수정 응답',
+        created_at: '2026-03-01T01:35:00.000Z',
+      },
+    });
+
+    await waitFor(() => expect(screen.queryByText('늦게 온 수정 응답')).toBeNull());
+    expect(screen.queryByText('수업 후 코멘트 대화를 수정했습니다.')).toBeNull();
+  });
+
+  it('ignores late admin thread delete response after route changed', async () => {
+    classGetRegistrationCommentThreadMock
+      .mockResolvedValueOnce({
+        data: {
+          attendance_id: 9001,
+          messages: [
+            {
+              id: 7102,
+              attendance_id: 9001,
+              author_role: 'admin',
+              author_user_id: 1,
+              message: '내 안내 메시지',
+              created_at: '2026-03-01T01:35:00.000Z',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+
+    let resolveDelete: (value: unknown) => void = () => {};
+    classDeleteRegistrationCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveDelete = resolve;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+    fireEvent.click(screen.getByText('삭제'));
+
+    routeId = '2';
+    classGetByIdMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        max_capacity: 12,
+        is_open: true,
+        class_status: 'open',
+        current_enrollment: 1,
+        remaining_seats: 11,
+      },
+    });
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          class_id: 2,
+          customer_id: 101,
+          attendance_status: 'reserved',
+          registered_at: '2026-03-02T01:00:00.000Z',
+          registration_comment: '',
+          attendance_id: 9002,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+    rerender(
+      <MemoryRouter>
+        <ClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    resolveDelete({});
+    await waitFor(() => expect(screen.queryByText('내 안내 메시지')).toBeNull());
+    expect(screen.queryByText('수업 후 코멘트 대화를 삭제했습니다.')).toBeNull();
+  });
+
+  it('ignores late admin thread delete error after route changed', async () => {
+    classGetRegistrationCommentThreadMock
+      .mockResolvedValueOnce({
+        data: {
+          attendance_id: 9001,
+          messages: [
+            {
+              id: 7102,
+              attendance_id: 9001,
+              author_role: 'admin',
+              author_user_id: 1,
+              message: '내 안내 메시지',
+              created_at: '2026-03-01T01:35:00.000Z',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ data: { attendance_id: 9002, messages: [] } });
+
+    let rejectDelete: (reason?: unknown) => void = () => {};
+    classDeleteRegistrationCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((_, reject) => {
+        rejectDelete = reject;
+      })
+    );
+
+    const { rerender } = renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+    fireEvent.click(screen.getByText('삭제'));
+
+    routeId = '2';
+    classGetByIdMock.mockResolvedValueOnce({
+      data: {
+        id: 2,
+        title: '아쉬탕가',
+        class_date: '2026-03-02',
+        start_time: '11:00:00',
+        end_time: '12:00:00',
+        max_capacity: 12,
+        is_open: true,
+        class_status: 'open',
+        current_enrollment: 1,
+        remaining_seats: 11,
+      },
+    });
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          class_id: 2,
+          customer_id: 101,
+          attendance_status: 'reserved',
+          registered_at: '2026-03-02T01:00:00.000Z',
+          registration_comment: '',
+          attendance_id: 9002,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+    rerender(
+      <MemoryRouter>
+        <ClassDetail />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText(/아쉬탕가/)).toBeTruthy());
+
+    rejectDelete(new Error('old admin thread delete failed'));
+    await waitFor(() => expect(screen.queryByText('요청 실패')).toBeNull());
+  });
+
+  it('ignores late admin thread delete success after registrations refresh clears thread cache', async () => {
+    classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 7102,
+            attendance_id: 9001,
+            author_role: 'admin',
+            author_user_id: 1,
+            message: '내 안내 메시지',
+            created_at: '2026-03-01T01:35:00.000Z',
+          },
+        ],
+      },
+    });
+
+    let resolveDelete: (value: unknown) => void = () => {};
+    classDeleteRegistrationCommentThreadMessageMock.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveDelete = resolve;
+      })
+    );
+    classUpdateRegistrationStatusMock.mockResolvedValueOnce({});
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('삭제'));
+    fireEvent.change(screen.getByDisplayValue('예약'), { target: { value: 'absent' } });
+    await waitFor(() => expect(classUpdateRegistrationStatusMock).toHaveBeenCalledWith(1, 101, 'absent'));
+    await waitFor(() => expect(screen.getByText('출석 상태를 변경했습니다.')).toBeTruthy());
+
+    resolveDelete({});
+
+    await waitFor(() => expect(screen.queryByText('내 안내 메시지')).toBeNull());
+    expect(screen.queryByText('수업 후 코멘트 대화를 삭제했습니다.')).toBeNull();
+  });
+
   it('does not send empty attendance comment thread and shows empty thread placeholder', async () => {
     classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
       data: {
