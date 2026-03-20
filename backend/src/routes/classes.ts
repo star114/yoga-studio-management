@@ -43,6 +43,49 @@ const getLatestAttendanceIdByClassCustomer = async (
   return Number(attendanceResult.rows[0].id);
 };
 
+const getAttendanceThreadMessages = async (attendanceId: number) => {
+  const result = await pool.query(
+    `SELECT
+       m.id,
+       m.attendance_id,
+       m.author_role,
+       m.author_user_id,
+       m.message,
+       m.created_at
+     FROM yoga_attendance_messages m
+     WHERE m.attendance_id = $1
+     ORDER BY m.created_at ASC, m.id ASC`,
+    [attendanceId]
+  );
+
+  return result.rows;
+};
+
+const getAttendanceThreadMessageById = async (attendanceId: number, messageId: number) => {
+  const result = await pool.query(
+    `SELECT
+       m.id,
+       m.attendance_id,
+       m.author_role,
+       m.author_user_id,
+       m.message,
+       m.created_at
+     FROM yoga_attendance_messages m
+     WHERE m.attendance_id = $1
+       AND m.id = $2`,
+    [attendanceId, messageId]
+  );
+
+  return result.rows[0] as {
+    id: number;
+    attendance_id: number;
+    author_role: 'admin' | 'customer';
+    author_user_id: number;
+    message: string;
+    created_at: string;
+  } | undefined;
+};
+
 const cancelRegistrationAndRelatedAttendance = async (
   client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number }> },
   registration: {
@@ -541,23 +584,9 @@ router.get('/:id/me/comment-thread',
         return res.status(404).json({ error: 'Attendance not found' });
       }
 
-      const result = await pool.query(
-        `SELECT
-           m.id,
-           m.attendance_id,
-           m.author_role,
-           m.author_user_id,
-           m.message,
-           m.created_at
-         FROM yoga_attendance_messages m
-         WHERE m.attendance_id = $1
-         ORDER BY m.created_at ASC, m.id ASC`,
-        [attendanceId]
-      );
-
       res.json({
         attendance_id: attendanceId,
-        messages: result.rows,
+        messages: await getAttendanceThreadMessages(attendanceId),
       });
     } catch (error) {
       console.error('Get my attendance comment thread error:', error);
@@ -625,26 +654,115 @@ router.get('/:id/registrations/:customerId/comment-thread',
         return res.status(404).json({ error: 'Attendance not found' });
       }
 
-      const result = await pool.query(
-        `SELECT
-           m.id,
-           m.attendance_id,
-           m.author_role,
-           m.author_user_id,
-           m.message,
-           m.created_at
-         FROM yoga_attendance_messages m
-         WHERE m.attendance_id = $1
-         ORDER BY m.created_at ASC, m.id ASC`,
-        [attendanceId]
-      );
-
       res.json({
         attendance_id: attendanceId,
-        messages: result.rows,
+        messages: await getAttendanceThreadMessages(attendanceId),
       });
     } catch (error) {
       console.error('Get attendance comment thread (admin) error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 코멘트 스레드 수정 (고객 본인)
+router.put('/:id/me/comment-thread/:messageId',
+  authenticate,
+  param('id').isInt({ min: 1 }),
+  param('messageId').isInt({ min: 1 }),
+  body('message').isString().trim().isLength({ min: 1, max: 1000 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+    const messageId = Number(req.params.messageId);
+
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin cannot use customer comment thread endpoint' });
+    }
+
+    const message = String(req.body.message).trim();
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
+      if (!existingMessage) {
+        return res.status(404).json({ error: 'Comment message not found' });
+      }
+
+      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'customer') {
+        return res.status(403).json({ error: 'Cannot modify another user\'s comment message' });
+      }
+
+      const result = await pool.query(
+        `UPDATE yoga_attendance_messages
+         SET message = $3
+         WHERE attendance_id = $1
+           AND id = $2
+         RETURNING id, attendance_id, author_role, author_user_id, message, created_at`,
+        [attendanceId, messageId, message]
+      );
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Update my attendance comment thread message error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 코멘트 스레드 삭제 (고객 본인)
+router.delete('/:id/me/comment-thread/:messageId',
+  authenticate,
+  param('id').isInt({ min: 1 }),
+  param('messageId').isInt({ min: 1 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+    const messageId = Number(req.params.messageId);
+
+    if (req.user?.role === 'admin') {
+      return res.status(400).json({ error: 'Admin cannot use customer comment thread endpoint' });
+    }
+
+    try {
+      const customerId = await getCustomerIdFromUser(req.user!.id);
+      if (!customerId) {
+        return res.status(403).json({ error: 'Customer account not found' });
+      }
+
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
+      if (!existingMessage) {
+        return res.status(404).json({ error: 'Comment message not found' });
+      }
+
+      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'customer') {
+        return res.status(403).json({ error: 'Cannot delete another user\'s comment message' });
+      }
+
+      await pool.query(
+        `DELETE FROM yoga_attendance_messages
+         WHERE attendance_id = $1
+           AND id = $2`,
+        [attendanceId, messageId]
+      );
+
+      res.status(204).send();
+    } catch (error) {
+      console.error('Delete my attendance comment thread message error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -680,6 +798,96 @@ router.post('/:id/registrations/:customerId/comment-thread',
       res.status(201).json(result.rows[0]);
     } catch (error) {
       console.error('Create attendance comment thread message (admin) error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 코멘트 스레드 수정 (관리자)
+router.put('/:id/registrations/:customerId/comment-thread/:messageId',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  param('customerId').isInt({ min: 1 }),
+  param('messageId').isInt({ min: 1 }),
+  body('message').isString().trim().isLength({ min: 1, max: 1000 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+    const customerId = Number(req.params.customerId);
+    const messageId = Number(req.params.messageId);
+    const message = String(req.body.message).trim();
+
+    try {
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
+      if (!existingMessage) {
+        return res.status(404).json({ error: 'Comment message not found' });
+      }
+
+      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'admin') {
+        return res.status(403).json({ error: 'Cannot modify another user\'s comment message' });
+      }
+
+      const result = await pool.query(
+        `UPDATE yoga_attendance_messages
+         SET message = $3
+         WHERE attendance_id = $1
+           AND id = $2
+         RETURNING id, attendance_id, author_role, author_user_id, message, created_at`,
+        [attendanceId, messageId, message]
+      );
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Update attendance comment thread message (admin) error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// 출석 코멘트 스레드 삭제 (관리자)
+router.delete('/:id/registrations/:customerId/comment-thread/:messageId',
+  authenticate,
+  requireAdmin,
+  param('id').isInt({ min: 1 }),
+  param('customerId').isInt({ min: 1 }),
+  param('messageId').isInt({ min: 1 }),
+  validateRequest,
+  async (req: AuthRequest, res) => {
+    const classId = Number(req.params.id);
+    const customerId = Number(req.params.customerId);
+    const messageId = Number(req.params.messageId);
+
+    try {
+      const attendanceId = await getLatestAttendanceIdByClassCustomer(classId, customerId);
+      if (!attendanceId) {
+        return res.status(404).json({ error: 'Attendance not found' });
+      }
+
+      const existingMessage = await getAttendanceThreadMessageById(attendanceId, messageId);
+      if (!existingMessage) {
+        return res.status(404).json({ error: 'Comment message not found' });
+      }
+
+      if (existingMessage.author_user_id !== req.user!.id || existingMessage.author_role !== 'admin') {
+        return res.status(403).json({ error: 'Cannot delete another user\'s comment message' });
+      }
+
+      await pool.query(
+        `DELETE FROM yoga_attendance_messages
+         WHERE attendance_id = $1
+           AND id = $2`,
+        [attendanceId, messageId]
+      );
+
+      res.status(204).send();
+    } catch (error) {
+      console.error('Delete attendance comment thread message (admin) error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }

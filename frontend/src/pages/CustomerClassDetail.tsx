@@ -51,15 +51,20 @@ const CustomerClassDetail: React.FC = () => {
   const location = useLocation();
   const classId = Number(id);
   const activeClassIdRef = useRef<number | null>(null);
+  const editingTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [detail, setDetail] = useState<CustomerClassDetailData | null>(null);
   const [threadMessages, setThreadMessages] = useState<AttendanceCommentMessage[]>([]);
   const [threadMessageDraft, setThreadMessageDraft] = useState('');
+  const [editingThreadMessageId, setEditingThreadMessageId] = useState<number | null>(null);
+  const [editingThreadDraft, setEditingThreadDraft] = useState('');
   const [selectedQuickComments, setSelectedQuickComments] = useState<string[]>([]);
   const [customCommentChips, setCustomCommentChips] = useState<string[]>([]);
   const [isDirectCommentOpen, setIsDirectCommentOpen] = useState(false);
   const [directCommentInput, setDirectCommentInput] = useState('');
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const [isThreadSaving, setIsThreadSaving] = useState(false);
+  const [savingEditedThreadMessageId, setSavingEditedThreadMessageId] = useState<number | null>(null);
+  const [deletingThreadMessageId, setDeletingThreadMessageId] = useState<number | null>(null);
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,6 +86,10 @@ const CustomerClassDetail: React.FC = () => {
     setIsThreadLoading(false);
     setIsThreadSaving(false);
     setIsSavingComment(false);
+    setEditingThreadMessageId(null);
+    setEditingThreadDraft('');
+    setSavingEditedThreadMessageId(null);
+    setDeletingThreadMessageId(null);
 
     if (user?.role !== 'customer') {
       setIsLoading(false);
@@ -156,6 +165,16 @@ const CustomerClassDetail: React.FC = () => {
     setIsDirectCommentOpen(false);
   }, [detail?.registration_comment]);
 
+  useEffect(() => {
+    if (editingThreadMessageId === null || !editingTextareaRef.current) {
+      return;
+    }
+
+    const textarea = editingTextareaRef.current;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [editingThreadMessageId, editingThreadDraft]);
+
   if (user?.role !== 'customer') {
     return <Navigate to="/" replace />;
   }
@@ -207,6 +226,76 @@ const CustomerClassDetail: React.FC = () => {
     } finally {
       if (activeClassIdRef.current === requestClassId) {
         setIsThreadSaving(false);
+      }
+    }
+  };
+
+  const handleStartEditThreadMessage = (message: AttendanceCommentMessage) => {
+    setEditingThreadMessageId(message.id);
+    setEditingThreadDraft(message.message);
+  };
+
+  const handleCancelEditThreadMessage = () => {
+    setEditingThreadMessageId(null);
+    setEditingThreadDraft('');
+  };
+
+  const handleSaveEditedThreadMessage = async (messageId: number) => {
+    const requestClassId = classId;
+    const nextMessage = editingThreadDraft.trim();
+
+    if (!nextMessage) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSavingEditedThreadMessageId(messageId);
+      const response = await classAPI.updateMyCommentThreadMessage(requestClassId, messageId, nextMessage);
+      if (activeClassIdRef.current !== requestClassId) {
+        return;
+      }
+      setThreadMessages((prev) => prev.map((item) => (
+        item.id === messageId ? response.data : item
+      )));
+      setEditingThreadMessageId(null);
+      setEditingThreadDraft('');
+    } catch (threadEditError: unknown) {
+      if (activeClassIdRef.current !== requestClassId) {
+        return;
+      }
+      console.error('Failed to edit my comment thread message:', threadEditError);
+      setError(parseApiError(threadEditError, '수업 후 코멘트 대화를 수정하지 못했습니다.'));
+    } finally {
+      if (activeClassIdRef.current === requestClassId) {
+        setSavingEditedThreadMessageId(null);
+      }
+    }
+  };
+
+  const handleDeleteThreadMessage = async (messageId: number) => {
+    const requestClassId = classId;
+
+    try {
+      setError('');
+      setDeletingThreadMessageId(messageId);
+      await classAPI.deleteMyCommentThreadMessage(requestClassId, messageId);
+      if (activeClassIdRef.current !== requestClassId) {
+        return;
+      }
+      setThreadMessages((prev) => prev.filter((item) => item.id !== messageId));
+      if (editingThreadMessageId === messageId) {
+        setEditingThreadMessageId(null);
+        setEditingThreadDraft('');
+      }
+    } catch (threadDeleteError: unknown) {
+      if (activeClassIdRef.current === requestClassId) {
+        console.error('Failed to delete my comment thread message:', threadDeleteError);
+        setError(parseApiError(threadDeleteError, '수업 후 코멘트 대화를 삭제하지 못했습니다.'));
+      }
+    } finally {
+      if (activeClassIdRef.current === requestClassId) {
+        setDeletingThreadMessageId(null);
       }
     }
   };
@@ -393,19 +482,79 @@ const CustomerClassDetail: React.FC = () => {
                   key={message.id}
                   className={`flex ${message.author_role === 'customer' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className="max-w-[85%] space-y-1">
+                  <div className={`space-y-1 max-w-[85%] ${editingThreadMessageId === message.id ? 'w-[85%]' : ''}`}>
                     <div
                       className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${
                         message.author_role === 'customer'
                           ? 'rounded-br-md bg-primary-500 text-white'
                           : 'rounded-bl-md bg-white text-warm-800 border border-warm-200'
-                      }`}
+                      } ${editingThreadMessageId === message.id ? 'w-full' : ''}`}
                     >
-                      <p className="whitespace-pre-wrap break-words">{message.message}</p>
+                      {editingThreadMessageId === message.id ? (
+                        <div className="space-y-2">
+                          <textarea
+                            ref={editingTextareaRef}
+                            className="input-field w-full max-w-none min-h-[72px] text-warm-900 resize-y"
+                            value={editingThreadDraft}
+                            maxLength={1000}
+                            onChange={(event) => setEditingThreadDraft(event.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              className="px-3 py-1 text-xs rounded-md bg-white/20"
+                              onClick={handleCancelEditThreadMessage}
+                              disabled={savingEditedThreadMessageId === message.id || deletingThreadMessageId === message.id}
+                            >
+                              취소
+                            </button>
+                            <button
+                              type="button"
+                              className="px-3 py-1 text-xs rounded-md bg-red-50 text-red-600 disabled:opacity-50"
+                              onClick={() => void handleDeleteThreadMessage(message.id)}
+                              disabled={savingEditedThreadMessageId === message.id || deletingThreadMessageId === message.id}
+                            >
+                              {deletingThreadMessageId === message.id ? '삭제 중...' : '삭제'}
+                            </button>
+                            <button
+                              type="button"
+                              className="px-3 py-1 text-xs rounded-md bg-white text-primary-700 disabled:opacity-50"
+                              onClick={() => void handleSaveEditedThreadMessage(message.id)}
+                              disabled={savingEditedThreadMessageId === message.id || deletingThreadMessageId === message.id}
+                            >
+                              {savingEditedThreadMessageId === message.id ? '저장 중...' : '저장'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap break-words">{message.message}</p>
+                      )}
                     </div>
-                    <p className={`text-[11px] text-warm-500 ${message.author_role === 'customer' ? 'text-right' : 'text-left'}`}>
-                      {new Date(message.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    <div className={`space-y-1 ${message.author_role === 'customer' ? 'text-right' : 'text-left'}`}>
+                      <p className="text-[11px] text-warm-500">
+                        {new Date(message.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      {message.author_role === 'customer' && message.author_user_id === user?.id && editingThreadMessageId !== message.id && (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            className="text-[11px] text-primary-700 hover:underline"
+                            onClick={() => handleStartEditThreadMessage(message)}
+                            disabled={deletingThreadMessageId === message.id}
+                          >
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            className="text-[11px] text-red-600 hover:underline disabled:opacity-50"
+                            onClick={() => void handleDeleteThreadMessage(message.id)}
+                            disabled={deletingThreadMessageId === message.id}
+                          >
+                            {deletingThreadMessageId === message.id ? '삭제 중...' : '삭제'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

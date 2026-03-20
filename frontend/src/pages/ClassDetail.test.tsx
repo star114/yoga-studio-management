@@ -15,6 +15,8 @@ const {
   classUpdateRegistrationStatusMock,
   classGetRegistrationCommentThreadMock,
   classPostRegistrationCommentThreadMock,
+  classUpdateRegistrationCommentThreadMessageMock,
+  classDeleteRegistrationCommentThreadMessageMock,
   attendanceCheckInMock,
   customerGetAllMock,
   membershipGetByCustomerMock,
@@ -31,6 +33,8 @@ const {
   classUpdateRegistrationStatusMock: vi.fn(),
   classGetRegistrationCommentThreadMock: vi.fn(),
   classPostRegistrationCommentThreadMock: vi.fn(),
+  classUpdateRegistrationCommentThreadMessageMock: vi.fn(),
+  classDeleteRegistrationCommentThreadMessageMock: vi.fn(),
   attendanceCheckInMock: vi.fn(),
   customerGetAllMock: vi.fn(),
   membershipGetByCustomerMock: vi.fn(),
@@ -41,6 +45,11 @@ const {
 
 const navigateMock = vi.fn();
 let routeId = '1';
+let authState: {
+  user: { id: number; login_id: string; role: 'admin' | 'customer' } | null;
+} = {
+  user: { id: 1, login_id: 'admin', role: 'admin' },
+};
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -62,6 +71,8 @@ vi.mock('../services/api', () => ({
     updateRegistrationStatus: classUpdateRegistrationStatusMock,
     getRegistrationCommentThread: classGetRegistrationCommentThreadMock,
     postRegistrationCommentThread: classPostRegistrationCommentThreadMock,
+    updateRegistrationCommentThreadMessage: classUpdateRegistrationCommentThreadMessageMock,
+    deleteRegistrationCommentThreadMessage: classDeleteRegistrationCommentThreadMessageMock,
   },
   customerAPI: {
     getAll: customerGetAllMock,
@@ -72,6 +83,10 @@ vi.mock('../services/api', () => ({
   attendanceAPI: {
     checkIn: attendanceCheckInMock,
   },
+}));
+
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => authState,
 }));
 
 vi.mock('../utils/apiError', () => ({
@@ -138,6 +153,7 @@ describe('ClassDetail page', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     routeId = '1';
+    authState = { user: { id: 1, login_id: 'admin', role: 'admin' } };
     seedLoad();
     vi.stubGlobal('confirm', vi.fn(() => true));
     classGetRegistrationCommentThreadMock.mockResolvedValue({
@@ -842,6 +858,117 @@ describe('ClassDetail page', () => {
     expect(screen.getByText('강사 답변')).toBeTruthy();
   });
 
+  it('edits and deletes only the current admin attendance comment thread message', async () => {
+    classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 7101,
+            attendance_id: 9001,
+            author_role: 'customer',
+            author_user_id: 11,
+            message: '수련생 첫 메시지',
+            created_at: '2026-03-01T01:30:00.000Z',
+          },
+          {
+            id: 7102,
+            attendance_id: 9001,
+            author_role: 'admin',
+            author_user_id: 1,
+            message: '내 안내 메시지',
+            created_at: '2026-03-01T01:35:00.000Z',
+          },
+        ],
+      },
+    });
+    classUpdateRegistrationCommentThreadMessageMock.mockResolvedValueOnce({
+      data: {
+        id: 7102,
+        attendance_id: 9001,
+        author_role: 'admin',
+        author_user_id: 1,
+        message: '수정된 안내 메시지',
+        created_at: '2026-03-01T01:35:00.000Z',
+      },
+    });
+    classDeleteRegistrationCommentThreadMessageMock.mockResolvedValueOnce({});
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 안내 메시지'), { target: { value: '수정 요청 메시지' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(classUpdateRegistrationCommentThreadMessageMock).toHaveBeenCalledWith(1, 101, 7102, '수정 요청 메시지'));
+    await waitFor(() => expect(screen.getByText('수업 후 코멘트 대화를 수정했습니다.')).toBeTruthy());
+    expect(screen.getByText('수정된 안내 메시지')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('삭제'));
+    await waitFor(() => expect(classDeleteRegistrationCommentThreadMessageMock).toHaveBeenCalledWith(1, 101, 7102));
+    await waitFor(() => expect(screen.getByText('수업 후 코멘트 대화를 삭제했습니다.')).toBeTruthy());
+    expect(screen.queryByText('수정된 안내 메시지')).toBeNull();
+  });
+
+  it('clears admin edit state when deleting the message currently being edited', async () => {
+    classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 7102,
+            attendance_id: 9001,
+            author_role: 'admin',
+            author_user_id: 1,
+            message: '내 안내 메시지',
+            created_at: '2026-03-01T01:35:00.000Z',
+          },
+        ],
+      },
+    });
+    classDeleteRegistrationCommentThreadMessageMock.mockResolvedValueOnce({});
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    expect(screen.getByRole('button', { name: '취소' })).toBeTruthy();
+
+    fireEvent.click(screen.getByText('삭제'));
+    await waitFor(() => expect(classDeleteRegistrationCommentThreadMessageMock).toHaveBeenCalledWith(1, 101, 7102));
+    expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
+    expect(screen.queryByText('내 안내 메시지')).toBeNull();
+  });
+
+  it('does not save empty edited admin attendance comment thread message', async () => {
+    classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 7102,
+            attendance_id: 9001,
+            author_role: 'admin',
+            author_user_id: 1,
+            message: '내 안내 메시지',
+            created_at: '2026-03-01T01:35:00.000Z',
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 안내 메시지'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(classUpdateRegistrationCommentThreadMessageMock).not.toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: '취소' })).toBeTruthy();
+  });
+
   it('does not send empty attendance comment thread and shows empty thread placeholder', async () => {
     classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
       data: {
@@ -1005,6 +1132,41 @@ describe('ClassDetail page', () => {
     fireEvent.change(screen.getByLabelText('수업 후 코멘트 대화 작성'), { target: { value: '실패 메시지' } });
     fireEvent.click(screen.getByRole('button', { name: '대화 전송' }));
 
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('shows error when editing or deleting attendance comment thread fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    classGetRegistrationCommentThreadMock.mockResolvedValueOnce({
+      data: {
+        attendance_id: 9001,
+        messages: [
+          {
+            id: 7102,
+            attendance_id: 9001,
+            author_role: 'admin',
+            author_user_id: 1,
+            message: '내 안내 메시지',
+            created_at: '2026-03-01T01:35:00.000Z',
+          },
+        ],
+      },
+    });
+    classUpdateRegistrationCommentThreadMessageMock.mockRejectedValueOnce(new Error('thread edit failed'));
+    classDeleteRegistrationCommentThreadMessageMock.mockRejectedValueOnce(new Error('thread delete failed'));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('내 안내 메시지')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('수정'));
+    fireEvent.change(screen.getByDisplayValue('내 안내 메시지'), { target: { value: '수정 실패 메시지' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    fireEvent.click(screen.getByText('삭제'));
     await waitFor(() => expect(screen.getByText('요청 실패')).toBeTruthy());
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();

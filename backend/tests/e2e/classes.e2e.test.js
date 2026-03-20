@@ -2616,6 +2616,102 @@ test('attendance comment-thread routes cover customer/admin success and failures
   });
   assert.equal(res.status, 500);
 
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '수정', created_at: '2026-03-01T00:00:00.000Z' }] },
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/comment-thread/:messageId',
+    params: { id: '11', messageId: '55' },
+    body: { message: ' 수정 ' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.message, '수정');
+
+  h.queryQueue.push({ rows: [{ id: 7 }] }, { rows: [{ id: 501 }] }, { rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/comment-thread/:messageId',
+    params: { id: '11', messageId: '55' },
+    body: { message: '수정' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 55, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/comment-thread/:messageId',
+    params: { id: '11', messageId: '55' },
+    body: { message: '수정' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    new Error('customer thread edit fail'),
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/me/comment-thread/:messageId',
+    params: { id: '11', messageId: '55' },
+    body: { message: '수정' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [], rowCount: 1 },
+  );
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/me/comment-thread/:messageId',
+    params: { id: '11', messageId: '55' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 204);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 55, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+  );
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/me/comment-thread/:messageId',
+    params: { id: '11', messageId: '55' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 7 }] },
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 55, attendance_id: 501, author_role: 'customer', author_user_id: 10, message: '기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    new Error('customer thread delete fail'),
+  );
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/me/comment-thread/:messageId',
+    params: { id: '11', messageId: '55' },
+    headers: { authorization: `Bearer ${customerToken()}` },
+  });
+  assert.equal(res.status, 500);
+
   h.queryQueue.push({ rows: [{ id: 501 }] }, { rows: [{ id: 61, message: 'admin 메시지' }] });
   res = await h.runRoute({
     method: 'post',
@@ -2670,6 +2766,96 @@ test('attendance comment-thread routes cover customer/admin success and failures
     routePath: '/:id/registrations/:customerId/comment-thread',
     params: { id: '11', customerId: '7' },
     body: { message: 'admin 메시지' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push(
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 수정', created_at: '2026-03-01T00:00:00.000Z' }] },
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
+    params: { id: '11', customerId: '7', messageId: '61' },
+    body: { message: ' admin 수정 ' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.message, 'admin 수정');
+
+  h.queryQueue.push({ rows: [{ id: 501 }] }, { rows: [] });
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
+    params: { id: '11', customerId: '7', messageId: '61' },
+    body: { message: 'admin 수정' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 404);
+
+  h.queryQueue.push(
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 61, attendance_id: 501, author_role: 'customer', author_user_id: 2, message: 'customer 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
+    params: { id: '11', customerId: '7', messageId: '61' },
+    body: { message: 'admin 수정' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    new Error('admin thread edit fail'),
+  );
+  res = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
+    params: { id: '11', customerId: '7', messageId: '61' },
+    body: { message: 'admin 수정' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 500);
+
+  h.queryQueue.push(
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    { rows: [], rowCount: 1 },
+  );
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
+    params: { id: '11', customerId: '7', messageId: '61' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 204);
+
+  h.queryQueue.push(
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 61, attendance_id: 501, author_role: 'customer', author_user_id: 2, message: 'customer 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+  );
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
+    params: { id: '11', customerId: '7', messageId: '61' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 403);
+
+  h.queryQueue.push(
+    { rows: [{ id: 501 }] },
+    { rows: [{ id: 61, attendance_id: 501, author_role: 'admin', author_user_id: 1, message: 'admin 기존', created_at: '2026-03-01T00:00:00.000Z' }] },
+    new Error('admin thread delete fail'),
+  );
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id/registrations/:customerId/comment-thread/:messageId',
+    params: { id: '11', customerId: '7', messageId: '61' },
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 500);
