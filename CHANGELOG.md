@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/star114/yoga-studio-management/compare/v2.6.0...v2.7.0) (2026-03-20)
+
+
+### Features
+
+* add comment thread edit and delete ([#62](https://github.com/star114/yoga-studio-management/issues/62)) ([92eb22f](https://github.com/star114/yoga-studio-management/commit/92eb22f2b155ac6fa673f9fd01634f7f417e316f))
+
 ## [2.6.0](https://github.com/star114/yoga-studio-management/compare/v2.5.2...v2.6.0) (2026-03-19)
 
 
