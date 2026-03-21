@@ -116,13 +116,14 @@ const CustomerManagement: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">고객 관리</h1>
-        <p className="text-warm-600">고객 로그인 계정을 생성하고 기본 정보를 관리합니다.</p>
+        <p className="section-kicker">Customer Accounts</p>
+        <h1 className="page-title">고객 관리</h1>
+        <p className="page-description">고객 로그인 계정을 생성하고 기본 정보를 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">신규 고객 계정 생성</h2>
+          <h2 className="card-title mb-4">신규 고객 계정 생성</h2>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
@@ -145,7 +146,7 @@ const CustomerManagement: React.FC = () => {
                 onChange={(e) => handleFormChange('phone', formatPhoneNumberInput(e.target.value))}
                 required
               />
-              <p className="mt-1 text-xs text-warm-500">입력한 전화번호가 로그인 아이디로 사용됩니다.</p>
+              <p className="mt-1 text-xs muted-note">입력한 전화번호가 로그인 아이디로 사용됩니다.</p>
             </div>
 
             <div>
@@ -164,8 +165,8 @@ const CustomerManagement: React.FC = () => {
               </p>
             )}
 
-            <p className="text-xs text-warm-500">
-              신규 고객의 초기 비밀번호는 <span className="font-semibold text-primary-800">12345</span>로 자동 설정됩니다.
+            <p className="text-xs muted-note">
+              신규 고객의 초기 비밀번호는 <span className="font-semibold text-[var(--text-strong)]">12345</span>로 자동 설정됩니다.
             </p>
 
             <div className="flex gap-3 items-center">
@@ -182,7 +183,7 @@ const CustomerManagement: React.FC = () => {
 
         <section className="card xl:col-span-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <h2 className="text-xl font-display font-semibold text-primary-800">고객 목록</h2>
+            <h2 className="card-title">고객 목록</h2>
             <input
               className="input-field md:max-w-xs"
               placeholder="이름/전화번호 검색"
@@ -198,35 +199,35 @@ const CustomerManagement: React.FC = () => {
           )}
 
           {isLoading ? (
-            <p className="text-warm-600 py-8 text-center">고객 목록 불러오는 중...</p>
+            <p className="muted-note py-8 text-center">고객 목록 불러오는 중...</p>
           ) : filteredCustomers.length === 0 ? (
-            <p className="text-warm-600 py-8 text-center">표시할 고객이 없습니다.</p>
+            <p className="muted-note py-8 text-center">표시할 고객이 없습니다.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="table-shell overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-warm-200 text-left text-warm-600">
-                    <th className="py-2 pr-4">이름</th>
+                  <tr className="text-left">
+                    <th className="py-3 pl-4 pr-4 sm:pl-6">이름</th>
                     <th className="py-2 pr-4">전화번호</th>
                     <th className="py-2 pr-4">회원권</th>
                     <th className="py-2 pr-4">출석</th>
-                    <th className="py-2 pr-0 text-right">작업</th>
+                    <th className="py-3 pl-4 pr-4 text-right sm:pr-6">작업</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCustomers.map((customer) => (
-                    <tr key={customer.id} className="border-b border-warm-100">
-                      <td className="py-3 pr-4 font-medium text-primary-800">{customer.name}</td>
+                    <tr key={customer.id}>
+                      <td className="py-3 pl-4 pr-4 font-medium text-[var(--text-strong)] sm:pl-6">{customer.name}</td>
                       <td className="py-3 pr-4">{customer.phone}</td>
                       <td className="py-3 pr-4">{customer.membership_count ?? 0}</td>
                       <td className="py-3 pr-4">{customer.total_attendance ?? 0}</td>
-                      <td className="py-3 pr-0">
+                      <td className="py-3 pl-4 pr-4 sm:pr-6">
                         <div className="flex justify-end gap-2">
-                          <Link to={`/customers/${customer.id}`} className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200">상세</Link>
+                          <Link to={`/customers/${customer.id}`} className="soft-link-button">상세</Link>
                           <button
                             type="button"
                             onClick={() => handleDelete(customer)}
-                            className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
+                            className="danger-button"
                           >
                             삭제
                           </button>

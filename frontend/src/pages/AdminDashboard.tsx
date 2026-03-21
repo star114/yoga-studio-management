@@ -278,7 +278,7 @@ const AdminDashboard: React.FC = () => {
     return (
       <div
         key={item.id}
-        className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm ${meta.cardClassName}`}
+        className={`rounded-2xl border px-3 py-2 text-xs shadow-sm ${meta.cardClassName}`}
       >
         <div className="flex items-start justify-between gap-2">
           <p className="font-semibold truncate">{item.title}</p>
@@ -310,31 +310,33 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div>
-        <h1 className="text-3xl font-display font-bold text-primary-800 mb-2">
+        <p className="section-kicker mb-2">Studio Overview</p>
+        <h1 className="text-3xl font-display font-bold text-[var(--text-strong)] mb-2">
           대시보드
         </h1>
-        <p className="text-warm-600">오늘도 평온한 하루 되세요</p>
+        <p className="text-[var(--text-muted)]">오늘도 평온한 하루 되세요</p>
       </div>
 
-      <section className="card space-y-4">
+      <section className="card space-y-4 linen-texture">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xl font-display font-semibold text-primary-800">{classSnapshotHeading}</h2>
-            <p className="text-sm text-warm-600">
+            <p className="section-kicker mb-2">Class Snapshot</p>
+            <h2 className="text-xl font-display font-semibold text-[var(--text-strong)]">{classSnapshotHeading}</h2>
+            <p className="text-sm text-[var(--text-muted)]">
               {classSnapshot.target_date
                 ? formatKoreanDate(classSnapshot.target_date)
                 : '오늘이나 예정된 수업이 없습니다.'}
             </p>
           </div>
           {classSnapshot.target_date && (
-            <span className="inline-flex w-fit rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700">
+            <span className="studio-badge">
               {classSnapshot.basis === 'today' ? '오늘 일정' : '가장 가까운 예정일'}
             </span>
           )}
         </div>
 
         {classSnapshot.classes.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-warm-300 bg-warm-50 px-4 py-8 text-center text-warm-500">
+          <p className="rounded-2xl border border-dashed border-[rgba(122,93,72,0.18)] bg-[rgba(122,93,72,0.04)] px-4 py-8 text-center text-[var(--text-muted)]">
             표시할 수업이 없습니다.
           </p>
         ) : (
@@ -345,32 +347,32 @@ const AdminDashboard: React.FC = () => {
                 splitRegistrationComment(registration.registration_comment).length > 0
               );
               return (
-                <article key={item.id} className="overflow-hidden rounded-2xl border border-warm-200 bg-white/80 shadow-sm">
+                <article key={item.id} className="overflow-hidden rounded-[1.7rem] border border-[rgba(122,93,72,0.12)] bg-[rgba(255,251,247,0.84)] shadow-[0_14px_30px_rgba(91,65,49,0.08)]">
                   <button
                     type="button"
                     onClick={() => navigate(`/classes/${item.id}`)}
-                    className="flex w-full flex-col gap-3 border-b border-warm-100 px-4 py-4 text-left transition-colors hover:bg-warm-50 sm:flex-row sm:items-start sm:justify-between"
+                    className="flex w-full flex-col gap-3 border-b border-[rgba(122,93,72,0.08)] px-4 py-4 text-left transition-colors hover:bg-[rgba(122,93,72,0.04)] sm:flex-row sm:items-start sm:justify-between"
                   >
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-semibold text-primary-800">{item.title}</h3>
+                        <h3 className="text-lg font-semibold text-[var(--text-strong)]">{item.title}</h3>
                         <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${classMeta.badgeClassName}`}>
                           {classMeta.label}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-warm-600">
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
                         {normalizeTime(item.start_time)} - {normalizeTime(item.end_time)}
                         {typeof item.current_enrollment === 'number' && typeof item.max_capacity === 'number'
                           ? ` · 신청 ${item.current_enrollment}/${item.max_capacity}`
                           : ''}
                       </p>
                     </div>
-                    <span className="text-sm font-medium text-primary-700">상세 보기</span>
+                    <span className="text-sm font-medium text-[var(--accent-strong)]">상세 보기</span>
                   </button>
 
-                  <div className="divide-y divide-warm-100">
+                  <div className="divide-y divide-[rgba(122,93,72,0.08)]">
                     {commentedRegistrations.length === 0 ? (
-                      <p className="px-4 py-5 text-sm text-warm-500">남긴 코멘트가 없습니다.</p>
+                      <p className="px-4 py-5 text-sm text-[var(--text-muted)]">남긴 코멘트가 없습니다.</p>
                     ) : (
                       commentedRegistrations.map((registration) => {
                         const statusMeta = getRegistrationStatusMeta(registration.attendance_status);
@@ -379,19 +381,19 @@ const AdminDashboard: React.FC = () => {
                           <div key={registration.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                             <div className="space-y-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-medium text-primary-800">{registration.customer_name}</p>
+                                <p className="font-medium text-[var(--text-strong)]">{registration.customer_name}</p>
                                 <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusMeta.className}`}>
                                   {statusMeta.label}
                                 </span>
                               </div>
-                              <p className="text-sm text-warm-600">{registration.customer_phone}</p>
+                              <p className="text-sm text-[var(--text-muted)]">{registration.customer_phone}</p>
                             </div>
-                            <div className="rounded-xl bg-warm-50 px-3 py-3">
+                            <div className="rounded-2xl studio-inset px-3 py-3">
                               <div className="flex flex-wrap gap-2">
                                 {commentLines.map((commentLine) => (
                                   <span
                                     key={`${registration.id}-${commentLine}`}
-                                    className="max-w-full rounded-full border border-primary-200 bg-white px-3 py-1.5 text-sm text-primary-800"
+                                    className="max-w-full rounded-full border border-[rgba(122,93,72,0.14)] bg-[rgba(255,252,248,0.92)] px-3 py-1.5 text-sm text-[var(--text-strong)]"
                                     title={commentLine}
                                   >
                                     {commentLine}
@@ -414,17 +416,18 @@ const AdminDashboard: React.FC = () => {
       <section className="card space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-xl font-display font-semibold text-primary-800">수업 캘린더</h2>
-            <p className="text-sm text-warm-600">현재 날짜는 강조 표시됩니다.</p>
+            <p className="section-kicker mb-2">Schedule Rhythm</p>
+            <h2 className="text-xl font-display font-semibold text-[var(--text-strong)]">수업 캘린더</h2>
+            <p className="text-sm text-[var(--text-muted)]">현재 날짜는 강조 표시됩니다.</p>
           </div>
 
           <div className="flex w-full flex-wrap items-center gap-1.5 sm:gap-2 lg:w-auto">
-            <div className="inline-flex rounded-lg sm:rounded-xl border border-warm-200 bg-white/75 p-0.5 sm:p-1">
+            <div className="inline-flex rounded-2xl border border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.76)] p-0.5 sm:p-1">
               {(['month', 'week', 'day'] as CalendarView[]).map((view) => (
                 <button
                   key={view}
                   type="button"
-                  className={`px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg ${calendarView === view ? 'bg-primary-600 text-white' : 'text-primary-800 hover:bg-warm-100'}`}
+                  className={`px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-xl ${calendarView === view ? 'bg-[var(--accent-strong)] text-white shadow-[0_8px_18px_rgba(85,98,73,0.18)]' : 'text-[var(--text-strong)] hover:bg-[rgba(122,93,72,0.05)]'}`}
                   onClick={() => setCalendarView(view)}
                 >
                   {view === 'month' ? '월간' : view === 'week' ? '주간' : '일간'}
@@ -434,21 +437,21 @@ const AdminDashboard: React.FC = () => {
             <div className="ml-auto inline-flex items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
-                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-xl border border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.76)] text-[var(--text-strong)] hover:bg-[rgba(122,93,72,0.05)]"
                 onClick={() => setFocusDate(startOfDay(new Date()))}
               >
                 오늘
               </button>
               <button
                 type="button"
-                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-xl border border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.76)] text-[var(--text-strong)] hover:bg-[rgba(122,93,72,0.05)]"
                 onClick={movePrev}
               >
                 이전
               </button>
               <button
                 type="button"
-                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-md sm:rounded-lg border border-warm-200 bg-white/75 text-primary-800 hover:bg-warm-100"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-xl border border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.76)] text-[var(--text-strong)] hover:bg-[rgba(122,93,72,0.05)]"
                 onClick={moveNext}
               >
                 다음
@@ -458,7 +461,7 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center">
-          <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
+          <p className="text-lg font-semibold text-[var(--text-strong)]">{calendarTitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {(['open', 'in_progress', 'completed', 'closed'] as AdminClassStatus[]).map((status) => {
@@ -473,7 +476,7 @@ const AdminDashboard: React.FC = () => {
 
         {calendarView === 'month' && (
           <div className="space-y-2">
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-[11px] sm:text-xs text-warm-600">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-[11px] sm:text-xs text-[var(--text-muted)]">
               {WEEKDAY_LABELS.map((label) => (
                 <div key={label} className="text-center py-1 font-medium">{label}</div>
               ))}
@@ -494,19 +497,19 @@ const AdminDashboard: React.FC = () => {
                       setFocusDate(date);
                       setCalendarView('day');
                     }}
-                    className={`min-h-[58px] sm:min-h-[108px] rounded-lg sm:rounded-xl border p-1 sm:p-2 text-left transition-colors ${today ? 'border-primary-500 bg-primary-50/80' : active ? 'border-primary-300 bg-primary-50/50' : 'border-warm-200 bg-white/70'} ${inMonth ? 'text-primary-800' : 'text-warm-400'}`}
+                    className={`min-h-[58px] sm:min-h-[108px] rounded-2xl border p-1 sm:p-2 text-left transition-colors ${today ? 'border-[rgba(111,127,95,0.42)] bg-[rgba(223,230,212,0.55)]' : active ? 'border-[rgba(138,97,86,0.25)] bg-[rgba(245,237,229,0.92)]' : 'border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.72)]'} ${inMonth ? 'text-[var(--text-strong)]' : 'text-[rgba(133,112,96,0.62)]'}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`text-xs sm:text-sm font-semibold ${today ? 'text-primary-700' : ''}`}>{format(date, 'd')}</span>
-                      {today && <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-full bg-primary-600 text-white">오늘</span>}
+                      <span className={`text-xs sm:text-sm font-semibold ${today ? 'text-[var(--accent-strong)]' : ''}`}>{format(date, 'd')}</span>
+                      {today && <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-strong)] text-white">오늘</span>}
                     </div>
                     <div className="mt-2 space-y-1 hidden sm:block">
                       {dayClasses.slice(0, 2).map(renderClassChip)}
                       {dayClasses.length > 2 && (
-                        <p className="text-[11px] text-warm-600">+{dayClasses.length - 2}개 더 있음</p>
+                        <p className="text-[11px] text-[var(--text-muted)]">+{dayClasses.length - 2}개 더 있음</p>
                       )}
                     </div>
-                    <div className="sm:hidden mt-1 text-[10px] text-warm-600 font-medium min-h-[10px]">
+                    <div className="sm:hidden mt-1 text-[10px] text-[var(--text-muted)] font-medium min-h-[10px]">
                       {dayClasses.length > 0 ? `${dayClasses.length}개` : ''}
                     </div>
                   </button>
@@ -531,13 +534,13 @@ const AdminDashboard: React.FC = () => {
                     setFocusDate(date);
                     setCalendarView('day');
                   }}
-                  className={`rounded-xl border p-3 text-left min-h-[160px] ${today ? 'border-primary-500 bg-primary-50/80' : 'border-warm-200 bg-white/70'}`}
+                  className={`rounded-[1.6rem] border p-3 text-left min-h-[160px] ${today ? 'border-[rgba(111,127,95,0.42)] bg-[rgba(223,230,212,0.55)]' : 'border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.72)]'}`}
                 >
-                  <p className="text-xs text-warm-600">{WEEKDAY_LABELS[date.getDay()]}</p>
-                  <p className={`text-lg font-semibold ${today ? 'text-primary-700' : 'text-primary-800'}`}>{format(date, 'd')}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{WEEKDAY_LABELS[date.getDay()]}</p>
+                  <p className={`text-lg font-semibold ${today ? 'text-[var(--accent-strong)]' : 'text-[var(--text-strong)]'}`}>{format(date, 'd')}</p>
                   <div className="mt-2 space-y-1">
                     {dayClasses.length === 0 ? (
-                      <p className="text-xs text-warm-500">수업 없음</p>
+                      <p className="text-xs text-[var(--text-muted)]">수업 없음</p>
                     ) : (
                       dayClasses.map(renderClassChip)
                     )}
@@ -549,10 +552,10 @@ const AdminDashboard: React.FC = () => {
         )}
 
         {calendarView === 'day' && (
-          <div className="rounded-xl border border-warm-200 bg-white/70 p-4">
-            <p className="text-sm text-warm-600 mb-2">{formatKoreanDate(focusDate)}</p>
+          <div className="rounded-[1.7rem] border border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.76)] p-4">
+            <p className="text-sm text-[var(--text-muted)] mb-2">{formatKoreanDate(focusDate)}</p>
             {selectedDayClasses.length === 0 ? (
-              <p className="text-warm-500">해당 날짜에 등록된 수업이 없습니다.</p>
+              <p className="text-[var(--text-muted)]">해당 날짜에 등록된 수업이 없습니다.</p>
             ) : (
               <div className="space-y-2">
                 {selectedDayClasses.map((item) => (
@@ -595,11 +598,12 @@ const AdminDashboard: React.FC = () => {
         <div className="card hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-warm-600 mb-1">전체 회원</p>
-              <p className="text-3xl font-bold text-primary-800">{stats.totalCustomers}</p>
+              <p className="section-kicker mb-2">Members</p>
+              <p className="text-sm text-[var(--text-muted)] mb-1">전체 회원</p>
+              <p className="text-3xl font-bold text-[var(--text-strong)]">{stats.totalCustomers}</p>
             </div>
-            <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[rgba(223,230,212,0.86)]">
+              <svg className="w-6 h-6 text-[var(--accent-strong)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
@@ -609,11 +613,12 @@ const AdminDashboard: React.FC = () => {
         <div className="card hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-warm-600 mb-1">오늘 출석</p>
-              <p className="text-3xl font-bold text-primary-800">{stats.todayAttendance}</p>
+              <p className="section-kicker mb-2">Attendance</p>
+              <p className="text-sm text-[var(--text-muted)] mb-1">오늘 출석</p>
+              <p className="text-3xl font-bold text-[var(--text-strong)]">{stats.todayAttendance}</p>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[rgba(138,97,86,0.14)]">
+              <svg className="w-6 h-6 text-[var(--accent-clay)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
@@ -623,23 +628,23 @@ const AdminDashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+          <h2 className="text-xl font-display font-semibold text-[var(--text-strong)] mb-4">
             오늘 출석
           </h2>
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {todayAttendances.length === 0 ? (
-              <p className="text-warm-500 text-center py-8">아직 출석한 회원이 없습니다</p>
+              <p className="text-[var(--text-muted)] text-center py-8">아직 출석한 회원이 없습니다</p>
             ) : (
               todayAttendances.map((attendance) => (
-                <div key={attendance.id} className="flex items-center justify-between p-3 bg-warm-50 rounded-lg">
+                <div key={attendance.id} className="flex items-center justify-between rounded-2xl p-3 studio-inset">
                   <div>
-                    <p className="font-medium text-primary-800">{attendance.customer_name}</p>
-                    <p className="text-sm text-warm-600">
+                    <p className="font-medium text-[var(--text-strong)]">{attendance.customer_name}</p>
+                    <p className="text-sm text-[var(--text-muted)]">
                       {format(new Date(attendance.attendance_date), 'HH:mm')}
                     </p>
                   </div>
                   {attendance.class_type && (
-                    <span className="px-3 py-1 bg-primary-100 text-primary-700 text-sm rounded-full">
+                    <span className="rounded-full border border-[rgba(111,127,95,0.16)] bg-[rgba(223,230,212,0.86)] px-3 py-1 text-sm text-[var(--accent-strong)]">
                       {attendance.class_type}
                     </span>
                   )}
@@ -650,25 +655,25 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="card">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+          <h2 className="text-xl font-display font-semibold text-[var(--text-strong)] mb-4">
             최근 등록 회원
           </h2>
           <div className="space-y-3">
             {recentCustomers.length === 0 ? (
-              <p className="text-warm-500 text-center py-8">등록된 회원이 없습니다</p>
+              <p className="text-[var(--text-muted)] text-center py-8">등록된 회원이 없습니다</p>
             ) : (
               recentCustomers.map((customer) => (
                 <button
                   key={customer.id}
                   type="button"
                   onClick={() => navigate(`/customers/${customer.id}`)}
-                  className="w-full flex items-center justify-between p-3 bg-warm-50 rounded-lg hover:bg-warm-100 transition-colors text-left"
+                  className="w-full flex items-center justify-between rounded-2xl p-3 studio-inset hover:bg-[rgba(122,93,72,0.08)] transition-colors text-left"
                 >
                   <div>
-                    <p className="font-medium text-primary-800">{customer.name}</p>
-                    <p className="text-sm text-warm-600">{customer.phone}</p>
+                    <p className="font-medium text-[var(--text-strong)]">{customer.name}</p>
+                    <p className="text-sm text-[var(--text-muted)]">{customer.phone}</p>
                   </div>
-                  <div className="text-right text-sm text-warm-600">
+                  <div className="text-right text-sm text-[var(--text-muted)]">
                     <p>회원권 {customer.membership_count}개</p>
                     <p>출석 {customer.total_attendance}회</p>
                   </div>

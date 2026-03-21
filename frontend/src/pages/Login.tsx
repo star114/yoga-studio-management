@@ -28,77 +28,73 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center px-4">
-      <div className="pointer-events-none absolute -top-24 -left-20 h-80 w-80 rounded-full bg-primary-200/35 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 -right-16 h-96 w-96 rounded-full bg-warm-300/28 blur-3xl" />
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center fade-in">
-          <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-lg bg-gradient-to-br from-primary-500 to-primary-600">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center px-4 py-10">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[24rem] bg-[radial-gradient(circle_at_top,rgba(255,251,255,0.84),transparent_64%)]" />
+      <div className="pointer-events-none absolute -top-24 -left-20 h-80 w-80 rounded-full bg-[#cdb5d2]/34 blur-3xl" />
+      <div className="pointer-events-none absolute top-20 -right-16 h-96 w-96 rounded-full bg-[#ddd3e4]/28 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/2 h-48 w-[38rem] -translate-x-1/2 rounded-full bg-[rgba(255,250,255,0.56)] blur-3xl" />
+
+      <div className="max-w-md w-full mx-auto space-y-6">
+          <div className="text-center fade-in">
+            <div className="mx-auto mb-4 h-20 w-20 overflow-hidden rounded-[1.75rem] shadow-[0_18px_30px_rgba(112,88,118,0.18)] bg-[#b8a7bb]">
+              <img src="/soom-garden-logo.png" alt="" className="h-full w-full object-cover" />
+            </div>
+            <h2 className="text-4xl font-display font-bold text-[var(--text-strong)] mb-2">
+              숨의정원요가
+            </h2>
           </div>
-          <h1 className="text-4xl font-display font-bold text-primary-800 mb-2">
-            숨의정원요가
-          </h1>
-          <p className="text-warm-700">마음을 담은 회원 관리</p>
-        </div>
 
-        <div className="card fade-in" style={{ animationDelay: '0.1s' }}>
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="identifier" className="label">
-                아이디
-              </label>
-              <input
-                id="identifier"
-                name="identifier"
-                type="text"
-                autoComplete="username"
-                required
-                className="input-field"
-                placeholder="아이디를 입력하세요"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="label">
-                비밀번호
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="input-field"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
+          <div className="card fade-in calm-sheen" style={{ animationDelay: '0.1s' }}>
+            <form className="space-y-6 relative" onSubmit={handleSubmit}>
+              <div>
+                <label htmlFor="identifier" className="label">
+                  아이디
+                </label>
+                <input
+                  id="identifier"
+                  name="identifier"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  className="input-field"
+                  placeholder="아이디를 입력하세요"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? '로그인 중...' : '로그인'}
-            </button>
-          </form>
-        </div>
+              <div>
+                <label htmlFor="password" className="label">
+                  비밀번호
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  className="input-field"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
 
-        <p className="text-center text-sm text-warm-600 fade-in" style={{ animationDelay: '0.2s' }}>
-          평온함이 시작되는 곳
-        </p>
+              {error && (
+                <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? '로그인 중...' : '로그인'}
+              </button>
+            </form>
+          </div>
       </div>
     </div>
   );
