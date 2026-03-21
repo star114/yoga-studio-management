@@ -750,8 +750,9 @@ const ClassDetail: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-display font-bold text-primary-800">수업 상세</h1>
-          <p className="text-warm-600 mt-2">
+          <p className="section-kicker mb-2">Class Detail</p>
+          <h1 className="page-title">수업 상세</h1>
+          <p className="page-description mt-2">
             {formatKoreanDateTime(classDetail.class_date, classDetail.start_time)} ~ {formatKoreanTime(classDetail.end_time)} / {classDetail.title}
           </p>
         </div>
@@ -765,7 +766,7 @@ const ClassDetail: React.FC = () => {
 
       <section className="card">
         <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800">수업 정보</h2>
+          <h2 className="card-title">수업 정보</h2>
           <div className="flex items-center gap-2">
             {!isEditingClass && (
               <button
@@ -778,7 +779,7 @@ const ClassDetail: React.FC = () => {
             )}
             <button
               type="button"
-              className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="danger-button disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => void handleDeleteClass()}
               disabled={isClassDeleting || isClassSaving}
             >
@@ -887,10 +888,10 @@ const ClassDetail: React.FC = () => {
           </form>
         ) : (
           <>
-            <p className="text-warm-700">
+            <p className="text-[var(--text-body)]">
               신청 {classDetail.current_enrollment ?? 0}명 / 잔여 {classDetail.remaining_seats ?? classDetail.max_capacity}자리
             </p>
-            <p className="text-warm-700 mt-2">상태: {classStatusLabel}</p>
+            <p className="text-[var(--text-body)] mt-2">상태: {classStatusLabel}</p>
           </>
         )}
       </section>

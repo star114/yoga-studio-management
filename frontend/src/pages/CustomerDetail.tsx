@@ -706,15 +706,16 @@ const CustomerDetail: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-bold text-primary-800">고객 상세</h1>
-          <p className="text-warm-600">회원권 지급 및 관리</p>
+          <p className="section-kicker mb-2">Customer Detail</p>
+          <h1 className="page-title">고객 상세</h1>
+          <p className="page-description">회원권 지급 및 관리</p>
         </div>
         <Link to="/customers" className="btn-secondary">목록으로</Link>
       </div>
 
       <section className="card">
         <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 className="text-xl font-display font-semibold text-primary-800">기본 정보</h2>
+          <h2 className="card-title">기본 정보</h2>
           <div className="flex items-center gap-2">
             {!isEditingCustomer && (
               <button type="button" className="btn-secondary" onClick={startEditCustomer}>
@@ -777,12 +778,12 @@ const CustomerDetail: React.FC = () => {
         ) : (
           <div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customer.name}</span></p>
-              <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customer.phone}</span></p>
+              <p><span className="muted-note">이름:</span> <span className="text-[var(--text-strong)] font-medium">{customer.name}</span></p>
+              <p><span className="muted-note">전화번호:</span> <span className="text-[var(--text-strong)]">{customer.phone}</span></p>
             </div>
             {customer.notes && (
-              <div className="mt-3 text-sm text-warm-700">
-                <span className="text-warm-600">메모:</span> {customer.notes}
+              <div className="mt-3 text-sm text-[var(--text-body)]">
+                <span className="muted-note">메모:</span> {customer.notes}
               </div>
             )}
           </div>
@@ -798,7 +799,7 @@ const CustomerDetail: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <section className="card xl:col-span-1">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">회원권 발급</h2>
+          <h2 className="card-title mb-4">회원권 발급</h2>
           <form className="space-y-4" onSubmit={handleCreateMembership}>
             <div>
               <label className="label" htmlFor="membership-type">회원권 관리</label>
@@ -835,7 +836,7 @@ const CustomerDetail: React.FC = () => {
         </section>
 
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">지급된 회원권</h2>
+          <h2 className="card-title mb-4">지급된 회원권</h2>
           {memberships.length === 0 ? (
             <p className="text-warm-600 py-6 text-center">등록된 회원권이 없습니다.</p>
           ) : (

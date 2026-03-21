@@ -349,8 +349,9 @@ const CustomerClassDetail: React.FC = () => {
     <div className="space-y-6 fade-in">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-display font-bold text-primary-800">수업 상세</h1>
-          <p className="text-warm-600 mt-2">
+          <p className="section-kicker mb-2">Class Detail</p>
+          <h1 className="page-title">수업 상세</h1>
+          <p className="page-description mt-2">
             {formatKoreanDateTime(detail.class_date, detail.start_time)} ~ {formatKoreanTime(detail.end_time)} / {detail.title}
           </p>
         </div>
@@ -360,17 +361,17 @@ const CustomerClassDetail: React.FC = () => {
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
 
       <section className="card space-y-3">
-        <h2 className="text-xl font-display font-semibold text-primary-800">나의 수업 정보</h2>
-        <p className="text-warm-700">출석 여부: <span className="font-semibold text-primary-800">{attendanceLabel}</span></p>
-        <p className="text-warm-700">연결 회원권: <span className="font-semibold text-primary-800">{linkedMembershipLabel}</span></p>
+        <h2 className="card-title">나의 수업 정보</h2>
+        <p className="text-[var(--text-body)]">출석 여부: <span className="font-semibold text-[var(--text-strong)]">{attendanceLabel}</span></p>
+        <p className="text-[var(--text-body)]">연결 회원권: <span className="font-semibold text-[var(--text-strong)]">{linkedMembershipLabel}</span></p>
       </section>
 
       {detail.attendance_status === 'reserved' ? (
         <section className="card space-y-4">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <h2 className="text-xl font-display font-semibold text-primary-800">강사에게 전달할 코멘트</h2>
-              <p className="text-xs text-warm-600 mt-1">여러 개 선택할 수 있어요.</p>
+              <h2 className="card-title">강사에게 전달할 코멘트</h2>
+              <p className="text-xs muted-note mt-1">여러 개 선택할 수 있어요.</p>
             </div>
             {detail.registration_comment?.trim() && (
               <button
@@ -439,7 +440,7 @@ const CustomerClassDetail: React.FC = () => {
                 disabled={isSavingComment}
               />
               <div className="flex items-center justify-between">
-                <p className="text-xs text-warm-500">{directCommentInput.trim().length}/500</p>
+                <p className="text-xs muted-note">{directCommentInput.trim().length}/500</p>
                 <button
                   type="button"
                   onClick={async () => {
@@ -463,14 +464,14 @@ const CustomerClassDetail: React.FC = () => {
         </section>
       ) : (
         <section className="card space-y-3">
-          <h2 className="text-xl font-display font-semibold text-primary-800">수업 전 코멘트 (신청 시)</h2>
-          <p className="text-warm-700">{detail.registration_comment?.trim() || '-'}</p>
+          <h2 className="card-title">수업 전 코멘트 (신청 시)</h2>
+          <p className="text-[var(--text-body)]">{detail.registration_comment?.trim() || '-'}</p>
         </section>
       )}
 
       {detail.attendance_status === 'attended' && (
         <section className="card space-y-4">
-          <h2 className="text-xl font-display font-semibold text-primary-800">수업 후 코멘트 대화</h2>
+          <h2 className="card-title">수업 후 코멘트 대화</h2>
           {isThreadLoading ? (
             <p className="text-warm-600 text-sm">대화 불러오는 중...</p>
           ) : threadMessages.length === 0 ? (

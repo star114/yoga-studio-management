@@ -155,13 +155,14 @@ const AdminAccountManagement: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">관리자 계정 관리</h1>
-        <p className="text-warm-600">운영 관리자 로그인 계정을 생성/삭제하고 비밀번호를 재설정합니다.</p>
+        <p className="section-kicker">Admin Control</p>
+        <h1 className="page-title">관리자 계정 관리</h1>
+        <p className="page-description">운영 관리자 로그인 계정을 생성/삭제하고 비밀번호를 재설정합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">신규 관리자 계정 생성</h2>
+          <h2 className="card-title mb-4">신규 관리자 계정 생성</h2>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
@@ -207,7 +208,7 @@ const AdminAccountManagement: React.FC = () => {
 
         <section className="card xl:col-span-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <h2 className="text-xl font-display font-semibold text-primary-800">관리자 계정 목록</h2>
+            <h2 className="card-title">관리자 계정 목록</h2>
             <input
               className="input-field md:max-w-xs"
               placeholder="로그인 ID 검색"
@@ -223,35 +224,35 @@ const AdminAccountManagement: React.FC = () => {
           )}
 
           {isLoading ? (
-            <p className="text-warm-600 py-8 text-center">관리자 계정 불러오는 중...</p>
+            <p className="muted-note py-8 text-center">관리자 계정 불러오는 중...</p>
           ) : filteredAccounts.length === 0 ? (
-            <p className="text-warm-600 py-8 text-center">표시할 관리자 계정이 없습니다.</p>
+            <p className="muted-note py-8 text-center">표시할 관리자 계정이 없습니다.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-warm-200 text-left text-warm-600">
-                    <th className="py-2 pr-4">로그인 ID</th>
-                    <th className="py-2 pr-4">생성일</th>
-                    <th className="py-2 pr-0 text-right">작업</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="table-shell overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left">
+                      <th className="py-3 pl-4 pr-4 sm:pl-6">로그인 ID</th>
+                      <th className="py-2 pr-4">생성일</th>
+                      <th className="py-3 pl-4 pr-4 text-right sm:pr-6">작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                   {filteredAccounts.map((account) => {
                     const isCurrentUser = user?.id === account.id;
                     return (
-                      <tr key={account.id} className="border-b border-warm-100">
-                        <td className="py-3 pr-4 font-medium text-primary-800">
+                      <tr key={account.id}>
+                        <td className="py-3 pl-4 pr-4 font-medium text-[var(--text-strong)] sm:pl-6">
                           {account.login_id}
-                          {isCurrentUser ? <span className="ml-2 text-xs text-warm-500">(내 계정)</span> : null}
+                          {isCurrentUser ? <span className="ml-2 text-xs muted-note">(내 계정)</span> : null}
                         </td>
                         <td className="py-3 pr-4">{formatCreatedAt(account.created_at)}</td>
-                        <td className="py-3 pr-0">
+                        <td className="py-3 pl-4 pr-4 sm:pr-6">
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => openResetDialog(account)}
-                              className="px-3 py-1.5 rounded-md bg-primary-100 text-primary-800 hover:bg-primary-200"
+                              className="soft-link-button"
                             >
                               비밀번호 재설정
                             </button>
@@ -259,7 +260,7 @@ const AdminAccountManagement: React.FC = () => {
                               type="button"
                               disabled={isCurrentUser}
                               onClick={() => handleDelete(account)}
-                              className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="danger-button disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               삭제
                             </button>

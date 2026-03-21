@@ -420,13 +420,14 @@ const ClassManagement: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">수업 관리</h1>
-        <p className="text-warm-600">수업 생성/삭제와 전체 목록 필터링을 관리합니다.</p>
+        <p className="section-kicker">Class Schedule</p>
+        <h1 className="page-title">수업 관리</h1>
+        <p className="page-description">수업 생성/삭제와 전체 목록 필터링을 관리합니다.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+          <h2 className="card-title mb-4">
             수업 추가
           </h2>
 
@@ -497,7 +498,7 @@ const ClassManagement: React.FC = () => {
               />
             </div>
 
-            <label className="inline-flex items-center gap-2 text-sm text-warm-700">
+            <label className="inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
               <input
                 type="checkbox"
                 checked={form.is_open}
@@ -506,8 +507,8 @@ const ClassManagement: React.FC = () => {
               오픈 상태
             </label>
 
-            <div className="space-y-3 rounded-lg border border-warm-200 bg-warm-50 p-3">
-              <label className="inline-flex items-center gap-2 text-sm text-warm-700">
+            <div className="space-y-3 rounded-2xl studio-inset p-3">
+              <label className="inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
                 <input
                   type="checkbox"
                   checked={isRecurringCreate}
@@ -544,7 +545,7 @@ const ClassManagement: React.FC = () => {
                     <p className="label mb-1">반복 요일</p>
                     <div className="flex flex-wrap gap-2">
                       {WEEKDAY_OPTIONS.map((option) => (
-                        <label key={option.value} className="inline-flex items-center gap-1 text-sm text-warm-700">
+                        <label key={option.value} className="inline-flex items-center gap-1 text-sm text-[var(--text-body)]">
                           <input
                             type="checkbox"
                             checked={recurrenceWeekdays.includes(option.value)}
@@ -595,8 +596,8 @@ const ClassManagement: React.FC = () => {
         <section className="card xl:col-span-3">
           <div className="space-y-3 mb-4">
             <div className="space-y-1">
-              <h2 className="text-xl font-display font-semibold text-primary-800">전체 수업 목록</h2>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-warm-700">
+              <h2 className="card-title">전체 수업 목록</h2>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-body)]">
                 {STATUS_LEGEND.map((status) => (
                   <span key={status.key} className="inline-flex items-center gap-1.5">
                     <span
@@ -625,7 +626,7 @@ const ClassManagement: React.FC = () => {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-                <p className="text-sm text-warm-600 whitespace-nowrap">
+                <p className="text-sm muted-note whitespace-nowrap">
                   총 {totalClasses}건 · {page}/{totalPages} 페이지
                 </p>
               </div>
@@ -634,9 +635,9 @@ const ClassManagement: React.FC = () => {
 
           {isFilterModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-              <div className="w-full max-w-md rounded-xl border border-warm-200 bg-white p-5 shadow-xl space-y-4">
+              <div className="w-full max-w-md rounded-[1.7rem] border border-[rgba(122,93,72,0.14)] bg-[rgba(255,250,244,0.98)] p-5 shadow-xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-display font-semibold text-primary-800">필터 설정</h3>
+                  <h3 className="text-lg font-display font-semibold text-[var(--text-strong)]">필터 설정</h3>
                   <button
                     type="button"
                     className="btn-secondary"
@@ -646,7 +647,7 @@ const ClassManagement: React.FC = () => {
                   </button>
                 </div>
 
-                <label className="inline-flex items-center gap-2 text-sm text-warm-700">
+                <label className="inline-flex items-center gap-2 text-sm text-[var(--text-body)]">
                   <input
                     type="checkbox"
                     checked={draftShowOpenOnly}
@@ -717,30 +718,30 @@ const ClassManagement: React.FC = () => {
           )}
 
           {isLoading ? (
-            <p className="text-warm-600 py-8 text-center">수업 목록 불러오는 중...</p>
+            <p className="muted-note py-8 text-center">수업 목록 불러오는 중...</p>
           ) : filteredClasses.length === 0 ? (
-            <p className="text-warm-600 py-8 text-center">표시할 수업이 없습니다.</p>
+            <p className="muted-note py-8 text-center">표시할 수업이 없습니다.</p>
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto">
+              <div className="table-shell overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-warm-200 text-left text-warm-600">
-                      <th className="py-2 pr-4">수업명</th>
+                    <tr className="text-left">
+                      <th className="py-3 pl-4 pr-4 sm:pl-6">수업명</th>
                       <th className="py-2 pr-4">일정</th>
                       <th className="py-2 pr-4">제한 인원</th>
                       <th className="py-2 pr-4">신청 인원</th>
                       <th className="py-2 pr-4">잔여 자리</th>
                       <th className="py-2 pr-4">상태</th>
-                      <th className="py-2 pr-0 text-right">작업</th>
+                      <th className="py-3 pl-4 pr-4 text-right sm:pr-6">작업</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pagedClasses.map((item) => {
                       const status = getClassStatusIndicator(item);
                       return (
-                        <tr key={item.id} className="border-b border-warm-100">
-                          <td className="py-3 pr-4 font-medium text-primary-800">{item.title}</td>
+                        <tr key={item.id}>
+                          <td className="py-3 pl-4 pr-4 font-medium text-[var(--text-strong)] sm:pl-6">{item.title}</td>
                           <td className="py-3 pr-4">{formatKoreanDateTime(item.class_date, item.start_time)} ~ {formatKoreanTime(item.end_time)}</td>
                           <td className="py-3 pr-4">{item.max_capacity}명</td>
                           <td className="py-3 pr-4">{item.current_enrollment ?? 0}명</td>
@@ -757,7 +758,7 @@ const ClassManagement: React.FC = () => {
                               title={status.label}
                             />
                           </td>
-                          <td className="py-3 pr-0">
+                          <td className="py-3 pl-4 pr-4 sm:pr-6">
                             <div className="flex justify-end gap-2">
                               <Link
                                 to={`/classes/${item.id}`}

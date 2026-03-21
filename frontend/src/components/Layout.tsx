@@ -29,32 +29,34 @@ const Layout: React.FC = () => {
   const navClassName = ({ isActive }: { isActive: boolean }) =>
     `inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
       isActive
-        ? 'bg-white text-primary-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border border-white/90'
-        : 'text-slate-600 hover:text-primary-800 border border-transparent'
+        ? 'bg-[rgba(255,249,242,0.96)] text-[var(--text-strong)] shadow-[0_8px_20px_rgba(91,65,49,0.12)] border border-[rgba(122,93,72,0.14)]'
+        : 'text-[var(--text-muted)] hover:text-[var(--text-strong)] border border-transparent'
     }`;
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      <div className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-[#b8d3ff]/40 blur-3xl" />
-      <div className="pointer-events-none absolute top-20 -right-24 h-80 w-80 rounded-full bg-[#d3e6ff]/42 blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(circle_at_top,rgba(255,251,255,0.82),transparent_64%)]" />
+      <div className="pointer-events-none absolute -top-28 left-[-5rem] h-80 w-80 rounded-full bg-[#cdb5d2]/34 blur-3xl" />
+      <div className="pointer-events-none absolute top-20 right-[-4rem] h-96 w-96 rounded-full bg-[#ddd3e4]/30 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-6rem] left-1/3 h-64 w-64 rounded-full bg-[#efe3f1]/28 blur-3xl" />
 
-      {/* 헤더 */}
-      <header className="sticky top-0 z-20 bg-white/58 backdrop-blur-xl border-b border-white/60 shadow-[0_1px_0_rgba(255,255,255,0.6)]">
+      <header className="sticky top-0 z-20 border-b border-[rgba(124,102,126,0.12)] bg-[rgba(245,237,245,0.78)] backdrop-blur-md shadow-[0_1px_0_rgba(255,255,255,0.56)]">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16">
+          <div className="flex items-center justify-between h-16 sm:h-[4.75rem]">
             <div className="flex items-center flex-1">
               <div className="flex items-center space-x-2.5 sm:space-x-3">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-primary-600 rounded-full flex items-center justify-center shadow-[0_6px_16px_rgba(10,132,255,0.26)]">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 5.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM12 9.5v2.2m0 0l-3.2 2.1m3.2-2.1l3.2 2.1M8.8 13.8l-1.9 3.2m8.3-3.2l1.9 3.2M9.7 17h4.6M7.8 19h8.4" />
-                  </svg>
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-[1.25rem] overflow-hidden shadow-[0_14px_24px_rgba(112,88,118,0.22)] bg-[#b8a7bb]">
+                  <img src="/soom-garden-logo.png" alt="" className="h-full w-full object-cover" />
                 </div>
-                <h1 className="text-base sm:text-xl font-display font-bold text-primary-800">
-                  숨의정원요가
-                </h1>
+                <div>
+                  <p className="section-kicker hidden sm:block">Breath And Balance</p>
+                  <h1 className="text-lg sm:text-[1.55rem] font-display font-bold text-[var(--text-strong)]">
+                    숨의정원요가
+                  </h1>
+                </div>
               </div>
 
-              <nav className="hidden md:inline-flex items-center gap-1 mx-auto ios-segment">
+              <nav className="hidden md:inline-flex items-center gap-1 mx-auto ios-segment bg-[rgba(184,167,187,0.12)]">
                 {navItems.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.end} className={navClassName}>
                     {item.label}
@@ -65,17 +67,17 @@ const Layout: React.FC = () => {
 
             <div className="flex items-center space-x-2 sm:space-x-4">
               <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium text-primary-800">
+                <p className="text-sm font-medium text-[var(--text-strong)]">
                   {user?.login_id || '-'}
                 </p>
-                <p className="text-xs text-warm-600">
+                <p className="text-xs text-[var(--text-muted)]">
                   {user?.role === 'admin' ? '관리자' : '회원(아이디 로그인)'}
                 </p>
               </div>
               <button
                 onClick={logout}
                 aria-label="로그아웃"
-                className="inline-flex items-center justify-center gap-2 px-2.5 py-2 sm:px-4 text-sm font-medium text-warm-700 hover:text-primary-800 transition-colors rounded-xl hover:bg-white/70"
+                className="inline-flex items-center justify-center gap-2 px-2.5 py-2 sm:px-4 text-sm font-medium text-[var(--text-body)] hover:text-[var(--text-strong)] transition-colors rounded-xl hover:bg-[rgba(255,250,255,0.72)]"
               >
                 <svg
                   className="w-5 h-5 sm:w-4 sm:h-4"
@@ -96,7 +98,7 @@ const Layout: React.FC = () => {
           </div>
 
           <nav className="md:hidden pb-3 flex justify-center">
-            <div className="ios-segment max-w-full overflow-x-auto no-scrollbar whitespace-nowrap">
+            <div className="ios-segment max-w-full overflow-x-auto no-scrollbar whitespace-nowrap bg-[rgba(184,167,187,0.12)]">
               {navItems.map((item) => (
                 <NavLink key={`mobile-${item.to}`} to={item.to} end={item.end} className={navClassName}>
                   {item.label}
@@ -107,15 +109,13 @@ const Layout: React.FC = () => {
         </div>
       </header>
 
-      {/* 메인 컨텐츠 */}
       <main className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8">
         <Outlet />
       </main>
 
-      {/* 푸터 */}
-      <footer className="mt-auto border-t border-white/70 bg-white/58 backdrop-blur-md">
+      <footer className="mt-auto border-t border-[rgba(124,102,126,0.12)] bg-[rgba(245,237,245,0.72)] backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <p className="text-center text-sm text-warm-500">
+          <p className="text-center text-sm text-[var(--text-muted)]">
             © 2026 Yoga Studio Management.
           </p>
         </div>

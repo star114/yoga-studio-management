@@ -50,21 +50,22 @@ const CustomerProfile: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div>
-        <h1 className="text-3xl font-display font-bold text-primary-800 mb-2">내 정보</h1>
-        <p className="text-warm-600">내 계정 정보를 확인하고 비밀번호를 변경할 수 있습니다.</p>
+        <p className="section-kicker mb-2">My Account</p>
+        <h1 className="page-title mb-2">내 정보</h1>
+        <p className="page-description">내 계정 정보를 확인하고 비밀번호를 변경할 수 있습니다.</p>
       </div>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">기본 정보</h2>
+        <h2 className="card-title mb-4">기본 정보</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <p><span className="text-warm-600">이름:</span> <span className="text-primary-800 font-medium">{customerInfo?.name || '-'}</span></p>
-          <p><span className="text-warm-600">전화번호:</span> <span className="text-primary-800">{customerInfo?.phone || '-'}</span></p>
-          <p><span className="text-warm-600">로그인 방식:</span> <span className="text-primary-800">전화번호</span></p>
+          <p><span className="muted-note">이름:</span> <span className="text-[var(--text-strong)] font-medium">{customerInfo?.name || '-'}</span></p>
+          <p><span className="muted-note">전화번호:</span> <span className="text-[var(--text-strong)]">{customerInfo?.phone || '-'}</span></p>
+          <p><span className="muted-note">로그인 방식:</span> <span className="text-[var(--text-strong)]">전화번호</span></p>
         </div>
       </section>
 
       <section className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">비밀번호 변경</h2>
+        <h2 className="card-title mb-4">비밀번호 변경</h2>
         <form className="space-y-4 max-w-xl" onSubmit={handleSubmit}>
           <div>
             <label className="label" htmlFor="current-password">현재 비밀번호</label>
