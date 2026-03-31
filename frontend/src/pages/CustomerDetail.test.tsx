@@ -377,7 +377,7 @@ describe('CustomerDetail page', () => {
     consoleSpy.mockRestore();
   });
 
-  it('renders attended, reserved, and absent activities together', async () => {
+  it('renders attended, reserved, hold, and absent activities together', async () => {
     getClassActivitiesMock.mockResolvedValueOnce({
       data: {
         items: [
@@ -398,6 +398,14 @@ describe('CustomerDetail page', () => {
             class_start_time: '10:00:00',
           },
           {
+            activity_type: 'hold',
+            activity_id: 104,
+            class_id: 204,
+            class_title: '테라피',
+            class_date: '2026-02-21',
+            class_start_time: '10:30:00',
+          },
+          {
             activity_type: 'absent',
             activity_id: 103,
             class_id: 203,
@@ -406,7 +414,7 @@ describe('CustomerDetail page', () => {
             class_start_time: '11:00:00',
           },
         ],
-        pagination: { page: 1, page_size: 10, total: 3, total_pages: 1 },
+        pagination: { page: 1, page_size: 10, total: 4, total_pages: 1 },
       },
     });
 
@@ -415,11 +423,13 @@ describe('CustomerDetail page', () => {
     await waitFor(() => expect(screen.getByText('수업 기록 (출석/예약/결석)')).toBeTruthy());
     expect(screen.getByText('아쉬탕가')).toBeTruthy();
     expect(screen.getByText('빈야사')).toBeTruthy();
+    expect(screen.getByText('테라피')).toBeTruthy();
     expect(screen.getByText('하타')).toBeTruthy();
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('예약')).toBeTruthy();
+    expect(screen.getByText('보류')).toBeTruthy();
     expect(screen.getByText('결석')).toBeTruthy();
-    expect(screen.queryAllByRole('button', { name: '예약 취소' })).toHaveLength(1);
+    expect(screen.queryAllByRole('button', { name: '예약 취소' })).toHaveLength(2);
     expect(screen.queryAllByRole('button', { name: '결석 처리' })).toHaveLength(1);
   });
 
@@ -1583,6 +1593,46 @@ describe('CustomerDetail page', () => {
 
     const absentButton = await screen.findByRole('button', { name: '결석' });
     expect((absentButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows hold classes as already processed in recommended classes', async () => {
+    getByCustomerMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 43,
+          membership_type_name: '아쉬탕가',
+          remaining_sessions: 5,
+          available_sessions: 5,
+          is_active: true,
+          notes: null,
+        },
+      ],
+    });
+    getRecommendedClassesMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 902,
+            title: '아쉬탕가',
+            class_date: '2026-03-12',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            remaining_seats: 4,
+            current_enrollment: 1,
+            is_registered: true,
+            existing_status: 'hold',
+          },
+        ],
+        pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
+
+    const holdButton = await screen.findByRole('button', { name: '보류' });
+    expect((holdButton as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('updates only the selected class when quick reserving among multiple recommendations', async () => {

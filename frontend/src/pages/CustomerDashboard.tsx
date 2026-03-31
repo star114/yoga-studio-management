@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { attendanceAPI, classAPI } from '../services/api';
+import { attendanceAPI, classAPI, type RegistrationAttendanceStatus } from '../services/api';
 import { formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
 
 interface CustomerAttendance {
@@ -18,7 +18,7 @@ interface CustomerAttendance {
 interface MyRegistrationClass {
   registration_id: number;
   class_id: number;
-  attendance_status: 'reserved' | 'attended' | 'absent';
+  attendance_status: RegistrationAttendanceStatus;
   registration_comment?: string | null;
   title: string;
   class_date: string;
@@ -68,6 +68,24 @@ const composeRegistrationComment = (quickComments: string[], directInput: string
   return parts.join('\n');
 };
 
+export const selectNextUpcomingReservedClass = (
+  registrationItems: MyRegistrationClass[],
+  now = new Date()
+) => {
+  const nextClasses = registrationItems.filter((item) => {
+    const classStartAt = new Date(`${normalizeDate(item.class_date)}T${String(item.start_time).slice(0, 8)}`);
+    return classStartAt >= now && item.attendance_status === 'reserved';
+  });
+
+  nextClasses.sort((a, b) => {
+    const aStartAt = new Date(`${normalizeDate(a.class_date)}T${String(a.start_time).slice(0, 8)}`).getTime();
+    const bStartAt = new Date(`${normalizeDate(b.class_date)}T${String(b.start_time).slice(0, 8)}`).getTime();
+    return aStartAt - bStartAt;
+  });
+
+  return nextClasses[0] || null;
+};
+
 const CustomerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,18 +110,7 @@ const CustomerDashboard: React.FC = () => {
     try {
       const registrationsRes = await classAPI.getMyRegistrations();
       const registrationItems = registrationsRes.data as MyRegistrationClass[];
-
-      const now = new Date();
-      const nextClasses = registrationItems.filter((item) => {
-        const classStartAt = new Date(`${normalizeDate(item.class_date)}T${String(item.start_time).slice(0, 8)}`);
-        return classStartAt >= now && item.attendance_status === 'reserved';
-      });
-      nextClasses.sort((a, b) => {
-        const aStartAt = new Date(`${normalizeDate(a.class_date)}T${String(a.start_time).slice(0, 8)}`).getTime();
-        const bStartAt = new Date(`${normalizeDate(b.class_date)}T${String(b.start_time).slice(0, 8)}`).getTime();
-        return aStartAt - bStartAt;
-      });
-      setNextUpcomingClass(nextClasses[0] || null);
+      setNextUpcomingClass(selectNextUpcomingReservedClass(registrationItems));
     } catch (error) {
       console.error('Failed to load upcoming class data:', error);
     }

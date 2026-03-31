@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { attendanceAPI, classAPI, customerAPI, membershipAPI } from '../services/api';
+import { attendanceAPI, classAPI, customerAPI, membershipAPI, type RegistrationAttendanceStatus } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getCrossMembershipConfirmationMessage,
@@ -51,7 +51,7 @@ interface ClassRegistration {
   id: number;
   class_id: number;
   customer_id: number;
-  attendance_status?: 'reserved' | 'attended' | 'absent';
+  attendance_status?: RegistrationAttendanceStatus;
   registered_at: string;
   registration_comment?: string | null;
   attendance_id?: number | null;
@@ -621,8 +621,8 @@ const ClassDetail: React.FC = () => {
 
   const handleAttendanceStatusChange = async (
     customerId: number,
-    currentStatus: 'reserved' | 'attended' | 'absent',
-    attendanceStatus: 'reserved' | 'attended' | 'absent'
+    currentStatus: RegistrationAttendanceStatus,
+    attendanceStatus: RegistrationAttendanceStatus
   ) => {
     if (currentStatus !== 'attended' && attendanceStatus === 'attended') {
       await handleCheckIn(customerId);
@@ -1026,6 +1026,8 @@ const ClassDetail: React.FC = () => {
                     <p className="text-xs text-warm-600 mt-1">
                       출석 상태: {registration.attendance_status === 'attended'
                         ? '출석'
+                        : registration.attendance_status === 'hold'
+                          ? '보류'
                         : registration.attendance_status === 'absent'
                           ? '결석'
                           : '예약'}
@@ -1037,7 +1039,7 @@ const ClassDetail: React.FC = () => {
                       onClick={() => void handleCancelRegistration(registration.customer_id)}
                       disabled={
                         classDetail.class_status === 'completed'
-                        || registration.attendance_status !== 'reserved'
+                        || !['reserved', 'hold'].includes(registration.attendance_status || 'reserved')
                       }
                       className="px-3 py-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -1066,16 +1068,17 @@ const ClassDetail: React.FC = () => {
                     className="input-field md:max-w-xs"
                     value={registration.attendance_status || 'reserved'}
                     onChange={(event) => {
-                      const currentStatus = (registration.attendance_status || 'reserved') as 'reserved' | 'attended' | 'absent';
+                      const currentStatus = (registration.attendance_status || 'reserved') as RegistrationAttendanceStatus;
                       void handleAttendanceStatusChange(
                         registration.customer_id,
                         currentStatus,
-                        event.target.value as 'reserved' | 'attended' | 'absent'
+                        event.target.value as RegistrationAttendanceStatus
                       );
                     }}
                     disabled={savingAttendanceStatusCustomerId === registration.customer_id}
                   >
                     <option value="reserved">예약</option>
+                    <option value="hold">보류</option>
                     <option value="attended">출석</option>
                     <option value="absent">결석</option>
                   </select>

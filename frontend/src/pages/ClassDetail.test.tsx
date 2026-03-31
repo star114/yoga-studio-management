@@ -184,6 +184,28 @@ describe('ClassDetail page', () => {
     expect(classGetByIdMock).not.toHaveBeenCalled();
   });
 
+  it('renders hold status label in registration list', async () => {
+    classGetRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: 1,
+          class_id: 1,
+          customer_id: 101,
+          attendance_status: 'hold',
+          registered_at: '2026-03-01T01:00:00.000Z',
+          registration_comment: '기존 코멘트',
+          attendance_id: null,
+          customer_name: '홍길동',
+          customer_phone: '010-1111-2222',
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('출석 상태: 보류')).toBeTruthy());
+  });
+
   it('shows load error from API', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     classGetByIdMock.mockRejectedValueOnce(new Error('load failed'));

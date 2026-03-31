@@ -1,6 +1,8 @@
 import pool from '../config/database';
 import { buildMembershipClassTitleMatchExistsSql } from '../utils/membershipClassTitles';
 
+const SEAT_OCCUPYING_REGISTRATION_STATUSES = ['reserved', 'attended', 'absent'] as const;
+
 const toBool = (value: string | undefined, defaultValue: boolean): boolean => {
   if (!value) return defaultValue;
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
@@ -287,7 +289,7 @@ export const startClassAutoCloseWorker = () => {
              SELECT 1
              FROM yoga_class_registrations r
              WHERE r.class_id = yoga_classes.id
-               AND r.attendance_status = 'reserved'
+               AND r.attendance_status = ANY($1::text[])
                AND NOT EXISTS (
                  SELECT 1
                  FROM yoga_attendances a
@@ -295,7 +297,8 @@ export const startClassAutoCloseWorker = () => {
                    AND a.customer_id = r.customer_id
                )
            )
-         RETURNING id`
+         RETURNING id`,
+        [Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
       );
 
       if (result.rowCount && result.rowCount > 0) {

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { classAPI } from '../services/api';
+import { classAPI, type RegistrationAttendanceStatus } from '../services/api';
 import { parseApiError } from '../utils/apiError';
 import { useAuth } from '../contexts/AuthContext';
 import { formatKoreanDate, formatKoreanDateTime, formatKoreanTime } from '../utils/dateFormat';
@@ -13,7 +13,7 @@ interface CustomerClassDetailData {
   end_time: string;
   class_status?: 'open' | 'closed' | 'in_progress' | 'completed';
   registration_comment?: string | null;
-  attendance_status?: 'reserved' | 'attended' | 'absent';
+  attendance_status?: RegistrationAttendanceStatus;
   membership_id?: number | null;
   membership_type_name?: string | null;
   membership_created_date?: string | null;
@@ -194,6 +194,8 @@ const CustomerClassDetail: React.FC = () => {
 
   const attendanceLabel = detail.attendance_status === 'attended'
     ? '출석'
+    : detail.attendance_status === 'hold'
+      ? '보류'
     : detail.attendance_status === 'absent'
       ? '결석'
       : '예약';

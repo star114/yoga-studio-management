@@ -212,6 +212,27 @@ describe('CustomerClassDetail page', () => {
     expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
   });
 
+  it('renders hold status label', async () => {
+    classGetMyClassDetailMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        title: '빈야사',
+        class_date: '2026-03-01',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        attendance_status: 'hold',
+        registration_comment: null,
+        membership_id: 302,
+        membership_type_name: '아쉬탕가 10회권',
+        membership_created_date: null,
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('보류')).toBeTruthy());
+    expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
+  });
+
   it('saves quick comments, custom comment, and reset in reserved detail view', async () => {
     classGetMyClassDetailMock.mockResolvedValueOnce({
       data: {

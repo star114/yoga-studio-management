@@ -1355,7 +1355,7 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+  assert.equal(res.body.error, 'Only reserved or hold registrations can be canceled by admin');
 
   const cancelAdminImmediateAttendanceClient = h.createDbClientMock();
   cancelAdminImmediateAttendanceClient.queryQueue.push(
@@ -1371,7 +1371,7 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+  assert.equal(res.body.error, 'Only reserved or hold registrations can be canceled by admin');
 
   const cancelAdminNullAttendanceMembershipClient = h.createDbClientMock();
   cancelAdminNullAttendanceMembershipClient.queryQueue.push(
@@ -1387,7 +1387,7 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+  assert.equal(res.body.error, 'Only reserved or hold registrations can be canceled by admin');
 
   const cancelAdminDuplicateDeductionClient = h.createDbClientMock();
   cancelAdminDuplicateDeductionClient.queryQueue.push(
@@ -1403,7 +1403,7 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+  assert.equal(res.body.error, 'Only reserved or hold registrations can be canceled by admin');
 
   const cancelAdminNullMembershipClient = h.createDbClientMock();
   cancelAdminNullMembershipClient.queryQueue.push(
@@ -1419,7 +1419,7 @@ test('class registration and recurring routes cover core branches', async () => 
     headers: { authorization: `Bearer ${adminToken()}` },
   });
   assert.equal(res.status, 400);
-  assert.equal(res.body.error, 'Only reserved registrations can be canceled by admin');
+  assert.equal(res.body.error, 'Only reserved or hold registrations can be canceled by admin');
 
   const cancelAdminErrorClient = h.createDbClientMock();
   cancelAdminErrorClient.queryQueue.push(
@@ -1501,8 +1501,21 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     { rows: [{ id: 501, membership_id: 77 }] },
     { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 90,
+          class_id: 11,
+          customer_id: 2,
+          attendance_status: 'absent',
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
     {
       rows: [
         {
@@ -1560,6 +1573,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(sameStatusClient);
@@ -1588,6 +1602,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     { rows: [] },
     { rows: [], rowCount: 0 }
   );
@@ -1618,6 +1633,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     { rows: [], rowCount: 0 }
   );
   h.connectQueue.push(absentReservedMissingMembershipClient);
@@ -1648,6 +1664,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     { rows: [], rowCount: 0 },
     { rows: [], rowCount: 0 }
   );
@@ -1679,6 +1696,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     {
       rows: [
         { id: 601, membership_id: 77, session_deducted: true },
@@ -1734,6 +1752,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     {
       rows: [
         { id: 703, membership_id: 501, session_deducted: false },
@@ -1788,6 +1807,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     {
       rows: [
         { id: 704, membership_id: null, session_deducted: false },
@@ -1842,6 +1862,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     {
       rows: [
         { id: 704, membership_id: null, session_deducted: false },
@@ -1900,6 +1921,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     { rows: [] },
     { rows: [{ id: 503, remaining_sessions: 1 }] },
     {
@@ -1959,6 +1981,7 @@ test('registration status change reconciles attendance row and membership usage'
         },
       ],
     },
+    { rows: [{ max_capacity: 12 }] },
     {
       rows: [
         { id: 701, membership_id: null, session_deducted: false },
@@ -2028,6 +2051,155 @@ test('registration status change reconciles attendance row and membership usage'
     body: { attendance_status: 'absent' },
   });
   assert.equal(statusErrorRes.status, 500);
+
+  const attendedToHoldClient = h.createDbClientMock();
+  attendedToHoldClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 101,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 510,
+          attendance_status: 'attended',
+          session_consumed: true,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [{ max_capacity: 12 }] },
+    {
+      rows: [
+        { id: 801, membership_id: 510, session_deducted: true },
+      ],
+    },
+    { rows: [{ id: 510, remaining_sessions: 3 }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 101,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 510,
+          attendance_status: 'hold',
+          session_consumed: false,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(attendedToHoldClient);
+  const attendedToHoldRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'hold' },
+  });
+  assert.equal(attendedToHoldRes.status, 200);
+  assert.equal(attendedToHoldRes.body.attendance_status, 'hold');
+  assert.equal(attendedToHoldRes.body.session_consumed, false);
+  assert.ok(
+    attendedToHoldClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
+    )
+  );
+  assert.ok(
+    attendedToHoldClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('DELETE FROM yoga_attendances')
+    )
+  );
+
+  const holdToReservedFullClient = h.createDbClientMock();
+  holdToReservedFullClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 102,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 511,
+          attendance_status: 'hold',
+          session_consumed: false,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [{ max_capacity: 1 }] },
+    { rows: [] },
+    { rows: [{ count: 1 }] },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(holdToReservedFullClient);
+  const holdToReservedFullRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'reserved' },
+  });
+  assert.equal(holdToReservedFullRes.status, 400);
+  assert.equal(holdToReservedFullRes.body.error, 'Class is full');
+
+  const holdToAbsentClient = h.createDbClientMock();
+  holdToAbsentClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 103,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 512,
+          attendance_status: 'hold',
+          session_consumed: false,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [{ max_capacity: 12 }] },
+    { rows: [] },
+    {
+      rows: [
+        {
+          id: 103,
+          class_id: 11,
+          customer_id: 2,
+          membership_id: 512,
+          attendance_status: 'absent',
+          session_consumed: true,
+          registration_comment: null,
+          registered_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+    },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(holdToAbsentClient);
+  const holdToAbsentRes = await h.runRoute({
+    method: 'put',
+    routePath: '/:id/registrations/:customerId/status',
+    params: { id: '11', customerId: '2' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { attendance_status: 'absent' },
+  });
+  assert.equal(holdToAbsentRes.status, 200);
+  assert.equal(holdToAbsentRes.body.attendance_status, 'absent');
+  assert.equal(
+    holdToAbsentClient.queryCalls.some(
+      ([sql]) => typeof sql === 'string' && sql.includes('UPDATE yoga_memberships')
+    ),
+    false
+  );
 });
 
 test('class registration diagnostics and recurring creation cover remaining branches', async () => {

@@ -54,7 +54,7 @@ interface DashboardSnapshotRegistration {
   customer_id: number;
   customer_name: string;
   customer_phone: string;
-  attendance_status: 'reserved' | 'attended' | 'absent';
+  attendance_status: 'reserved' | 'hold' | 'attended' | 'absent';
   registration_comment: string | null;
   registered_at: string;
 }
@@ -93,6 +93,11 @@ const getRegistrationStatusMeta = (status: DashboardSnapshotRegistration['attend
       return {
         label: '결석',
         className: 'bg-rose-100 text-rose-800 border-rose-200',
+      };
+    case 'hold':
+      return {
+        label: '보류',
+        className: 'bg-slate-100 text-slate-800 border-slate-200',
       };
     default:
       return {

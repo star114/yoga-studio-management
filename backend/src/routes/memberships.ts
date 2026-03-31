@@ -648,7 +648,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
            SELECT 1
            FROM yoga_class_registrations r
            WHERE r.membership_id = $1
-             AND r.attendance_status = 'reserved'
+             AND r.attendance_status IN ('reserved', 'hold')
          ) AS has_reserved_registrations,
          EXISTS (
            SELECT 1
@@ -700,7 +700,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     await client.query(
       `DELETE FROM yoga_class_registrations
        WHERE membership_id = $1
-         AND attendance_status = 'reserved'`,
+         AND attendance_status IN ('reserved', 'hold')`,
       [id]
     );
 

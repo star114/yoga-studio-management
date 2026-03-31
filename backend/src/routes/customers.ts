@@ -128,7 +128,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// 특정 고객 수업 활동(출석/예약/결석) 조회
+// 특정 고객 수업 활동(출석/예약/보류/결석) 조회
 router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) => {
   const { id } = req.params;
   const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
@@ -145,7 +145,7 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
     ? Math.min(Math.floor(rawPageSize), 100)
     : 10;
   const offset = (page - 1) * pageSize;
-  const activityType = ['all', 'attended', 'reserved', 'absent'].includes(rawActivityType)
+  const activityType = ['all', 'attended', 'reserved', 'hold', 'absent'].includes(rawActivityType)
     ? rawActivityType
     : 'all';
   const search = rawSearch.trim();
@@ -236,6 +236,26 @@ router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) 
         INNER JOIN yoga_classes cls ON cls.id = r.class_id
         WHERE r.customer_id = $1
           AND r.attendance_status = 'reserved'
+
+        UNION ALL
+
+        SELECT
+          'hold'::text AS activity_type,
+          r.id::int AS activity_id,
+          cls.id::int AS class_id,
+          cls.title::text AS class_title,
+          cls.title::text AS class_type,
+          cls.class_date::date AS class_day,
+          cls.class_date,
+          cls.start_time AS class_start_time,
+          cls.end_time AS class_end_time,
+          NULL::timestamp AS attendance_date,
+          r.registered_at,
+          (cls.class_date::timestamp + cls.start_time) AS sort_at
+        FROM yoga_class_registrations r
+        INNER JOIN yoga_classes cls ON cls.id = r.class_id
+        WHERE r.customer_id = $1
+          AND r.attendance_status = 'hold'
 
         UNION ALL
 
@@ -386,8 +406,15 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
          c.end_time,
          c.max_capacity,
          c.is_open,
-         COUNT(r.id)::int AS current_enrollment,
-         GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats,
+         COUNT(*) FILTER (
+           WHERE r.attendance_status IN ('reserved', 'attended', 'absent')
+         )::int AS current_enrollment,
+         GREATEST(
+           c.max_capacity - COUNT(*) FILTER (
+             WHERE r.attendance_status IN ('reserved', 'attended', 'absent')
+           ),
+           0
+         )::int AS remaining_seats,
          existing_usage.existing_status IS NOT NULL AS is_registered,
          existing_usage.existing_status
        FROM yoga_classes c
@@ -409,9 +436,10 @@ router.get('/:id/recommended-classes', authenticate, async (req: AuthRequest, re
          ) usage
          ORDER BY CASE usage.status
            WHEN 'reserved' THEN 1
-           WHEN 'attended' THEN 2
-           WHEN 'absent' THEN 3
-           ELSE 4
+           WHEN 'hold' THEN 2
+           WHEN 'attended' THEN 3
+           WHEN 'absent' THEN 4
+           ELSE 5
          END
          LIMIT 1
        ) existing_usage ON true

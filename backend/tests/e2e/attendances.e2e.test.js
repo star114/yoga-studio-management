@@ -631,6 +631,36 @@ test('attendance check/create and delete routes cover transaction branches', asy
     true
   );
 
+  const holdRegistrationCheckInClient = h.createDbClientMock();
+  holdRegistrationCheckInClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가', registration_id: 21, membership_id: 80, attendance_status: 'hold', session_consumed: false }] },
+    { rows: [] },
+    { rows: [{ id: 80, remaining_sessions: 2, is_active: true }] },
+    { rows: [{ id: 21, membership_id: 80, class_id: 5, class_type: '아쉬탕가', session_deducted: true }] },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 80 }], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(holdRegistrationCheckInClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 201);
+  const holdCheckInInsertCall = holdRegistrationCheckInClient.queryCalls.find(([queryText]) =>
+    String(queryText).includes('INSERT INTO yoga_attendances')
+  );
+  assert.equal(holdCheckInInsertCall?.[1]?.[5], true);
+  assert.equal(
+    holdRegistrationCheckInClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    true
+  );
+
   const absentRegistrationCheckInClient = h.createDbClientMock();
   absentRegistrationCheckInClient.queryQueue.push(
     { rows: [], rowCount: 0 },
