@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://github.com/star114/yoga-studio-management/compare/v2.7.0...v2.8.0) (2026-04-01)
+
+
+### Features
+
+* add hold attendance status flow ([560e7bc](https://github.com/star114/yoga-studio-management/commit/560e7bc05387eea44db4e141aeea9ee8f03d5e62))
+
+
+### Bug Fixes
+
+* preserve hold state across attendance rollback ([560e7bc](https://github.com/star114/yoga-studio-management/commit/560e7bc05387eea44db4e141aeea9ee8f03d5e62))
+
 ## [2.7.0](https://github.com/star114/yoga-studio-management/compare/v2.6.0...v2.7.0) (2026-03-20)
 
 
