@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS yoga_attendances (
     instructor_id INTEGER REFERENCES yoga_users(id),
     class_type VARCHAR(100),  -- 수업 종류
     session_deducted BOOLEAN NOT NULL DEFAULT FALSE,
+    registration_status_before_attendance VARCHAR(20)
+        CHECK (registration_status_before_attendance IN ('reserved', 'hold', 'absent')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

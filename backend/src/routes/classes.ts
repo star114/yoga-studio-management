@@ -1204,13 +1204,16 @@ router.put('/:id/registrations/:customerId/status',
         }
       }
 
+      const nextSessionConsumed = attendanceStatus === 'attended'
+        || (attendanceStatus === 'absent' && currentRegistration.attendance_status !== 'hold');
+
       const result = await client.query(
         `UPDATE yoga_class_registrations
          SET attendance_status = $3,
              session_consumed = $4
         WHERE class_id = $1 AND customer_id = $2
         RETURNING id, class_id, customer_id, membership_id, attendance_status, session_consumed, registration_comment, registered_at`,
-        [classId, customerId, attendanceStatus, ['attended', 'absent'].includes(attendanceStatus)]
+        [classId, customerId, attendanceStatus, nextSessionConsumed]
       );
 
       await client.query('COMMIT');
@@ -1527,7 +1530,8 @@ router.post('/:id/registrations',
              attendance_date,
              instructor_id,
              class_type,
-             session_deducted
+             session_deducted,
+             registration_status_before_attendance
            )
            VALUES (
              $1,
@@ -1536,7 +1540,8 @@ router.post('/:id/registrations',
              ($4::date::timestamp + $5::time),
              $6,
              $7,
-             $8
+             $8,
+             $9
            )`,
           [
             customerId,
@@ -1547,6 +1552,7 @@ router.post('/:id/registrations',
             req.user!.id,
             yogaClass.title || null,
             true,
+            'reserved',
           ]
         );
       }

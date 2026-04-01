@@ -2176,7 +2176,7 @@ test('registration status change reconciles attendance row and membership usage'
           customer_id: 2,
           membership_id: 512,
           attendance_status: 'absent',
-          session_consumed: true,
+          session_consumed: false,
           registration_comment: null,
           registered_at: '2026-02-20T00:00:00.000Z',
         },
@@ -2200,6 +2200,7 @@ test('registration status change reconciles attendance row and membership usage'
     ),
     false
   );
+  assert.equal(holdToAbsentRes.body.session_consumed, false);
 });
 
 test('class registration diagnostics and recurring creation cover remaining branches', async () => {

@@ -23,6 +23,10 @@ test('attendance class_id does not conflict with ON DELETE SET NULL', () => {
     schema,
     /session_deducted\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+FALSE/i
   );
+  assert.match(
+    schema,
+    /registration_status_before_attendance\s+VARCHAR\(20\)\s+CHECK\s+\(registration_status_before_attendance IN \('reserved', 'hold', 'absent'\)\)/i
+  );
 });
 
 test('attendance schema does not include deprecated comment columns', () => {

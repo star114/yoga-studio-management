@@ -1,7 +1,7 @@
 import pool from '../config/database';
 import { buildMembershipClassTitleMatchExistsSql } from '../utils/membershipClassTitles';
 
-const SEAT_OCCUPYING_REGISTRATION_STATUSES = ['reserved', 'attended', 'absent'] as const;
+const AUTO_CLOSE_PENDING_REGISTRATION_STATUSES = ['reserved', 'attended'] as const;
 
 const toBool = (value: string | undefined, defaultValue: boolean): boolean => {
   if (!value) return defaultValue;
@@ -298,7 +298,7 @@ export const startClassAutoCloseWorker = () => {
                )
            )
          RETURNING id`,
-        [Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
+        [Array.from(AUTO_CLOSE_PENDING_REGISTRATION_STATUSES)]
       );
 
       if (result.rowCount && result.rowCount > 0) {
