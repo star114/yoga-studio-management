@@ -8,6 +8,7 @@ type ClassRegistrationPayload = {
   allow_cross_membership_registration?: boolean;
   mark_attended_after_register?: boolean;
 };
+export type RegistrationAttendanceStatus = 'reserved' | 'hold' | 'attended' | 'absent';
 export type MembershipTypeRecord = {
   id: number;
   name: string;
@@ -226,7 +227,7 @@ export const classAPI = {
   deleteRegistrationCommentThreadMessage: (classId: number, customerId: number, messageId: number) =>
     api.delete(`/classes/${classId}/registrations/${customerId}/comment-thread/${messageId}`),
 
-  updateRegistrationStatus: (classId: number, customerId: number, attendance_status: 'reserved' | 'attended' | 'absent') =>
+  updateRegistrationStatus: (classId: number, customerId: number, attendance_status: RegistrationAttendanceStatus) =>
     api.put(`/classes/${classId}/registrations/${customerId}/status`, { attendance_status }),
 
   cancelRegistration: (classId: number, customerId: number) =>

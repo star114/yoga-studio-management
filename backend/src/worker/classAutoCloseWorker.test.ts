@@ -82,8 +82,9 @@ test('worker starts with fallback interval, runs query, and stops', async (t) =>
   const closeQuery = String(queryMock.mock.calls[1].arguments[0]);
   assert.match(closeQuery, /UPDATE yoga_classes/i);
   assert.match(closeQuery, /AND NOT EXISTS \(\s*SELECT 1\s*FROM yoga_class_registrations r/i);
-  assert.match(closeQuery, /r\.attendance_status = 'reserved'/i);
+  assert.match(closeQuery, /r\.attendance_status = ANY\(\$1::text\[\]\)/i);
   assert.match(closeQuery, /FROM yoga_attendances a/i);
+  assert.deepEqual(queryMock.mock.calls[1].arguments[1], [['reserved', 'attended']]);
   assert.equal(typeof capturedCallback, 'function');
   const initialLogs = logMock.mock.calls.map((call) => String(call.arguments[0]));
   assert.equal(initialLogs.some((line) => /Auto-processed 2 attendance/.test(line)), true);

@@ -631,6 +631,37 @@ test('attendance check/create and delete routes cover transaction branches', asy
     true
   );
 
+  const holdRegistrationCheckInClient = h.createDbClientMock();
+  holdRegistrationCheckInClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 5, title: '아쉬탕가', registration_id: 21, membership_id: 80, attendance_status: 'hold', session_consumed: false }] },
+    { rows: [] },
+    { rows: [{ id: 80, remaining_sessions: 2, is_active: true }] },
+    { rows: [{ id: 21, membership_id: 80, class_id: 5, class_type: '아쉬탕가', session_deducted: true }] },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 80 }], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(holdRegistrationCheckInClient);
+  res = await h.runRoute({
+    method: 'post',
+    routePath: '/',
+    headers: { authorization: `Bearer ${adminToken()}` },
+    body: { customer_id: 3, class_id: 5 },
+  });
+  assert.equal(res.status, 201);
+  const holdCheckInInsertCall = holdRegistrationCheckInClient.queryCalls.find(([queryText]) =>
+    String(queryText).includes('INSERT INTO yoga_attendances')
+  );
+  assert.equal(holdCheckInInsertCall?.[1]?.[5], true);
+  assert.equal(holdCheckInInsertCall?.[1]?.[6], 'hold');
+  assert.equal(
+    holdRegistrationCheckInClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    true
+  );
+
   const absentRegistrationCheckInClient = h.createDbClientMock();
   absentRegistrationCheckInClient.queryQueue.push(
     { rows: [], rowCount: 0 },
@@ -659,6 +690,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
     String(queryText).includes('INSERT INTO yoga_attendances')
   );
   assert.equal(absentCheckInInsertCall?.[1]?.[5], false);
+  assert.equal(absentCheckInInsertCall?.[1]?.[6], 'absent');
 
   const reservedMembershipExhaustedClient = h.createDbClientMock();
   reservedMembershipExhaustedClient.queryQueue.push(
@@ -734,7 +766,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const deleteSuccessClient = h.createDbClientMock();
   deleteSuccessClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3, session_deducted: true }] },
+    { rows: [{ id: 22, membership_id: 2, class_id: 5, customer_id: 3, session_deducted: true, registration_status_before_attendance: 'reserved' }] },
     { rows: [{ id: 12, membership_id: 2, session_consumed: true }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -756,13 +788,41 @@ test('attendance check/create and delete routes cover transaction branches', asy
     true
   );
   assert.match(String(deleteSuccessClient.queryCalls[4][0]), /UPDATE yoga_class_registrations/i);
+  assert.equal(deleteSuccessClient.queryCalls[4][1][2], 'reserved');
+  assert.equal(deleteSuccessClient.queryCalls[4][1][3], false);
+
+  const deleteHoldPromotedAttendanceClient = h.createDbClientMock();
+  deleteHoldPromotedAttendanceClient.queryQueue.push(
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 26, membership_id: 7, class_id: 10, customer_id: 12, session_deducted: true, registration_status_before_attendance: 'hold' }] },
+    { rows: [{ id: 20, membership_id: 7, session_consumed: true }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 }
+  );
+  h.connectQueue.push(deleteHoldPromotedAttendanceClient);
+  res = await h.runRoute({
+    method: 'delete',
+    routePath: '/:id',
+    params: { id: '26' },
+    headers: { authorization: `Bearer ${adminToken()}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(
+    deleteHoldPromotedAttendanceClient.queryCalls.some(([queryText]) =>
+      String(queryText).includes('UPDATE yoga_memberships')
+    ),
+    true
+  );
+  assert.equal(deleteHoldPromotedAttendanceClient.queryCalls[4][1][2], 'hold');
+  assert.equal(deleteHoldPromotedAttendanceClient.queryCalls[4][1][3], false);
 
   const deleteAbsentPromotedAttendanceClient = h.createDbClientMock();
   deleteAbsentPromotedAttendanceClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 23, membership_id: 4, class_id: 8, customer_id: 9, session_deducted: false }] },
+    { rows: [{ id: 23, membership_id: 4, class_id: 8, customer_id: 9, session_deducted: false, registration_status_before_attendance: 'absent' }] },
     { rows: [{ id: 18, membership_id: 4, session_consumed: true }] },
-    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }
   );
@@ -778,13 +838,15 @@ test('attendance check/create and delete routes cover transaction branches', asy
     deleteAbsentPromotedAttendanceClient.queryCalls.some(([queryText]) =>
       String(queryText).includes('UPDATE yoga_memberships')
     ),
-    true
+    false
   );
+  assert.equal(deleteAbsentPromotedAttendanceClient.queryCalls[3][1][2], 'absent');
+  assert.equal(deleteAbsentPromotedAttendanceClient.queryCalls[3][1][3], true);
 
   const deleteUndeductedAttendanceClient = h.createDbClientMock();
   deleteUndeductedAttendanceClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 24, membership_id: 5, class_id: 9, customer_id: 10, session_deducted: false }] },
+    { rows: [{ id: 24, membership_id: 5, class_id: 9, customer_id: 10, session_deducted: false, registration_status_before_attendance: 'reserved' }] },
     { rows: [{ id: 19, membership_id: 5, session_consumed: false }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -808,7 +870,7 @@ test('attendance check/create and delete routes cover transaction branches', asy
   const deleteDetachedAttendanceClient = h.createDbClientMock();
   deleteDetachedAttendanceClient.queryQueue.push(
     { rows: [], rowCount: 0 },
-    { rows: [{ id: 25, membership_id: 6, class_id: null, customer_id: 11, session_deducted: true }] },
+    { rows: [{ id: 25, membership_id: 6, class_id: null, customer_id: 11, session_deducted: true, registration_status_before_attendance: null }] },
     { rows: [{ id: 6, remaining_sessions: 2 }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 0 }

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { attendanceAPI, classAPI, membershipAPI } from '../services/api';
+import { attendanceAPI, classAPI, membershipAPI, type RegistrationAttendanceStatus } from '../services/api';
 import { formatKoreanDate } from '../utils/dateFormat';
 import {
   addDays,
@@ -48,7 +48,7 @@ interface CustomerAttendance {
 interface MyRegistrationClass {
   registration_id: number;
   class_id: number | null;
-  attendance_status: 'reserved' | 'attended' | 'absent';
+  attendance_status: RegistrationAttendanceStatus;
   title: string;
   class_date: string;
   start_time?: string | null;
@@ -63,11 +63,11 @@ interface CustomerCalendarEntry {
   start_time?: string | null;
   end_time?: string | null;
   source: 'registration' | 'attendance';
-  attendance_status?: 'reserved' | 'attended' | 'absent';
+  attendance_status?: RegistrationAttendanceStatus;
 }
 
 type CalendarView = 'month' | 'week' | 'day';
-type CustomerEntryStatus = 'reserved' | 'attended' | 'absent';
+type CustomerEntryStatus = RegistrationAttendanceStatus;
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -86,6 +86,9 @@ const formatConsumedSummary = (membership: CustomerMembership) => {
 const getEntryStatus = (entry: CustomerCalendarEntry): CustomerEntryStatus => {
   if (entry.attendance_status === 'absent') {
     return 'absent';
+  }
+  if (entry.attendance_status === 'hold') {
+    return 'hold';
   }
   if (entry.source === 'attendance' || entry.attendance_status === 'attended') {
     return 'attended';
@@ -108,6 +111,13 @@ const getEntryStatusMeta = (status: CustomerEntryStatus) => {
         badgeClassName: 'bg-rose-100 text-rose-800 border-rose-200',
         cardClassName: 'bg-rose-50/85 border-rose-200 text-rose-950',
         subtleTextClassName: 'text-rose-700',
+      };
+    case 'hold':
+      return {
+        label: '보류',
+        badgeClassName: 'bg-slate-100 text-slate-800 border-slate-200',
+        cardClassName: 'bg-slate-50/85 border-slate-200 text-slate-950',
+        subtleTextClassName: 'text-slate-700',
       };
     default:
       return {
@@ -400,7 +410,7 @@ const CustomerMemberships: React.FC = () => {
           <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          {(['reserved', 'attended', 'absent'] as CustomerEntryStatus[]).map((status) => {
+          {(['reserved', 'hold', 'attended', 'absent'] as CustomerEntryStatus[]).map((status) => {
             const meta = getEntryStatusMeta(status);
             return (
               <span key={status} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium ${meta.badgeClassName}`}>

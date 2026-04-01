@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { classAPI, customerAPI, membershipAPI } from '../services/api';
+import { classAPI, customerAPI, membershipAPI, type RegistrationAttendanceStatus } from '../services/api';
 import {
   getCrossMembershipConfirmationMessage,
   parseApiError,
@@ -47,7 +47,7 @@ interface RecommendedClass {
   remaining_seats: number;
   current_enrollment: number;
   is_registered: boolean;
-  existing_status?: 'reserved' | 'attended' | 'absent' | null;
+  existing_status?: RegistrationAttendanceStatus | null;
 }
 
 interface RecommendedClassesResponse {
@@ -60,10 +60,10 @@ interface RecommendedClassesResponse {
   };
 }
 
-type ActivityTypeFilter = 'all' | 'attended' | 'reserved' | 'absent';
+type ActivityTypeFilter = 'all' | 'attended' | 'reserved' | 'hold' | 'absent';
 
 interface ClassActivity {
-  activity_type: 'attended' | 'reserved' | 'absent';
+  activity_type: 'attended' | 'reserved' | 'hold' | 'absent';
   activity_id: number;
   class_id?: number | null;
   class_title?: string | null;
@@ -141,6 +141,8 @@ const getRecommendedClassStatusLabel = (item: RecommendedClass) => {
   switch (item.existing_status) {
     case 'attended':
       return '출석';
+    case 'hold':
+      return '보류';
     case 'absent':
       return '결석';
     case 'reserved':
@@ -1091,6 +1093,7 @@ const CustomerDetail: React.FC = () => {
                   <option value="all">전체</option>
                   <option value="attended">출석</option>
                   <option value="reserved">예약</option>
+                  <option value="hold">보류</option>
                   <option value="absent">결석</option>
                 </select>
               </div>
@@ -1178,6 +1181,8 @@ const CustomerDetail: React.FC = () => {
                         className={`px-2 py-0.5 text-xs rounded-full ${
                           item.activity_type === 'reserved'
                             ? 'bg-blue-100 text-blue-700'
+                            : item.activity_type === 'hold'
+                              ? 'bg-slate-100 text-slate-700'
                             : item.activity_type === 'absent'
                               ? 'bg-red-100 text-red-700'
                               : 'bg-green-100 text-green-700'
@@ -1185,6 +1190,8 @@ const CustomerDetail: React.FC = () => {
                       >
                         {item.activity_type === 'reserved'
                           ? '예약'
+                          : item.activity_type === 'hold'
+                            ? '보류'
                           : item.activity_type === 'absent'
                             ? '결석'
                             : '출석'}
@@ -1210,14 +1217,14 @@ const CustomerDetail: React.FC = () => {
                   </div>
                   {item.class_id && (
                     <div className="shrink-0">
-                      {item.activity_type === 'reserved' ? (
+                      {item.activity_type === 'reserved' || item.activity_type === 'hold' ? (
                         <button
                           type="button"
                           className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                          disabled={activityActionLoading[`reserved-${item.activity_id}`]}
+                          disabled={activityActionLoading[`${item.activity_type}-${item.activity_id}`]}
                           onClick={() => void handleCancelReservedClass(item)}
                         >
-                          {activityActionLoading[`reserved-${item.activity_id}`] ? '처리 중...' : '예약 취소'}
+                          {activityActionLoading[`${item.activity_type}-${item.activity_id}`] ? '처리 중...' : '예약 취소'}
                         </button>
                       ) : item.activity_type === 'attended' ? (
                         <button

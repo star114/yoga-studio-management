@@ -8,6 +8,13 @@ import { buildMembershipClassTitleMatchExistsSql, buildNormalizedTitleSql } from
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
+const SEAT_OCCUPYING_REGISTRATION_STATUSES = ['reserved', 'attended', 'absent'] as const;
+const CANCELABLE_REGISTRATION_STATUSES = ['reserved', 'hold'] as const;
+type RegistrationAttendanceStatus = 'reserved' | 'hold' | 'attended' | 'absent';
+const isCancelableRegistrationStatus = (
+  status: RegistrationAttendanceStatus
+): status is (typeof CANCELABLE_REGISTRATION_STATUSES)[number] =>
+  CANCELABLE_REGISTRATION_STATUSES.includes(status as (typeof CANCELABLE_REGISTRATION_STATUSES)[number]);
 
 const getCustomerIdFromUser = async (userId: number): Promise<number | null> => {
   const result = await pool.query(
@@ -153,7 +160,7 @@ const cancelRegistrationAndRelatedAttendance = async (
   registration: {
     id: number;
     membership_id: number | null;
-    attendance_status: 'reserved' | 'attended' | 'absent';
+    attendance_status: RegistrationAttendanceStatus;
     session_consumed?: boolean | null;
   },
   classId: string,
@@ -261,17 +268,19 @@ router.get('/dashboard/admin-snapshot',
            c.is_open,
            CASE
              WHEN (c.class_date::timestamp + c.end_time) <= CURRENT_TIMESTAMP THEN 'completed'
-             WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
-             WHEN c.is_open THEN 'open'
-             ELSE 'closed'
+           WHEN (c.class_date::timestamp + c.start_time) <= CURRENT_TIMESTAMP THEN 'in_progress'
+            WHEN c.is_open THEN 'open'
+            ELSE 'closed'
            END AS class_status,
-           COUNT(r.id)::int AS current_enrollment
+           COUNT(*) FILTER (
+             WHERE r.attendance_status = ANY($2::text[])
+           )::int AS current_enrollment
          FROM yoga_classes c
          LEFT JOIN yoga_class_registrations r ON r.class_id = c.id
          WHERE c.class_date = $1
          GROUP BY c.id
          ORDER BY c.start_time ASC, c.id ASC`,
-        [targetDateRow.target_date]
+        [targetDateRow.target_date, Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
       );
 
       const classes = classResult.rows as Array<{
@@ -315,7 +324,7 @@ router.get('/dashboard/admin-snapshot',
         id: number;
         class_id: number;
         customer_id: number;
-        attendance_status: 'reserved' | 'attended' | 'absent';
+        attendance_status: RegistrationAttendanceStatus;
         registered_at: string;
         registration_comment: string | null;
         customer_name: string;
@@ -326,7 +335,7 @@ router.get('/dashboard/admin-snapshot',
         id: number;
         class_id: number;
         customer_id: number;
-        attendance_status: 'reserved' | 'attended' | 'absent';
+        attendance_status: RegistrationAttendanceStatus;
         registered_at: string;
         registration_comment: string | null;
         customer_name: string;
@@ -372,15 +381,22 @@ router.get('/',
             WHEN c.is_open THEN 'open'
             ELSE 'closed'
           END AS class_status,
-          COUNT(r.id)::int AS current_enrollment,
-          GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats
+          COUNT(*) FILTER (
+            WHERE r.attendance_status = ANY($1::text[])
+          )::int AS current_enrollment,
+          GREATEST(
+            c.max_capacity - COUNT(*) FILTER (
+              WHERE r.attendance_status = ANY($1::text[])
+            ),
+            0
+          )::int AS remaining_seats
         FROM yoga_classes c
         LEFT JOIN yoga_class_registrations r ON c.id = r.class_id
         WHERE 1=1
       `;
 
-      const params: Array<string | boolean> = [];
-      let paramIndex = 1;
+      const params: Array<string | boolean | string[]> = [Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)];
+      let paramIndex = 2;
 
       if (typeof date_from === 'string') {
         sql += ` AND class_date >= $${paramIndex}`;
@@ -475,13 +491,20 @@ router.get('/:id',
              WHEN c.is_open THEN 'open'
              ELSE 'closed'
            END AS class_status,
-           COUNT(r.id)::int AS current_enrollment,
-           GREATEST(c.max_capacity - COUNT(r.id), 0)::int AS remaining_seats
+           COUNT(*) FILTER (
+             WHERE r.attendance_status = ANY($2::text[])
+           )::int AS current_enrollment,
+           GREATEST(
+             c.max_capacity - COUNT(*) FILTER (
+               WHERE r.attendance_status = ANY($2::text[])
+             ),
+             0
+           )::int AS remaining_seats
          FROM yoga_classes c
          LEFT JOIN yoga_class_registrations r ON c.id = r.class_id
          WHERE c.id = $1
          GROUP BY c.id`,
-        [classId]
+        [classId, Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
       );
 
       if (result.rows.length === 0) {
@@ -1034,12 +1057,12 @@ router.put('/:id/registrations/:customerId/status',
   requireAdmin,
   param('id').isInt({ min: 1 }),
   param('customerId').isInt({ min: 1 }),
-  body('attendance_status').isIn(['reserved', 'attended', 'absent']),
+  body('attendance_status').isIn(['reserved', 'hold', 'attended', 'absent']),
   validateRequest,
   async (req: AuthRequest, res) => {
     const classId = Number(req.params.id);
     const customerId = Number(req.params.customerId);
-    const attendanceStatus = String(req.body.attendance_status);
+    const attendanceStatus = String(req.body.attendance_status) as RegistrationAttendanceStatus;
 
     const client = await pool.connect();
     try {
@@ -1063,28 +1086,43 @@ router.put('/:id/registrations/:customerId/status',
         class_id: number;
         customer_id: number;
         membership_id: number | null;
-        attendance_status: 'reserved' | 'attended' | 'absent';
+        attendance_status: RegistrationAttendanceStatus;
         session_consumed?: boolean | null;
         registration_comment: string | null;
         registered_at: string;
       };
       const currentSessionConsumed = Boolean(currentRegistration.session_consumed);
+      const classCapacityResult = await client.query(
+        'SELECT max_capacity FROM yoga_classes WHERE id = $1 FOR UPDATE',
+        [classId]
+      );
+
+      if (classCapacityResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Class not found' });
+      }
 
       if (currentRegistration.attendance_status === attendanceStatus) {
         await client.query('COMMIT');
         return res.json(currentRegistration);
       }
 
-      if (attendanceStatus === 'attended') {
-        const attendanceCheckResult = await client.query(
-          `SELECT id
-           FROM yoga_attendances
-           WHERE class_id = $1 AND customer_id = $2
-           LIMIT 1`,
-          [classId, customerId]
-        );
+      const attendanceResult = await client.query(
+        `SELECT id, membership_id, session_deducted
+         FROM yoga_attendances
+         WHERE class_id = $1 AND customer_id = $2
+         FOR UPDATE`,
+        [classId, customerId]
+      );
 
-        if (attendanceCheckResult.rows.length === 0) {
+      const attendanceRows = attendanceResult.rows as Array<{
+        id: number;
+        membership_id: number | null;
+        session_deducted: boolean;
+      }>;
+
+      if (attendanceStatus === 'attended') {
+        if (attendanceRows.length === 0) {
           await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Attendance record not found; use check-in endpoint first' });
         }
@@ -1109,37 +1147,52 @@ router.put('/:id/registrations/:customerId/status',
             return res.status(409).json({ error: 'Membership sessions exhausted' });
           }
         }
-      } else {
-        const attendanceResult = await client.query(
-          `SELECT id, membership_id, session_deducted
-           FROM yoga_attendances
-           WHERE class_id = $1 AND customer_id = $2
-           FOR UPDATE`,
-          [classId, customerId]
+      } else if (attendanceStatus === 'absent' && currentRegistration.attendance_status === 'hold') {
+        // Hold 상태 결석은 차감 없이 최종 결석으로만 전환한다.
+      } else if (attendanceStatus === 'absent' && currentRegistration.attendance_status === 'attended') {
+        if (attendanceRows.length > 0) {
+          const attendanceIds = attendanceRows.map((attendanceRow) => attendanceRow.id);
+          await client.query(
+            'DELETE FROM yoga_attendances WHERE id = ANY($1::int[])',
+            [attendanceIds]
+          );
+        }
+      } else if (attendanceStatus === 'reserved' && currentRegistration.attendance_status === 'hold') {
+        const enrollmentResult = await client.query(
+          `SELECT COUNT(*)::int AS count
+           FROM yoga_class_registrations
+           WHERE class_id = $1
+             AND customer_id <> $2
+             AND attendance_status = ANY($3::text[])`,
+          [classId, customerId, Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
         );
 
-        const attendanceRows = attendanceResult.rows as Array<{
-          id: number;
-          membership_id: number | null;
-          session_deducted: boolean;
-        }>;
+        const currentEnrollment = Number(enrollmentResult.rows[0]?.count ?? 0);
+        const maxCapacity = Number(classCapacityResult.rows[0]?.max_capacity ?? 0);
+        if (currentEnrollment >= maxCapacity) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Class is full' });
+        }
+      } else if (attendanceStatus === 'hold' && currentRegistration.attendance_status === 'absent') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Absent registration cannot be changed to hold' });
+      } else if (attendanceStatus === 'hold' || attendanceStatus === 'reserved') {
+        const refundMembershipId = currentRegistration.membership_id
+          ?? attendanceRows.find((attendanceRow) => attendanceRow.membership_id !== null)?.membership_id
+          ?? null;
 
-        if (attendanceStatus === 'reserved') {
-          const refundMembershipId = currentRegistration.membership_id
-            ?? attendanceRows.find((attendanceRow) => attendanceRow.membership_id !== null)?.membership_id
-            ?? null;
-
-          if (currentSessionConsumed && refundMembershipId !== null) {
-            await refundMembershipSessions(client, {
-              membershipId: refundMembershipId,
-              changeAmount: 1,
-              actorUserId: req.user!.id,
-              classId,
-              registrationId: currentRegistration.id,
-              reason: 'registration_status_reserved_refund',
-              note: `Status changed from ${currentRegistration.attendance_status} to reserved`,
-            });
-          }
+        if (currentSessionConsumed && refundMembershipId !== null) {
+          await refundMembershipSessions(client, {
+            membershipId: refundMembershipId,
+            changeAmount: 1,
+            actorUserId: req.user!.id,
+            classId,
+            registrationId: currentRegistration.id,
+            reason: attendanceStatus === 'hold'
+              ? 'registration_status_hold_refund'
+              : 'registration_status_reserved_refund',
+            note: `Status changed from ${currentRegistration.attendance_status} to ${attendanceStatus}`,
+          });
         }
 
         if (attendanceRows.length > 0) {
@@ -1151,13 +1204,16 @@ router.put('/:id/registrations/:customerId/status',
         }
       }
 
+      const nextSessionConsumed = attendanceStatus === 'attended'
+        || (attendanceStatus === 'absent' && currentRegistration.attendance_status !== 'hold');
+
       const result = await client.query(
         `UPDATE yoga_class_registrations
          SET attendance_status = $3,
              session_consumed = $4
-         WHERE class_id = $1 AND customer_id = $2
-         RETURNING id, class_id, customer_id, membership_id, attendance_status, session_consumed, registration_comment, registered_at`,
-        [classId, customerId, attendanceStatus, attendanceStatus !== 'reserved']
+        WHERE class_id = $1 AND customer_id = $2
+        RETURNING id, class_id, customer_id, membership_id, attendance_status, session_consumed, registration_comment, registered_at`,
+        [classId, customerId, attendanceStatus, nextSessionConsumed]
       );
 
       await client.query('COMMIT');
@@ -1278,9 +1334,9 @@ router.post('/:id/registrations',
           `SELECT membership_id, COUNT(*)::int AS reserved_count
            FROM yoga_class_registrations
            WHERE membership_id = ANY($1::int[])
-             AND attendance_status = 'reserved'
+             AND attendance_status = ANY($2::text[])
            GROUP BY membership_id`,
-          [lockedMembershipRows.map((row) => row.id)]
+          [lockedMembershipRows.map((row) => row.id), Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
         );
 
         for (const row of reservedCountResult.rows as Array<{ membership_id: number; reserved_count: number }>) {
@@ -1354,10 +1410,10 @@ router.post('/:id/registrations',
              SELECT COUNT(*)::int AS reserved_count
              FROM yoga_class_registrations rr
              WHERE rr.membership_id = m.id
-               AND rr.attendance_status = 'reserved'
+               AND rr.attendance_status = ANY($3::text[])
            ) reservations ON true
            WHERE m.customer_id = $1`,
-            [customerId, yogaClass.title]
+            [customerId, yogaClass.title, Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
           );
           const diagnostic = membershipDiagnosticResult.rows[0] as {
             total_memberships: number;
@@ -1421,8 +1477,11 @@ router.post('/:id/registrations',
 
       if (!shouldCreateImmediateAttendance) {
         const countResult = await client.query(
-          'SELECT COUNT(*)::int AS count FROM yoga_class_registrations WHERE class_id = $1',
-          [id]
+          `SELECT COUNT(*)::int AS count
+           FROM yoga_class_registrations
+           WHERE class_id = $1
+             AND attendance_status = ANY($2::text[])`,
+          [id, Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
         );
         const currentEnrollment = countResult.rows[0].count as number;
 
@@ -1471,7 +1530,8 @@ router.post('/:id/registrations',
              attendance_date,
              instructor_id,
              class_type,
-             session_deducted
+             session_deducted,
+             registration_status_before_attendance
            )
            VALUES (
              $1,
@@ -1480,7 +1540,8 @@ router.post('/:id/registrations',
              ($4::date::timestamp + $5::time),
              $6,
              $7,
-             $8
+             $8,
+             $9
            )`,
           [
             customerId,
@@ -1491,6 +1552,7 @@ router.post('/:id/registrations',
             req.user!.id,
             yogaClass.title || null,
             true,
+            'reserved',
           ]
         );
       }
@@ -1543,13 +1605,13 @@ router.delete('/:id/registrations/me',
         const registration = registrationResult.rows[0] as {
           id: number;
           membership_id: number | null;
-          attendance_status: 'reserved' | 'attended' | 'absent';
+          attendance_status: RegistrationAttendanceStatus;
           session_consumed?: boolean | null;
         };
 
-        if (registration.attendance_status !== 'reserved') {
+        if (!isCancelableRegistrationStatus(registration.attendance_status)) {
           await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Only reserved registrations can be canceled by customer' });
+          return res.status(400).json({ error: 'Only reserved or hold registrations can be canceled by customer' });
         }
 
         await cancelRegistrationAndRelatedAttendance(
@@ -1603,13 +1665,13 @@ router.delete('/:id/registrations/:customerId',
         const registration = registrationResult.rows[0] as {
           id: number;
           membership_id: number | null;
-          attendance_status: 'reserved' | 'attended' | 'absent';
+          attendance_status: RegistrationAttendanceStatus;
           session_consumed?: boolean | null;
         };
 
-        if (registration.attendance_status !== 'reserved') {
+        if (!isCancelableRegistrationStatus(registration.attendance_status)) {
           await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Only reserved registrations can be canceled by admin' });
+          return res.status(400).json({ error: 'Only reserved or hold registrations can be canceled by admin' });
         }
 
         await cancelRegistrationAndRelatedAttendance(

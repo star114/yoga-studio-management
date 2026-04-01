@@ -2,7 +2,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import CustomerDashboard from './CustomerDashboard';
+import CustomerDashboard, { selectNextUpcomingReservedClass } from './CustomerDashboard';
 
 const {
   attendanceGetAllMock,
@@ -88,6 +88,46 @@ describe('CustomerDashboard page', () => {
     renderPage();
     expect(screen.getByText('로딩 중...')).toBeTruthy();
     expect(attendanceGetAllMock).not.toHaveBeenCalled();
+  });
+
+  it('selectNextUpcomingReservedClass excludes hold and sorts reserved classes', () => {
+    const result = selectNextUpcomingReservedClass(
+      [
+        {
+          registration_id: 1,
+          class_id: 11,
+          attendance_status: 'hold',
+          title: '보류 수업',
+          class_date: '2099-01-01',
+          start_time: '07:00:00',
+          end_time: '08:00:00',
+          is_open: true,
+        },
+        {
+          registration_id: 2,
+          class_id: 12,
+          attendance_status: 'reserved',
+          title: '늦은 예약',
+          class_date: '2099-01-03',
+          start_time: '09:00:00',
+          end_time: '10:00:00',
+          is_open: true,
+        },
+        {
+          registration_id: 3,
+          class_id: 13,
+          attendance_status: 'reserved',
+          title: '빠른 예약',
+          class_date: '2099-01-02',
+          start_time: '08:00:00',
+          end_time: '09:00:00',
+          is_open: true,
+        },
+      ],
+      new Date('2098-12-31T00:00:00')
+    );
+
+    expect(result?.title).toBe('빠른 예약');
   });
 
   it('renders empty summaries when no upcoming or attendance data', async () => {
@@ -182,6 +222,72 @@ describe('CustomerDashboard page', () => {
     expect(screen.getByText('월경 중입니다')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('어깨가 뻐근해요')).toBeTruthy());
     expect(screen.getByRole('button', { name: '초기화' })).toBeTruthy();
+  });
+
+  it('does not show hold registrations in the next upcoming class card', async () => {
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([]));
+    classGetMyRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          registration_id: 10,
+          class_id: 5,
+          attendance_status: 'hold',
+          title: '보류된 수업',
+          class_date: '2099-01-01',
+          start_time: '08:00:00',
+          end_time: '09:00:00',
+          is_open: true,
+        },
+        {
+          registration_id: 11,
+          class_id: 6,
+          attendance_status: 'reserved',
+          title: '실제 다음 수업',
+          class_date: '2099-01-02',
+          start_time: '08:00:00',
+          end_time: '09:00:00',
+          is_open: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('실제 다음 수업')).toBeTruthy());
+    expect(screen.queryByText('보류된 수업')).toBeNull();
+  });
+
+  it('sorts future reserved registrations and shows the nearest one', async () => {
+    attendanceGetAllMock.mockResolvedValueOnce(attendancePageResponse([]));
+    classGetMyRegistrationsMock.mockResolvedValueOnce({
+      data: [
+        {
+          registration_id: 10,
+          class_id: 5,
+          attendance_status: 'reserved',
+          title: '늦은 수업',
+          class_date: '2099-01-03',
+          start_time: '10:00:00',
+          end_time: '11:00:00',
+          is_open: true,
+        },
+        {
+          registration_id: 11,
+          class_id: 6,
+          attendance_status: 'reserved',
+          title: '빠른 수업',
+          class_date: '2099-01-02',
+          start_time: '08:00:00',
+          end_time: '09:00:00',
+          is_open: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('빠른 수업')).toBeTruthy());
+    expect(screen.queryByText('늦은 수업')).toBeNull();
   });
 
   it('keeps attendance history visible when upcoming-class loading fails', async () => {
