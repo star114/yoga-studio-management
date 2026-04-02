@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1](https://github.com/star114/yoga-studio-management/compare/v2.8.0...v2.8.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* allow rebooking after hold and rename hold labels ([#67](https://github.com/star114/yoga-studio-management/issues/67)) ([9581c6a](https://github.com/star114/yoga-studio-management/commit/9581c6a29e77c71c3894f1855ec0d38d1dfdc943))
+
 ## [2.8.0](https://github.com/star114/yoga-studio-management/compare/v2.7.0...v2.8.0) (2026-04-01)
 
 
