@@ -142,7 +142,7 @@ const getRecommendedClassStatusLabel = (item: RecommendedClass) => {
     case 'attended':
       return '출석';
     case 'hold':
-      return '보류';
+      return '홀드';
     case 'absent':
       return '결석';
     case 'reserved':
@@ -1093,7 +1093,7 @@ const CustomerDetail: React.FC = () => {
                   <option value="all">전체</option>
                   <option value="attended">출석</option>
                   <option value="reserved">예약</option>
-                  <option value="hold">보류</option>
+                  <option value="hold">홀드</option>
                   <option value="absent">결석</option>
                 </select>
               </div>
@@ -1191,7 +1191,7 @@ const CustomerDetail: React.FC = () => {
                         {item.activity_type === 'reserved'
                           ? '예약'
                           : item.activity_type === 'hold'
-                            ? '보류'
+                            ? '홀드'
                           : item.activity_type === 'absent'
                             ? '결석'
                             : '출석'}

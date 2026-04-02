@@ -114,7 +114,7 @@ const getEntryStatusMeta = (status: CustomerEntryStatus) => {
       };
     case 'hold':
       return {
-        label: '보류',
+        label: '홀드',
         badgeClassName: 'bg-slate-100 text-slate-800 border-slate-200',
         cardClassName: 'bg-slate-50/85 border-slate-200 text-slate-950',
         subtleTextClassName: 'text-slate-700',

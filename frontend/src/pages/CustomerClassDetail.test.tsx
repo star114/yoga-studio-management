@@ -229,7 +229,7 @@ describe('CustomerClassDetail page', () => {
     });
 
     renderPage();
-    await waitFor(() => expect(screen.getByText('보류')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('홀드')).toBeTruthy());
     expect(classGetMyCommentThreadMock).not.toHaveBeenCalled();
   });
 
