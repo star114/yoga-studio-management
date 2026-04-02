@@ -195,7 +195,7 @@ const CustomerClassDetail: React.FC = () => {
   const attendanceLabel = detail.attendance_status === 'attended'
     ? '출석'
     : detail.attendance_status === 'hold'
-      ? '보류'
+      ? '홀드'
     : detail.attendance_status === 'absent'
       ? '결석'
       : '예약';

@@ -1027,7 +1027,7 @@ const ClassDetail: React.FC = () => {
                       출석 상태: {registration.attendance_status === 'attended'
                         ? '출석'
                         : registration.attendance_status === 'hold'
-                          ? '보류'
+                          ? '홀드'
                         : registration.attendance_status === 'absent'
                           ? '결석'
                           : '예약'}
@@ -1078,7 +1078,7 @@ const ClassDetail: React.FC = () => {
                     disabled={savingAttendanceStatusCustomerId === registration.customer_id}
                   >
                     <option value="reserved">예약</option>
-                    <option value="hold">보류</option>
+                    <option value="hold">홀드</option>
                     <option value="attended">출석</option>
                     <option value="absent">결석</option>
                   </select>

@@ -9,6 +9,7 @@ import { validateRequest } from '../middleware/validateRequest';
 
 const router = express.Router();
 const SEAT_OCCUPYING_REGISTRATION_STATUSES = ['reserved', 'attended', 'absent'] as const;
+const MEMBERSHIP_RESERVING_REGISTRATION_STATUSES = ['reserved'] as const;
 const CANCELABLE_REGISTRATION_STATUSES = ['reserved', 'hold'] as const;
 type RegistrationAttendanceStatus = 'reserved' | 'hold' | 'attended' | 'absent';
 const isCancelableRegistrationStatus = (
@@ -1336,7 +1337,7 @@ router.post('/:id/registrations',
            WHERE membership_id = ANY($1::int[])
              AND attendance_status = ANY($2::text[])
            GROUP BY membership_id`,
-          [lockedMembershipRows.map((row) => row.id), Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
+          [lockedMembershipRows.map((row) => row.id), Array.from(MEMBERSHIP_RESERVING_REGISTRATION_STATUSES)]
         );
 
         for (const row of reservedCountResult.rows as Array<{ membership_id: number; reserved_count: number }>) {
@@ -1413,7 +1414,7 @@ router.post('/:id/registrations',
                AND rr.attendance_status = ANY($3::text[])
            ) reservations ON true
            WHERE m.customer_id = $1`,
-            [customerId, yogaClass.title, Array.from(SEAT_OCCUPYING_REGISTRATION_STATUSES)]
+            [customerId, yogaClass.title, Array.from(MEMBERSHIP_RESERVING_REGISTRATION_STATUSES)]
           );
           const diagnostic = membershipDiagnosticResult.rows[0] as {
             total_memberships: number;

@@ -203,7 +203,7 @@ describe('ClassDetail page', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('출석 상태: 보류')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('출석 상태: 홀드')).toBeTruthy());
   });
 
   it('shows load error from API', async () => {
