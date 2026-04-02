@@ -216,7 +216,7 @@ describe('CustomerMemberships page', () => {
           registration_id: 204,
           class_id: 12,
           attendance_status: 'hold',
-          title: '보류 수업',
+          title: '홀드 수업',
           class_date: today,
           start_time: '12:00:00',
           end_time: '13:00:00',
@@ -229,7 +229,7 @@ describe('CustomerMemberships page', () => {
     await waitFor(() => expect(screen.getByText('수업 캘린더')).toBeTruthy());
     expect(screen.getAllByText('출석').length).toBeGreaterThan(0);
     expect(screen.getAllByText('결석').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('보류').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('홀드').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: '주간' }));
     await waitFor(() => expect(screen.getByText(/ - /)).toBeTruthy());

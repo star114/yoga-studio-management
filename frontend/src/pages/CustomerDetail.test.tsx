@@ -427,7 +427,7 @@ describe('CustomerDetail page', () => {
     expect(screen.getByText('하타')).toBeTruthy();
     expect(screen.getByText('출석')).toBeTruthy();
     expect(screen.getByText('예약')).toBeTruthy();
-    expect(screen.getByText('보류')).toBeTruthy();
+    expect(screen.getByText('홀드')).toBeTruthy();
     expect(screen.getByText('결석')).toBeTruthy();
     expect(screen.queryAllByRole('button', { name: '예약 취소' })).toHaveLength(2);
     expect(screen.queryAllByRole('button', { name: '결석 처리' })).toHaveLength(1);
@@ -1631,7 +1631,7 @@ describe('CustomerDetail page', () => {
     await waitFor(() => expect(screen.getByText('아쉬탕가')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '불러오기' }));
 
-    const holdButton = await screen.findByRole('button', { name: '보류' });
+    const holdButton = await screen.findByRole('button', { name: '홀드' });
     expect((holdButton as HTMLButtonElement).disabled).toBe(true);
   });
 

@@ -97,7 +97,7 @@ describe('CustomerDashboard page', () => {
           registration_id: 1,
           class_id: 11,
           attendance_status: 'hold',
-          title: '보류 수업',
+          title: '홀드 수업',
           class_date: '2099-01-01',
           start_time: '07:00:00',
           end_time: '08:00:00',
@@ -232,7 +232,7 @@ describe('CustomerDashboard page', () => {
           registration_id: 10,
           class_id: 5,
           attendance_status: 'hold',
-          title: '보류된 수업',
+          title: '홀드된 수업',
           class_date: '2099-01-01',
           start_time: '08:00:00',
           end_time: '09:00:00',
@@ -254,7 +254,7 @@ describe('CustomerDashboard page', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('실제 다음 수업')).toBeTruthy());
-    expect(screen.queryByText('보류된 수업')).toBeNull();
+    expect(screen.queryByText('홀드된 수업')).toBeNull();
   });
 
   it('sorts future reserved registrations and shows the nearest one', async () => {

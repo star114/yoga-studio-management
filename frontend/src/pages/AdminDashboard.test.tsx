@@ -191,10 +191,10 @@ describe('AdminDashboard page', () => {
                 id: 106,
                 class_id: 1,
                 customer_id: 6,
-                customer_name: '정보류',
+                customer_name: '정홀드',
                 customer_phone: '010-6666-7777',
                 attendance_status: 'hold',
-                registration_comment: '사전 협의된 보류 상태예요',
+                registration_comment: '사전 협의된 홀드 상태예요',
                 registered_at: '2026-03-05T08:50:00.000Z',
               },
             ],
@@ -273,11 +273,11 @@ describe('AdminDashboard page', () => {
     expect(screen.getByText('호흡 천천히 진행하고 싶어요')).toBeTruthy();
     expect(screen.getByText('결석')).toBeTruthy();
     expect(screen.getByText('몸 상태 체크 부탁드려요')).toBeTruthy();
-    expect(screen.getByText('보류')).toBeTruthy();
-    expect(screen.getByText('사전 협의된 보류 상태예요')).toBeTruthy();
+    expect(screen.getByText('홀드')).toBeTruthy();
+    expect(screen.getByText('사전 협의된 홀드 상태예요')).toBeTruthy();
     const snapshotSection = screen.getByText('오늘 수업 전체').closest('section') as HTMLElement;
     expect(within(snapshotSection).getByText('김영희')).toBeTruthy();
-    expect(within(snapshotSection).getByText('정보류')).toBeTruthy();
+    expect(within(snapshotSection).getByText('정홀드')).toBeTruthy();
     expect(screen.getByText('저녁요가')).toBeTruthy();
     expect(screen.getByText('조용한 수련 원해요')).toBeTruthy();
     expect(screen.getByText('남긴 코멘트가 없습니다.')).toBeTruthy();

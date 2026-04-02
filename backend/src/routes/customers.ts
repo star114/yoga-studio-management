@@ -128,7 +128,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// 특정 고객 수업 활동(출석/예약/보류/결석) 조회
+// 특정 고객 수업 활동(출석/예약/홀드/결석) 조회
 router.get('/:id/class-activities', authenticate, async (req: AuthRequest, res) => {
   const { id } = req.params;
   const rawPage = typeof req.query.page === 'string' ? Number(req.query.page) : 1;

@@ -96,7 +96,7 @@ const getRegistrationStatusMeta = (status: DashboardSnapshotRegistration['attend
       };
     case 'hold':
       return {
-        label: '보류',
+        label: '홀드',
         className: 'bg-slate-100 text-slate-800 border-slate-200',
       };
     default:

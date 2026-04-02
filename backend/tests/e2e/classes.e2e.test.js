@@ -826,6 +826,7 @@ test('class registration and recurring routes cover core branches', async () => 
     ([queryText]) => typeof queryText === 'string' && queryText.includes('AS reserved_count')
   );
   assert.notEqual(reservedCountQuery, undefined);
+  assert.deepEqual(reservedCountQuery?.[1]?.[1], ['reserved']);
   assert.equal(
     remainingSessionsClient.queryCalls.some(([queryText]) =>
       String(queryText).includes('FOR UPDATE OF m')
@@ -2423,6 +2424,10 @@ test('class registration diagnostics and recurring creation cover remaining bran
   });
   assert.equal(res.status, 400);
   assert.equal(res.body.reason, 'NO_ELIGIBLE_MEMBERSHIP');
+  const noEligibleReservedCountQuery = noEligibleDiagnosticClient.queryCalls.find(
+    ([queryText]) => typeof queryText === 'string' && queryText.includes('COUNT(*)::int AS reserved_count')
+  );
+  assert.deepEqual(noEligibleReservedCountQuery?.[1]?.[2], ['reserved']);
   assert.deepEqual(res.body.failed_checks, []);
 
   const crossMembershipRemainingClient = h.createDbClientMock();
