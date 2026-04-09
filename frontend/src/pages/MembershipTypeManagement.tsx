@@ -192,8 +192,9 @@ const MembershipTypeManagement: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-primary-800">회원권 관리</h1>
-        <p className="text-warm-600">활성/비활성 회원권 관리 항목을 모두 확인하고 수정, 비활성화, 삭제할 수 있습니다.</p>
+        <p className="section-kicker">Membership Setup</p>
+        <h1 className="page-title">회원권 관리</h1>
+        <p className="page-description">활성/비활성 회원권 관리 항목을 모두 확인하고 수정, 비활성화, 삭제할 수 있습니다.</p>
       </div>
 
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
@@ -201,7 +202,7 @@ const MembershipTypeManagement: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <section className="card xl:col-span-1">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+          <h2 className="card-title mb-4">
             {editingTypeId ? '회원권 관리 수정' : '회원권 관리 추가'}
           </h2>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -259,9 +260,9 @@ const MembershipTypeManagement: React.FC = () => {
                   {classTitlesError}
                 </p>
               ) : null}
-              <div className="space-y-2 rounded-lg border border-warm-200 bg-warm-50 p-3">
+              <div className="space-y-2 rounded-2xl studio-inset p-3">
                 {selectableClassTitles.length === 0 ? (
-                  <p className="text-sm text-warm-600">등록된 수업명이 없습니다. 먼저 수업을 등록해주세요.</p>
+                  <p className="text-sm muted-note">등록된 수업명이 없습니다. 먼저 수업을 등록해주세요.</p>
                 ) : (
                   <div className="max-h-56 space-y-2 overflow-y-auto">
                     {selectableClassTitles.map((title) => {
@@ -269,17 +270,17 @@ const MembershipTypeManagement: React.FC = () => {
                       const isLegacyTitle = !availableClassTitles.includes(title);
 
                       return (
-                        <label key={title} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                        <label key={title} className="flex items-start gap-2 rounded-xl px-2 py-1.5 hover:bg-[rgba(255,251,247,0.92)]">
                           <input
                             type="checkbox"
                             className="mt-1 h-4 w-4"
                             checked={checked}
                             onChange={() => toggleReservableClassTitle(title)}
                           />
-                          <span className="text-sm text-primary-800">
+                          <span className="text-sm text-[var(--text-strong)]">
                             {title}
                             {isLegacyTitle ? (
-                              <span className="ml-2 text-xs text-warm-500">(현재 수업 목록에는 없음)</span>
+                              <span className="ml-2 text-xs muted-note">(현재 수업 목록에는 없음)</span>
                             ) : null}
                           </span>
                         </label>
@@ -288,7 +289,7 @@ const MembershipTypeManagement: React.FC = () => {
                   </div>
                 )}
               </div>
-              <p className="mt-1 text-xs text-warm-500">
+              <p className="mt-1 text-xs muted-note">
                 현재 등록된 수업명 중에서 선택할 수 있고, 목록에 없는 수업명은 직접 추가할 수 있습니다.
               </p>
             </div>
@@ -306,18 +307,18 @@ const MembershipTypeManagement: React.FC = () => {
         </section>
 
         <section className="card xl:col-span-2">
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">회원권 관리 목록</h2>
+          <h2 className="card-title mb-4">회원권 관리 목록</h2>
           {isLoading ? (
-            <p className="text-warm-600 py-8 text-center">목록을 불러오는 중...</p>
+            <p className="muted-note py-8 text-center">목록을 불러오는 중...</p>
           ) : types.length === 0 ? (
-            <p className="text-warm-600 py-8 text-center">등록된 회원권 관리 항목이 없습니다.</p>
+            <p className="muted-note py-8 text-center">등록된 회원권 관리 항목이 없습니다.</p>
           ) : (
             <div className="space-y-3">
               {types.map((type) => {
                 const reservableClassTitles = type.reservable_class_titles ?? [];
 
                 return (
-                  <div key={type.id} className="border border-warm-200 rounded-lg p-4 bg-warm-50">
+                  <div key={type.id} className="soft-list-item p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold text-primary-800">{type.name}</p>

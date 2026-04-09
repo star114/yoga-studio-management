@@ -306,50 +306,54 @@ const CustomerMemberships: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div>
-        <h1 className="text-3xl font-display font-bold text-primary-800 mb-2">회원권</h1>
-        <p className="text-warm-600">{customerInfo?.name}님의 회원권 현황입니다.</p>
+        <p className="section-kicker mb-2">Membership Flow</p>
+        <h1 className="page-title mb-2">회원권</h1>
+        <p className="page-description">{customerInfo?.name}님의 회원권 현황입니다.</p>
       </div>
 
       <div className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">활성 회원권</h2>
+        <h2 className="card-title mb-4">활성 회원권</h2>
         <div className="space-y-4">
           {activeMemberships.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-warm-500 mb-2">활성화된 회원권이 없습니다</p>
-              <p className="text-sm text-warm-400">원장님께 문의해주세요</p>
+              <p className="muted-note mb-2">활성화된 회원권이 없습니다</p>
+              <p className="text-sm text-[rgba(133,112,96,0.72)]">원장님께 문의해주세요</p>
             </div>
           ) : (
             activeMemberships.map((membership) => (
-              <div key={membership.id} className="p-4 bg-primary-50 rounded-lg border border-primary-100 space-y-4">
+              <div key={membership.id} className="space-y-4 rounded-[1.7rem] border border-[rgba(122,93,72,0.12)] bg-[linear-gradient(145deg,rgba(255,250,244,0.84),rgba(247,239,230,0.94))] p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-semibold text-primary-800 text-lg">{membership.membership_type_name}</h3>
+                    <p className="section-kicker mb-2">Active Membership</p>
+                    <p className="text-lg font-medium tracking-[-0.01em] text-[var(--text-strong)]">
+                      {membership.membership_type_name}
+                    </p>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">활성</span>
+                  <span className="status-chip">활성</span>
                 </div>
 
-                <div className="space-y-1.5 text-sm text-warm-700">
+                <div className="space-y-1.5 text-sm text-[var(--text-body)]">
                   <p>
-                    <span className="text-warm-600">예약 가능 잔여:</span>{' '}
-                    <span className="font-semibold text-primary-800">
+                    <span className="muted-note">예약 가능 잔여:</span>{' '}
+                    <span className="font-semibold text-[var(--text-strong)]">
                       {membership.available_sessions ?? membership.remaining_sessions}회
                     </span>
                   </p>
                   <p>
-                    <span className="text-warm-600">소진 횟수:</span>{' '}
-                    <span className="font-medium text-primary-800">
+                    <span className="muted-note">소진 횟수:</span>{' '}
+                    <span className="font-medium text-[var(--text-strong)]">
                       {formatConsumedSummary(membership)}
                     </span>
                   </p>
                   <p>
-                    <span className="text-warm-600">시작일:</span>{' '}
-                    <span className="font-medium text-primary-800">
+                    <span className="muted-note">시작일:</span>{' '}
+                    <span className="font-medium text-[var(--text-strong)]">
                       {membership.start_date ? formatKoreanDate(membership.start_date, false) : '-'}
                     </span>
                   </p>
                   <p>
-                    <span className="text-warm-600">예상 종료일:</span>{' '}
-                    <span className="font-medium text-primary-800">
+                    <span className="muted-note">예상 종료일:</span>{' '}
+                    <span className="font-medium text-[var(--text-strong)]">
                       {membership.expected_end_date ? formatKoreanDate(membership.expected_end_date, false) : '-'}
                     </span>
                   </p>
@@ -363,8 +367,9 @@ const CustomerMemberships: React.FC = () => {
       <section className="card space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-xl font-display font-semibold text-primary-800">수업 캘린더</h2>
-            <p className="text-sm text-warm-600">내 수업 일정과 출석 기록만 표시됩니다.</p>
+            <p className="section-kicker mb-2">Schedule Rhythm</p>
+            <h2 className="card-title">수업 캘린더</h2>
+            <p className="text-sm muted-note">내 수업 일정과 출석 기록만 표시됩니다.</p>
           </div>
 
           <div className="flex w-full flex-wrap items-center gap-1.5 sm:gap-2 lg:w-auto">
@@ -407,7 +412,7 @@ const CustomerMemberships: React.FC = () => {
         </div>
 
         <div className="flex items-center">
-          <p className="text-lg font-semibold text-primary-800">{calendarTitle}</p>
+          <p className="text-lg font-semibold text-[var(--text-strong)]">{calendarTitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {(['reserved', 'hold', 'attended', 'absent'] as CustomerEntryStatus[]).map((status) => {
@@ -422,7 +427,7 @@ const CustomerMemberships: React.FC = () => {
 
         {calendarView === 'month' && (
           <div className="space-y-2">
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-[11px] sm:text-xs text-warm-600">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-[11px] sm:text-xs muted-note">
               {WEEKDAY_LABELS.map((label) => (
                 <div key={label} className="text-center py-1 font-medium">{label}</div>
               ))}
@@ -467,7 +472,7 @@ const CustomerMemberships: React.FC = () => {
                         );
                       })}
                       {dayEntries.length > 2 && (
-                        <p className="text-[11px] text-warm-600">+{dayEntries.length - 2}개 더 있음</p>
+                        <p className="text-[11px] muted-note">+{dayEntries.length - 2}개 더 있음</p>
                       )}
                     </div>
 
@@ -484,7 +489,7 @@ const CustomerMemberships: React.FC = () => {
                         );
                       })}
                       {dayEntries.length > 2 && (
-                        <span className="text-[10px] text-warm-600">+{dayEntries.length - 2}</span>
+                        <span className="text-[10px] muted-note">+{dayEntries.length - 2}</span>
                       )}
                     </div>
                   </button>
@@ -511,11 +516,11 @@ const CustomerMemberships: React.FC = () => {
                   }}
                   className={`rounded-xl border p-3 text-left min-h-[160px] ${today ? 'border-primary-500 bg-primary-50/80' : 'border-warm-200 bg-white/70'}`}
                 >
-                  <p className="text-xs text-warm-600">{WEEKDAY_LABELS[date.getDay()]}</p>
+                  <p className="text-xs muted-note">{WEEKDAY_LABELS[date.getDay()]}</p>
                   <p className={`text-lg font-semibold ${today ? 'text-primary-700' : 'text-primary-800'}`}>{format(date, 'd')}</p>
                   <div className="mt-2 space-y-1">
                     {dayEntries.length === 0 ? (
-                      <p className="text-xs text-warm-500">수업 없음</p>
+                      <p className="text-xs muted-note">수업 없음</p>
                     ) : (
                       dayEntries.map((item) => {
                         const status = getEntryStatus(item);
@@ -542,9 +547,9 @@ const CustomerMemberships: React.FC = () => {
 
         {calendarView === 'day' && (
           <div className="rounded-xl border border-warm-200 bg-white/70 p-4">
-            <p className="text-sm text-warm-600 mb-2">{formatKoreanDate(focusDate)}</p>
+            <p className="text-sm muted-note mb-2">{formatKoreanDate(focusDate)}</p>
             {selectedDayEntries.length === 0 ? (
-              <p className="text-warm-500">해당 날짜에 등록된 수업이 없습니다.</p>
+              <p className="muted-note">해당 날짜에 등록된 수업이 없습니다.</p>
             ) : (
               <div className="space-y-2">
                 {selectedDayEntries.map((item) => (

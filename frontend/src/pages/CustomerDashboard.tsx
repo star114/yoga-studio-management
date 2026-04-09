@@ -365,23 +365,27 @@ const CustomerDashboard: React.FC = () => {
   return (
     <div className="space-y-6 fade-in">
       <div>
-        <p className="text-warm-600">수련의 흐름과 몸과 마음의 상태를 간단히 기록하고 나누는 공간입니다.</p>
+        <p className="section-kicker mb-2">Practice Journal</p>
+        <p className="text-[var(--text-muted)]">수련의 흐름과 몸과 마음의 상태를 간단히 기록하고 나누는 공간입니다.</p>
       </div>
 
-      <div className="card">
-        <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
+      <div className="card linen-texture">
+        <h2 className="text-xl font-display font-semibold text-[var(--text-strong)] mb-4">
           다음 수업
         </h2>
         {nextUpcomingClass ? (
-          <div className="p-4 bg-primary-50 rounded-lg border border-primary-100 space-y-4">
-            <p className="font-semibold text-primary-800">{nextUpcomingClass.title}</p>
-            <p className="text-sm text-warm-700 mt-1">
+          <div className="space-y-4 rounded-[1.7rem] border border-[rgba(122,93,72,0.12)] bg-[linear-gradient(145deg,rgba(255,250,244,0.84),rgba(247,239,230,0.94))] p-4 shadow-[0_16px_30px_rgba(91,65,49,0.08)]">
+            <div>
+              <p className="section-kicker mb-2">Upcoming Class</p>
+              <p className="font-semibold text-[var(--text-strong)]">{nextUpcomingClass.title}</p>
+            </div>
+            <p className="text-sm text-[var(--text-body)] mt-1">
               {formatKoreanDateTime(nextUpcomingClass.class_date, nextUpcomingClass.start_time)}
               {' '}~ {formatKoreanTime(nextUpcomingClass.end_time)}
             </p>
-            <div className="pt-1 border-t border-primary-100">
+            <div className="pt-1 border-t border-[rgba(122,93,72,0.08)]">
               <div className="mb-1 flex items-center justify-between gap-2">
-                <p className="text-sm font-medium text-primary-800">강사에게 전달할 코멘트</p>
+                <p className="text-sm font-medium text-[var(--text-strong)]">강사에게 전달할 코멘트</p>
                 {nextUpcomingClass.registration_comment?.trim() && (
                   <button
                     type="button"
@@ -393,7 +397,7 @@ const CustomerDashboard: React.FC = () => {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-warm-600 mb-2">여러 개 선택할 수 있어요.</p>
+              <p className="text-xs text-[var(--text-muted)] mb-2">여러 개 선택할 수 있어요.</p>
               <div className="flex flex-wrap gap-2">
                 {QUICK_COMMENT_OPTIONS.map((option) => (
                   <button
@@ -403,8 +407,8 @@ const CustomerDashboard: React.FC = () => {
                     onClick={() => void handleQuickCommentClick(option)}
                     className={`px-3 py-1.5 text-xs sm:text-sm rounded-full border transition-colors ${
                       selectedQuickComments.includes(option)
-                        ? 'bg-primary-600 text-white border-primary-600'
-                        : 'bg-white text-primary-800 border-primary-200 hover:bg-primary-100'
+                        ? 'bg-[var(--accent-strong)] text-white border-[var(--accent-strong)]'
+                        : 'bg-[rgba(255,250,244,0.88)] text-[var(--text-strong)] border-[rgba(122,93,72,0.14)] hover:bg-[rgba(122,93,72,0.05)]'
                     } disabled:opacity-60`}
                   >
                     {option}
@@ -416,7 +420,7 @@ const CustomerDashboard: React.FC = () => {
                     type="button"
                     disabled={isSavingComment}
                     onClick={() => void handleCustomCommentChipClick(comment)}
-                    className="max-w-full px-3 py-1.5 text-xs sm:text-sm rounded-full border border-primary-600 bg-primary-600 text-white hover:bg-primary-700 truncate disabled:opacity-60"
+                    className="max-w-full truncate rounded-full border border-[var(--accent-clay)] bg-[var(--accent-clay)] px-3 py-1.5 text-xs sm:text-sm text-white hover:brightness-105 disabled:opacity-60"
                     title="클릭하면 해당 직접 입력 코멘트 선택이 해제됩니다."
                   >
                     {comment}
@@ -430,8 +434,8 @@ const CustomerDashboard: React.FC = () => {
                   }}
                   className={`px-3 py-1.5 text-xs sm:text-sm rounded-full border transition-colors ${
                     isDirectCommentOpen
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-primary-800 border-primary-200 hover:bg-primary-100'
+                      ? 'bg-[var(--accent-strong)] text-white border-[var(--accent-strong)]'
+                      : 'bg-[rgba(255,250,244,0.88)] text-[var(--text-strong)] border-[rgba(122,93,72,0.14)] hover:bg-[rgba(122,93,72,0.05)]'
                   } disabled:opacity-60`}
                 >
                   직접 입력
@@ -450,7 +454,7 @@ const CustomerDashboard: React.FC = () => {
                     disabled={isSavingComment}
                   />
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-warm-500">{directCommentInput.trim().length}/500</p>
+                    <p className="text-xs text-[var(--text-muted)]">{directCommentInput.trim().length}/500</p>
                     <button
                       type="button"
                       onClick={async () => {
@@ -474,19 +478,20 @@ const CustomerDashboard: React.FC = () => {
             </div>
           </div>
         ) : (
-          <p className="text-warm-500 text-center py-8">예정된 수업이 없습니다</p>
+          <p className="text-[var(--text-muted)] text-center py-8">예정된 수업이 없습니다</p>
         )}
       </div>
 
       <section className="card space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xl font-display font-semibold text-primary-800">최근 출석 수업</h2>
-            <p className="text-sm text-warm-600">최근 출석 수업과 수업 후 코멘트 대화를 함께 확인할 수 있습니다.</p>
+            <p className="section-kicker mb-2">Recent Flow</p>
+            <h2 className="text-xl font-display font-semibold text-[var(--text-strong)]">최근 출석 수업</h2>
+            <p className="text-sm text-[var(--text-muted)]">최근 출석 수업과 수업 후 코멘트 대화를 함께 확인할 수 있습니다.</p>
           </div>
           {attendanceTotalCount > 0 && (
             <div className="flex items-center justify-between gap-3 sm:justify-end">
-              <p className="text-xs text-warm-600">
+              <p className="text-xs text-[var(--text-muted)]">
                 {attendanceTotalCount}개 중 {(attendancePage - 1) * ATTENDANCE_PAGE_SIZE + 1}-{Math.min(attendancePage * ATTENDANCE_PAGE_SIZE, attendanceTotalCount)}개
               </p>
               <div className="inline-flex items-center gap-2">
@@ -498,7 +503,7 @@ const CustomerDashboard: React.FC = () => {
                 >
                   이전
                 </button>
-                <span className="text-sm font-medium text-primary-800">
+                <span className="text-sm font-medium text-[var(--text-strong)]">
                   {attendancePage} / {attendanceTotalPages}
                 </span>
                 <button
@@ -514,7 +519,7 @@ const CustomerDashboard: React.FC = () => {
           )}
         </div>
         {recentAttendances.length === 0 ? (
-          <p className="text-warm-500 py-4">최근 출석 수업이 없습니다.</p>
+          <p className="py-4 text-[var(--text-muted)]">최근 출석 수업이 없습니다.</p>
         ) : (
           <div className="space-y-2">
             {recentAttendances.map((item) => {
@@ -534,23 +539,23 @@ const CustomerDashboard: React.FC = () => {
                     }
                   }}
                   disabled={!item.class_id}
-                  className="w-full rounded-lg border border-warm-200 bg-warm-50 p-3 text-left disabled:opacity-60 disabled:cursor-not-allowed hover:bg-warm-100 transition-colors"
+                  className="w-full rounded-[1.5rem] border border-[rgba(122,93,72,0.12)] bg-[rgba(255,250,244,0.8)] p-4 text-left disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[rgba(122,93,72,0.05)] transition-colors"
                 >
-                  <p className="font-semibold text-primary-800">{String(item.class_title || item.class_type || '수업 기록')}</p>
-                  <p className="text-sm text-warm-600">
+                  <p className="font-semibold text-[var(--text-strong)]">{String(item.class_title || item.class_type || '수업 기록')}</p>
+                  <p className="text-sm text-[var(--text-muted)]">
                     {formatKoreanDateTime(item.class_date || item.attendance_date, item.class_start_time || null)}
                   </p>
                   {pendingConversation && (
-                    <div className="mt-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2">
-                      <p className="text-xs font-medium text-primary-700">수업 후 코멘트 대화</p>
+                    <div className="mt-3 rounded-2xl border border-[rgba(122,93,72,0.12)] bg-[rgba(244,238,228,0.72)] px-3 py-3">
+                      <p className="text-xs font-medium text-[var(--accent-strong)]">수업 후 코멘트 대화</p>
                       <div className="mt-2 flex flex-col gap-2">
                         {pendingConversation.messages.map((message) => (
                           <div
                             key={message.id}
                             className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
                               message.author_role === 'customer'
-                                ? 'self-end bg-[#0B84FF] text-white rounded-br-md'
-                                : 'self-start bg-white text-primary-900 border border-warm-200 rounded-bl-md'
+                                ? 'self-end rounded-br-md bg-[var(--accent-strong)] text-white'
+                                : 'self-start rounded-bl-md border border-[rgba(122,93,72,0.12)] bg-[rgba(255,251,247,0.94)] text-[var(--text-strong)]'
                             }`}
                           >
                             {message.message}
